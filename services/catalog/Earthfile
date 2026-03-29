@@ -1,0 +1,35 @@
+VERSION 0.8
+
+FROM golang:1.26-alpine
+
+WORKDIR /app
+
+deps:
+    COPY go.mod go.sum* ./
+    RUN go mod download
+    SAVE ARTIFACT go.mod AS LOCAL go.mod
+    SAVE ARTIFACT go.sum AS LOCAL go.sum
+
+src:
+    FROM +deps
+    COPY --dir cmd internal migrations ./
+
+lint:
+    FROM +src
+    RUN go vet ./...
+
+test:
+    FROM +src
+    RUN go test ./internal/service/... ./internal/handler/... -v -count=1
+
+build:
+    FROM +src
+    RUN CGO_ENABLED=0 go build -o /bin/catalog ./cmd/
+    SAVE ARTIFACT /bin/catalog
+
+docker:
+    FROM alpine:3.19
+    COPY +build/catalog /usr/local/bin/catalog
+    EXPOSE 50052
+    ENTRYPOINT ["/usr/local/bin/catalog"]
+    SAVE IMAGE catalog:latest
