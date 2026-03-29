@@ -17,6 +17,7 @@ func main() {
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/healthz", handler.Health)
+	mux.HandleFunc("/books", handler.Books)
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("gateway listening on %s", addr)
