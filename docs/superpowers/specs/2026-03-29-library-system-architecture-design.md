@@ -135,11 +135,11 @@ A microservices-based library management system built in Go, serving as a learni
 | id | UUID PK | |
 | user_id | UUID | |
 | book_id | UUID | |
-| status | ENUM('active', 'returned', 'overdue') | |
+| status | ENUM('active', 'returned', 'overdue', 'rejected') | |
 | reserved_at | TIMESTAMP | |
 | due_at | TIMESTAMP | |
 | returned_at | TIMESTAMP | Nullable |
-| extensions | INTEGER | Default 0 |
+| extensions | INTEGER | Default 0, max 2 |
 | created_at | TIMESTAMP | |
 | updated_at | TIMESTAMP | |
 
@@ -219,7 +219,7 @@ Used for cross-service state propagation where eventual consistency is acceptabl
 
 **Eventual consistency is acceptable.** Search results may be slightly stale (sub-second). The reservation flow validates availability via gRPC before confirming, so correctness is maintained.
 
-**Race condition handling.** Two users could attempt to reserve the last copy simultaneously. Catalog handles this — when it processes a reservation event and available_copies would go below 0, it publishes a compensation event. This is an explicit teaching point in the tutorial.
+**Race condition handling.** Two users could attempt to reserve the last copy simultaneously. Catalog handles this — when it processes a reservation event and available_copies would go below 0, it publishes a `reservations.rejected` event (payload: `{ reservation_id, book_id, reason: "unavailable" }`). The Reservation service consumes this event and updates the reservation status to `rejected`. The Gateway can then inform the user. This is an explicit teaching point in the tutorial.
 
 ## Event Flows
 
@@ -252,7 +252,7 @@ Used for cross-service state propagation where eventual consistency is acceptabl
 - kafka (:9092), zookeeper (:2181)
 - meilisearch (:7700)
 
-Hot-reload via `air` (Go live reload). Each service has a multi-stage Dockerfile.
+Hot-reload via `air` (Go live reload). Each service has a multi-stage Dockerfile. Docker Compose uses Zookeeper for Kafka because it is simpler with existing images; Kubernetes uses KRaft mode to avoid the Zookeeper dependency — this difference is covered in the Kafka chapter.
 
 ### Kubernetes
 
@@ -353,7 +353,7 @@ Monorepo with Go workspaces (`go.work`). Each service has its own `go.mod` but s
 
 **Markdown (docs/):** One file per chapter with code blocks, exercises (collapsible solutions), Mermaid diagrams, and footnoted references.
 
-**Static HTML (GitHub Pages):** Generated from Markdown via Hugo or mdBook. Sidebar navigation, syntax highlighting, rendered Mermaid diagrams, mobile-responsive layout.
+**Static HTML (GitHub Pages):** Generated from Markdown via mdBook (simpler setup, built-in sidebar navigation, Mermaid support via plugin). Sidebar navigation, syntax highlighting, rendered Mermaid diagrams, mobile-responsive layout.
 
 ## Future Additions (Not in Initial Scope)
 
