@@ -1,0 +1,2 @@
+# Allow .env in deploy/ — contains only non-secret defaults for local dev
+!.env

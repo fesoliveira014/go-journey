@@ -12,3 +12,8 @@
   - [2.3 The Repository Pattern with GORM](./ch02/repository-pattern.md)
   - [2.4 Service Layer & Business Logic](./ch02/service-layer.md)
   - [2.5 Wiring It All Together](./ch02/wiring.md)
+- [Chapter 3: Containerization](./ch03/index.md)
+  - [3.1 Docker Fundamentals](./ch03/docker-fundamentals.md)
+  - [3.2 Writing Dockerfiles](./ch03/writing-dockerfiles.md)
+  - [3.3 Docker Compose](./ch03/docker-compose.md)
+  - [3.4 Development Workflow](./ch03/dev-workflow.md)

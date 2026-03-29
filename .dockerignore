@@ -1,0 +1,8 @@
+.git/
+.worktrees/
+docs/
+deploy/
+**/*.md
+.env*
+**/.air.toml
+**/tmp/
