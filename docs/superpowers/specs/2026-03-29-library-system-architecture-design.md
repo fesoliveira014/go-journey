@@ -337,7 +337,7 @@ Monorepo with Go workspaces (`go.work`). Each service has its own `go.mod` but s
 ## Tutorial Chapter Outline
 
 1. **Go Foundations** — project setup, modules, error handling, interfaces, testing basics, minimal HTTP server
-2. **First Microservice: Catalog** — PostgreSQL, sqlc/pgx, migrations, repository pattern, gRPC server, protobuf
+2. **First Microservice: Catalog** — PostgreSQL, GORM, golang-migrate, repository pattern, gRPC server, protobuf (buf)
 3. **Containerization** — multi-stage Dockerfile, Docker Compose, networking, hot-reload dev workflow
 4. **Auth Service** — JWT, bcrypt, OAuth2 with Gmail, role-based access, gRPC auth interceptors
 5. **Gateway & Frontend** — HTMX + Go templates, session management, BFF pattern

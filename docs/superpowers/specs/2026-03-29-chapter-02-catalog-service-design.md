@@ -302,6 +302,12 @@ var (
 - `github.com/google/uuid` — UUID type
 - `github.com/grpc-ecosystem/go-grpc-middleware/v2` — gRPC interceptors (logging, recovery)
 
+## Implementation Notes
+
+- **Partial updates:** Proto3 scalar fields default to zero values, making it impossible to distinguish "clear this field" from "field not sent." The tutorial should acknowledge this limitation and explain that `google.protobuf.FieldMask` is the production solution, but we skip it for simplicity.
+- **UpdateAvailability RPC:** This endpoint exists in anticipation of Chapter 6 (Kafka integration), where the Reservation service will trigger availability changes. The tutorial should note this forward reference so readers understand why it exists before Kafka is introduced.
+- **go.work entries:** The root `go.work` must be updated to include both `./services/catalog` and `./gen` so local cross-module imports resolve correctly.
+
 ## What This Chapter Does NOT Include
 
 - Kafka integration (Chapter 6)
