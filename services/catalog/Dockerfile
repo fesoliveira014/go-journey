@@ -1,4 +1,9 @@
 # Build stage
+# NOTE: This Dockerfile requires a build context that includes the gen/ module.
+# Build from the project root: docker build -f services/catalog/Dockerfile .
+# Standalone docker build from services/catalog/ will fail because go.mod
+# references ../../gen via a replace directive. This is addressed properly
+# in Chapter 3 (Docker Compose) with a root-level build context.
 FROM golang:1.26-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum* ./

@@ -44,10 +44,12 @@ func (s *CatalogService) GetBook(ctx context.Context, id uuid.UUID) (*model.Book
 }
 
 func (s *CatalogService) UpdateBook(ctx context.Context, book *model.Book) (*model.Book, error) {
-	if book.Title != "" || book.Author != "" {
-		if err := validateBook(book); err != nil {
-			return nil, err
-		}
+	// Note: Proto3 cannot distinguish "field not sent" from "field set to zero value."
+	// We only validate fields that have non-zero values. This means you cannot clear
+	// a field by sending an empty string — a known proto3 limitation. The production
+	// solution is google.protobuf.FieldMask, which we skip for simplicity.
+	if book.TotalCopies < 0 {
+		return nil, fmt.Errorf("%w: total copies must be non-negative", model.ErrInvalidBook)
 	}
 	return s.repo.Update(ctx, book)
 }

@@ -42,6 +42,10 @@ func (r *BookRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Book
 	return &book, nil
 }
 
+// Update overwrites all mutable fields. Because proto3 cannot distinguish "field not
+// sent" from "field set to zero value," this will set omitted fields to their zero
+// values (empty string, 0). In production, use google.protobuf.FieldMask to send
+// only the fields the client intended to change. We skip FieldMask for simplicity.
 func (r *BookRepository) Update(ctx context.Context, book *model.Book) (*model.Book, error) {
 	result := r.db.WithContext(ctx).Model(book).Updates(map[string]interface{}{
 		"title":          book.Title,
