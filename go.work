@@ -1,7 +1,7 @@
 go 1.26.1
 
 use (
-	./services/gateway
-	./services/catalog
 	./gen
+	./services/catalog
+	./services/gateway
 )
