@@ -73,7 +73,7 @@ services:
 
   catalog:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/catalog/Dockerfile
     environment:
       DATABASE_URL: "host=postgres-catalog port=5432 user=${POSTGRES_CATALOG_USER:-postgres} password=${POSTGRES_CATALOG_PASSWORD:-postgres} dbname=${POSTGRES_CATALOG_DB:-catalog} sslmode=disable"
@@ -88,7 +88,7 @@ services:
 
   gateway:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/gateway/Dockerfile
     environment:
       PORT: "8080"
@@ -173,11 +173,11 @@ This is a common source of startup failures. If your service crashes with "conne
 ```yaml
 catalog:
   build:
-    context: ../..
+    context: ..
     dockerfile: services/catalog/Dockerfile
 ```
 
-`context: ../..` sets the build context to the repository root (two levels up from `deploy/`). This is the same as running `docker build .` from the repo root. `dockerfile` specifies which Dockerfile to use within that context.
+`context: ..` sets the build context to the repository root (one level up from `deploy/`). This is the same as running `docker build .` from the repo root. `dockerfile` specifies which Dockerfile to use within that context.
 
 ---
 

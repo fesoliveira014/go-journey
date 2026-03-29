@@ -1,15 +1,15 @@
 services:
   catalog:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/catalog/Dockerfile.dev
     volumes:
-      - ../../services/catalog:/app/services/catalog
-      - ../../gen:/app/gen
+      - ../services/catalog:/app/services/catalog
+      - ../gen:/app/gen
 
   gateway:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/gateway/Dockerfile.dev
     volumes:
-      - ../../services/gateway:/app/services/gateway
+      - ../services/gateway:/app/services/gateway

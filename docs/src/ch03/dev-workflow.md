@@ -20,18 +20,18 @@ Here is `deploy/docker-compose.dev.yml`:
 services:
   catalog:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/catalog/Dockerfile.dev
     volumes:
-      - ../../services/catalog:/app/services/catalog
-      - ../../gen:/app/gen
+      - ../services/catalog:/app/services/catalog
+      - ../gen:/app/gen
 
   gateway:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/gateway/Dockerfile.dev
     volumes:
-      - ../../services/gateway:/app/services/gateway
+      - ../services/gateway:/app/services/gateway
 ```
 
 This override changes two things per service:
@@ -142,8 +142,8 @@ The magic is in the volume mounts from `docker-compose.dev.yml`:
 
 ```yaml
 volumes:
-  - ../../services/catalog:/app/services/catalog
-  - ../../gen:/app/gen
+  - ../services/catalog:/app/services/catalog
+  - ../gen:/app/gen
 ```
 
 A **bind mount** maps a host directory to a container directory. The container sees your local filesystem in real time -- when you save a file on your host, the change is immediately visible inside the container. Air detects the change and triggers a rebuild.
@@ -286,7 +286,7 @@ The key insight: volume-mounted source changes are instant (Air catches them). B
 
 5. Test the modified endpoint with `curl` to confirm the change is live:
    ```bash
-   curl http://localhost:8080/health
+   curl http://localhost:8080/healthz
    ```
 
 6. Try editing `services/catalog/` source code and observe Air rebuild that service independently.
@@ -302,7 +302,7 @@ gateway-1  | building...
 gateway-1  | running ./tmp/main
 ```
 
-The rebuild typically takes 1-3 seconds for a small service. The curl request to `localhost:8080/health` returns the modified response immediately.
+The rebuild typically takes 1-3 seconds for a small service. The curl request to `localhost:8080/healthz` returns the modified response immediately.
 
 If you don't see Air detecting the change:
 - Verify the volume mount is working: `docker compose exec gateway ls /app/services/gateway/cmd/` -- the file should show your latest modification timestamp.

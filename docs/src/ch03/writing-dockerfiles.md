@@ -130,7 +130,7 @@ Or equivalently, in `docker-compose.yml`:
 ```yaml
 catalog:
   build:
-    context: ../..            # repo root
+    context: ..               # repo root
     dockerfile: services/catalog/Dockerfile
 ```
 
@@ -231,7 +231,7 @@ docker run --rm -p 8080:8080 gateway:latest
 `--rm` removes the container when it exits (cleanup). `-p 8080:8080` maps host port 8080 to container port 8080. You should see the Gateway's startup log. Test it:
 
 ```bash
-curl http://localhost:8080/health
+curl http://localhost:8080/healthz
 ```
 
 The Catalog service is harder to run standalone because it needs PostgreSQL. That is exactly what Compose solves -- covered in the next section.
@@ -255,7 +255,7 @@ The Catalog service is harder to run standalone because it needs PostgreSQL. Tha
    ```bash
    docker run --rm -p 8080:8080 gateway:latest
    # In another terminal:
-   curl http://localhost:8080/health
+   curl http://localhost:8080/healthz
    ```
 
 4. Try running the catalog container. What happens and why?
@@ -276,7 +276,7 @@ Running the gateway:
 ```bash
 $ docker run --rm -p 8080:8080 gateway:latest
 # Gateway starts and listens on :8080
-$ curl http://localhost:8080/health
+$ curl http://localhost:8080/healthz
 # Returns 200 OK (or whatever the health endpoint returns)
 ```
 

@@ -19,7 +19,7 @@ services:
 
   catalog:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/catalog/Dockerfile
     environment:
       DATABASE_URL: "host=postgres-catalog port=5432 user=${POSTGRES_CATALOG_USER:-postgres} password=${POSTGRES_CATALOG_PASSWORD:-postgres} dbname=${POSTGRES_CATALOG_DB:-catalog} sslmode=disable"
@@ -34,7 +34,7 @@ services:
 
   gateway:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/gateway/Dockerfile
     environment:
       PORT: "8080"

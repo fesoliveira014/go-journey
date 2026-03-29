@@ -117,7 +117,7 @@ ENTRYPOINT ["/usr/local/bin/<name>"]
 ```
 
 Key points:
-- **Root build context:** Docker Compose sets `context: ../..` (project root) so COPY can reach `gen/`
+- **Root build context:** Docker Compose sets `context: ..` (project root) so COPY can reach `gen/`
 - **`GOWORK=off`:** Disables Go workspace mode inside the container. The `go.work` file lists all workspace members, but we only copy one service. With workspace mode off, the `replace` directive in each service's `go.mod` resolves the `gen/` import. This is a key monorepo Docker pattern — the build must be self-contained per service.
 - **Selective COPY:** Only copies what the service needs, not the entire monorepo
 - **Two-phase COPY for cache efficiency:** First copy only `go.mod`/`go.sum` and download dependencies. Then copy source code. This means source code changes don't invalidate the dependency download cache — a standard Go Docker optimization.
@@ -233,7 +233,7 @@ services:
 
   catalog:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/catalog/Dockerfile
     environment:
       DATABASE_URL: "host=postgres-catalog port=5432 user=${POSTGRES_CATALOG_USER:-postgres} password=${POSTGRES_CATALOG_PASSWORD:-postgres} dbname=${POSTGRES_CATALOG_DB:-catalog} sslmode=disable"
@@ -248,7 +248,7 @@ services:
 
   gateway:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/gateway/Dockerfile
     environment:
       PORT: "8080"
@@ -271,18 +271,18 @@ networks:
 services:
   catalog:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/catalog/Dockerfile.dev
     volumes:
-      - ../../services/catalog:/app/services/catalog
-      - ../../gen:/app/gen
+      - ../services/catalog:/app/services/catalog
+      - ../gen:/app/gen
 
   gateway:
     build:
-      context: ../..
+      context: ..
       dockerfile: services/gateway/Dockerfile.dev
     volumes:
-      - ../../services/gateway:/app/services/gateway
+      - ../services/gateway:/app/services/gateway
 ```
 
 Usage:
