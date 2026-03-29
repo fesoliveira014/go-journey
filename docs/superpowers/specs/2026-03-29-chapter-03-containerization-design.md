@@ -23,7 +23,7 @@ Containerize the existing services (gateway and catalog) with Docker, orchestrat
 - **Incremental containerization:** Only gateway + catalog + PostgreSQL. Future chapters add services to the compose file as they're built.
 - **Dev Dockerfiles with air:** Each service gets a `Dockerfile.dev` with air for hot-reload inside containers, teaching the full Docker dev workflow.
 - **Deploy directory:** Docker Compose files live in `deploy/`, following the architecture spec. Keeps deployment config grouped with future K8s manifests and Terraform.
-- **Multi-stage COPY for monorepo:** Dockerfiles explicitly copy `go.work`, `gen/`, and their own `services/<name>/` directory. Combined with a root `.dockerignore` to keep build context small.
+- **Multi-stage COPY for monorepo:** Dockerfiles selectively copy `gen/` and their own `services/<name>/` directory with `GOWORK=off`. Combined with a root `.dockerignore` to keep build context small.
 
 ## Docker Compose Architecture
 
@@ -88,13 +88,25 @@ Multi-stage builds for minimal final images:
 FROM golang:1.26-alpine AS builder
 WORKDIR /app
 
-# Copy workspace and shared modules first (cache-friendly layer ordering)
-COPY go.work go.work.sum* ./
+# Disable workspace mode — we only copy this service and gen/, not all
+# workspace members. The replace directive in go.mod handles the gen/ import.
+ENV GOWORK=off
+
+# 1. Copy only go.mod/go.sum for dependency caching
+COPY gen/go.mod gen/go.sum* ./gen/
+COPY services/<name>/go.mod services/<name>/go.sum* ./services/<name>/
+
+# 2. Download dependencies (cached unless go.mod changes)
+WORKDIR /app/services/<name>
+RUN go mod download
+
+# 3. Copy source code (invalidates cache only when source changes)
+WORKDIR /app
 COPY gen/ ./gen/
 COPY services/<name>/ ./services/<name>/
 
+# 4. Build static binary
 WORKDIR /app/services/<name>
-RUN go mod download
 RUN CGO_ENABLED=0 go build -o /bin/<name> ./cmd/
 
 # Stage 2: Runtime
@@ -105,16 +117,19 @@ ENTRYPOINT ["/usr/local/bin/<name>"]
 ```
 
 Key points:
-- **Root build context:** Docker Compose sets `context: ../..` (project root) so COPY can reach `go.work` and `gen/`
+- **Root build context:** Docker Compose sets `context: ../..` (project root) so COPY can reach `gen/`
+- **`GOWORK=off`:** Disables Go workspace mode inside the container. The `go.work` file lists all workspace members, but we only copy one service. With workspace mode off, the `replace` directive in each service's `go.mod` resolves the `gen/` import. This is a key monorepo Docker pattern — the build must be self-contained per service.
 - **Selective COPY:** Only copies what the service needs, not the entire monorepo
-- **Layer ordering:** Workspace files and dependencies before source code, maximizing cache hits
+- **Two-phase COPY for cache efficiency:** First copy only `go.mod`/`go.sum` and download dependencies. Then copy source code. This means source code changes don't invalidate the dependency download cache — a standard Go Docker optimization.
 - **Static binary:** `CGO_ENABLED=0` produces a self-contained binary that runs on alpine without glibc
 
-Both gateway and catalog get this pattern. The existing catalog Dockerfile is rewritten. Gateway gets a new Dockerfile.
+The catalog Dockerfile uses this pattern exactly. The gateway Dockerfile is simpler — it does not depend on the `gen/` module today (no gRPC client calls yet), so its COPY steps omit `gen/` and `GOWORK=off`. When future chapters add gRPC client calls to the gateway, its Dockerfile will be updated to match the full pattern. This difference is a teaching opportunity: not every service needs the monorepo-aware build.
 
 ### Dev Dockerfiles (`services/<name>/Dockerfile.dev`)
 
-Single-stage with air for hot-reload:
+Single-stage with air for hot-reload. Like the production Dockerfiles, services that depend on `gen/` (catalog) use `GOWORK=off` and copy the shared module. The gateway dev Dockerfile is simpler since it has no `gen/` dependency.
+
+**Catalog dev Dockerfile:**
 
 ```dockerfile
 FROM golang:1.26-alpine
@@ -123,12 +138,30 @@ RUN go install github.com/air-verse/air@latest
 
 WORKDIR /app
 
-# Copy workspace and shared modules
-COPY go.work go.work.sum* ./
-COPY gen/ ./gen/
-COPY services/<name>/ ./services/<name>/
+# Disable workspace mode — same reason as production
+ENV GOWORK=off
 
-WORKDIR /app/services/<name>
+# Copy shared modules and service source
+COPY gen/ ./gen/
+COPY services/catalog/ ./services/catalog/
+
+WORKDIR /app/services/catalog
+RUN go mod download
+
+CMD ["air", "-c", ".air.toml"]
+```
+
+**Gateway dev Dockerfile** (simpler — no gen/ dependency):
+
+```dockerfile
+FROM golang:1.26-alpine
+
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+COPY services/gateway/ ./services/gateway/
+
+WORKDIR /app/services/gateway
 RUN go mod download
 
 CMD ["air", "-c", ".air.toml"]
@@ -147,7 +180,7 @@ tmp_dir = "tmp"
   bin = "./tmp/main"
   delay = 1000
   exclude_dir = ["tmp", "vendor"]
-  include_ext = ["go", "proto"]
+  include_ext = ["go"]
   kill_delay = "0s"
 
 [log]
@@ -166,12 +199,13 @@ At the project root, excludes non-build files from the Docker build context:
 .worktrees/
 docs/
 deploy/
-*.md
-!go.work
+**/*.md
 .env*
-.air.toml
-tmp/
+**/.air.toml
+**/tmp/
 ```
+
+Note: `**/*.md` excludes Markdown files recursively. No `go.work` exception is needed — both production and dev Dockerfiles use `GOWORK=off` and rely on each service's `go.mod` `replace` directive instead.
 
 ## Docker Compose Files
 
@@ -216,6 +250,8 @@ services:
     build:
       context: ../..
       dockerfile: services/gateway/Dockerfile
+    environment:
+      PORT: "8080"
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
     networks:
@@ -314,11 +350,12 @@ docs/src/
 
 ## Implementation Notes
 
-- **go.work in Docker:** The `go.work` file is critical for the monorepo build. Dockerfiles copy it to `/app/go.work` so that `go build` resolves cross-module imports (e.g., catalog importing from gen/).
-- **Volume mount gotcha:** In dev mode, the volume mount overrides the COPY'd source. But `go.work` and `gen/` are also mounted so that local changes to proto definitions are reflected without rebuilding the container.
+- **GOWORK=off for services depending on gen/:** Dockerfiles for services that import from the `gen/` module (currently catalog) set `ENV GOWORK=off` to disable Go workspace mode. The `go.work` file references all workspace members, but each image only contains one service. With workspace mode off, the service's `go.mod` `replace` directive resolves the `gen/` import independently. This is a key monorepo Docker pattern. The gateway does not need `GOWORK=off` today since it has no `gen/` dependency.
+- **Volume mount gotcha:** In dev mode, volume mounts override the COPY'd source. For services that depend on `gen/` (catalog), both `gen/` and the service directory are mounted so that local changes to proto definitions or service code are reflected without rebuilding. Services without `gen/` dependency (gateway) only mount their own service directory.
 - **Port mapping:** PostgreSQL uses 5433 externally (to avoid conflicting with a local PostgreSQL on 5432) but 5432 internally. Services inside the Docker network connect on 5432.
-- **go.work.sum:** The `COPY go.work go.work.sum* ./` wildcard handles the case where `go.work.sum` doesn't exist yet.
 - **Catalog DATABASE_URL:** The catalog service already reads `DATABASE_URL` from the environment (implemented in Chapter 2). Docker Compose sets this to point at `postgres-catalog` by container name.
+- **Migrations on first startup:** The catalog service runs golang-migrate on startup (implemented in Chapter 2). On the first `docker compose up`, PostgreSQL starts, passes its healthcheck, then catalog starts and automatically applies migrations to create the books table. No manual migration step is needed.
+- **Gateway does not need gen/:** The gateway currently has no gRPC client dependencies on the `gen/` module. Its Dockerfile is simpler — no `COPY gen/` or `GOWORK=off`. When future chapters add gRPC client calls, its Dockerfile will be updated.
 
 ## What This Chapter Does NOT Include
 
