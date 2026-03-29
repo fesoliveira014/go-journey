@@ -1,0 +1,14 @@
+[book]
+title = "Building Microservices in Go"
+authors = ["fesoliveira014"]
+language = "en"
+multilingual = false
+src = "src"
+
+[build]
+build-dir = "../site"
+
+[output.html]
+default-theme = "navy"
+preferred-dark-theme = "navy"
+git-repository-url = "https://github.com/fesoliveira014/library-system"
