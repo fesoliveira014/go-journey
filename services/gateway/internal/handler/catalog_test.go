@@ -5,11 +5,14 @@ import (
 	"html/template"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
+	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	"github.com/fesoliveira014/library-system/services/gateway/internal/handler"
+	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -259,5 +262,261 @@ func TestBookDetail_NotFound(t *testing.T) {
 
 	if rec.Code != http.StatusNotFound {
 		t.Errorf("expected 404, got %d", rec.Code)
+	}
+}
+
+// adminTestTemplates extends catalogTestTemplates with templates needed for
+// admin handler tests.
+func adminTestTemplates(t *testing.T) map[string]*template.Template {
+	t.Helper()
+	m := catalogTestTemplates(t)
+
+	newSet := template.Must(template.New("base.html").Parse(
+		`ADMIN_NEW:{{if .Data.Error}}ERR:{{.Data.Error}}{{end}}`,
+	))
+	m["admin_book_new.html"] = newSet
+
+	editSet := template.Must(template.New("base.html").Parse(
+		`ADMIN_EDIT:{{.Data.Title}}:{{.Data.Author}}`,
+	))
+	m["admin_book_edit.html"] = editSet
+
+	return m
+}
+
+// withAdmin returns a copy of r with admin user injected into the context.
+func withAdmin(r *http.Request) *http.Request {
+	ctx := pkgauth.ContextWithUser(r.Context(), uuid.New(), "admin")
+	return r.WithContext(ctx)
+}
+
+// withMember returns a copy of r with a non-admin user injected into the context.
+func withMember(r *http.Request) *http.Request {
+	ctx := pkgauth.ContextWithUser(r.Context(), uuid.New(), "member")
+	return r.WithContext(ctx)
+}
+
+// ---- Admin handler tests ----
+
+func TestAdminBookNew_RequiresAdmin(t *testing.T) {
+	tmpl := adminTestTemplates(t)
+	srv := handler.New(nil, &mockCatalogClient{}, tmpl)
+
+	// No user in context → redirect to /login
+	req := httptest.NewRequest(http.MethodGet, "/admin/books/new", nil)
+	rec := httptest.NewRecorder()
+
+	srv.AdminBookNew(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("expected 303, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/login" {
+		t.Errorf("expected redirect to /login, got %q", loc)
+	}
+}
+
+func TestAdminBookNew_NonAdmin(t *testing.T) {
+	tmpl := adminTestTemplates(t)
+	srv := handler.New(nil, &mockCatalogClient{}, tmpl)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/books/new", nil)
+	req = withMember(req)
+	rec := httptest.NewRecorder()
+
+	srv.AdminBookNew(rec, req)
+
+	if rec.Code != http.StatusForbidden {
+		t.Errorf("expected 403, got %d", rec.Code)
+	}
+}
+
+func TestAdminBookNew_Admin(t *testing.T) {
+	tmpl := adminTestTemplates(t)
+	srv := handler.New(nil, &mockCatalogClient{}, tmpl)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/books/new", nil)
+	req = withAdmin(req)
+	rec := httptest.NewRecorder()
+
+	srv.AdminBookNew(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+	if !strings.Contains(rec.Body.String(), "ADMIN_NEW:") {
+		t.Errorf("expected admin_book_new.html rendered, got %q", rec.Body.String())
+	}
+}
+
+func TestAdminBookCreate_Success(t *testing.T) {
+	var captured *catalogv1.CreateBookRequest
+	mock := &mockCatalogClient{
+		createBookFn: func(_ context.Context, in *catalogv1.CreateBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
+			captured = in
+			return &catalogv1.Book{Id: "99", Title: in.Title}, nil
+		},
+	}
+	tmpl := adminTestTemplates(t)
+	srv := handler.New(nil, mock, tmpl)
+
+	form := url.Values{
+		"title":          {"The Pragmatic Programmer"},
+		"author":         {"Andy Hunt"},
+		"isbn":           {"978-0135957059"},
+		"genre":          {"Programming"},
+		"description":    {"A classic"},
+		"published_year": {"1999"},
+		"total_copies":   {"5"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/admin/books", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req = withAdmin(req)
+	rec := httptest.NewRecorder()
+
+	srv.AdminBookCreate(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("expected 303 redirect, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/books" {
+		t.Errorf("expected redirect to /books, got %q", loc)
+	}
+	// Flash cookie must be set.
+	cookies := rec.Result().Cookies()
+	var flash string
+	for _, c := range cookies {
+		if c.Name == "flash" {
+			flash = c.Value
+		}
+	}
+	if flash != "Book created" {
+		t.Errorf("expected flash 'Book created', got %q", flash)
+	}
+	if captured == nil {
+		t.Fatal("CreateBook was not called")
+	}
+	if captured.Title != "The Pragmatic Programmer" {
+		t.Errorf("unexpected title: %q", captured.Title)
+	}
+}
+
+func TestAdminBookEdit_LoadsBook(t *testing.T) {
+	mock := &mockCatalogClient{
+		getBookFn: func(_ context.Context, in *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
+			if in.Id != "42" {
+				return nil, status.Error(codes.NotFound, "not found")
+			}
+			return &catalogv1.Book{
+				Id:     "42",
+				Title:  "Clean Code",
+				Author: "Robert Martin",
+			}, nil
+		},
+	}
+	tmpl := adminTestTemplates(t)
+	srv := handler.New(nil, mock, tmpl)
+
+	req := httptest.NewRequest(http.MethodGet, "/admin/books/42", nil)
+	req.SetPathValue("id", "42")
+	req = withAdmin(req)
+	rec := httptest.NewRecorder()
+
+	srv.AdminBookEdit(rec, req)
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d", rec.Code)
+	}
+	body := rec.Body.String()
+	if !strings.Contains(body, "Clean Code") {
+		t.Errorf("expected book title in edit form, got %q", body)
+	}
+}
+
+func TestAdminBookUpdate_Success(t *testing.T) {
+	var capturedID string
+	mock := &mockCatalogClient{
+		updateBookFn: func(_ context.Context, in *catalogv1.UpdateBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
+			capturedID = in.Id
+			return &catalogv1.Book{Id: in.Id, Title: in.Title}, nil
+		},
+	}
+	tmpl := adminTestTemplates(t)
+	srv := handler.New(nil, mock, tmpl)
+
+	form := url.Values{
+		"title":          {"Clean Code (2nd ed)"},
+		"author":         {"Robert Martin"},
+		"isbn":           {"978-0132350884"},
+		"genre":          {"Programming"},
+		"description":    {"Updated"},
+		"published_year": {"2008"},
+		"total_copies":   {"3"},
+	}
+	req := httptest.NewRequest(http.MethodPost, "/admin/books/42", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.SetPathValue("id", "42")
+	req = withAdmin(req)
+	rec := httptest.NewRecorder()
+
+	srv.AdminBookUpdate(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("expected 303 redirect, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/books/42" {
+		t.Errorf("expected redirect to /books/42, got %q", loc)
+	}
+	if capturedID != "42" {
+		t.Errorf("expected UpdateBook called with id '42', got %q", capturedID)
+	}
+	cookies := rec.Result().Cookies()
+	var flash string
+	for _, c := range cookies {
+		if c.Name == "flash" {
+			flash = c.Value
+		}
+	}
+	if flash != "Book updated" {
+		t.Errorf("expected flash 'Book updated', got %q", flash)
+	}
+}
+
+func TestAdminBookDelete_Success(t *testing.T) {
+	var deletedID string
+	mock := &mockCatalogClient{
+		deleteBookFn: func(_ context.Context, in *catalogv1.DeleteBookRequest, _ ...grpc.CallOption) (*catalogv1.DeleteBookResponse, error) {
+			deletedID = in.Id
+			return &catalogv1.DeleteBookResponse{}, nil
+		},
+	}
+	tmpl := adminTestTemplates(t)
+	srv := handler.New(nil, mock, tmpl)
+
+	req := httptest.NewRequest(http.MethodPost, "/admin/books/42/delete", nil)
+	req.SetPathValue("id", "42")
+	req = withAdmin(req)
+	rec := httptest.NewRecorder()
+
+	srv.AdminBookDelete(rec, req)
+
+	if rec.Code != http.StatusSeeOther {
+		t.Errorf("expected 303 redirect, got %d", rec.Code)
+	}
+	if loc := rec.Header().Get("Location"); loc != "/books" {
+		t.Errorf("expected redirect to /books, got %q", loc)
+	}
+	if deletedID != "42" {
+		t.Errorf("expected DeleteBook called with id '42', got %q", deletedID)
+	}
+	cookies := rec.Result().Cookies()
+	var flash string
+	for _, c := range cookies {
+		if c.Name == "flash" {
+			flash = c.Value
+		}
+	}
+	if flash != "Book deleted" {
+		t.Errorf("expected flash 'Book deleted', got %q", flash)
 	}
 }
