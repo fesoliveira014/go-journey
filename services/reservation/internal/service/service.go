@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"log"
 	"time"
 
 	"github.com/google/uuid"
@@ -90,13 +91,15 @@ func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.
 		return nil, fmt.Errorf("create reservation: %w", err)
 	}
 
-	_ = s.publisher.Publish(ctx, ReservationEvent{
+	if err := s.publisher.Publish(ctx, ReservationEvent{
 		Type:          "reservation.created",
 		ReservationID: created.ID.String(),
 		UserID:        userID.String(),
 		BookID:        bookID.String(),
 		Timestamp:     now,
-	})
+	}); err != nil {
+		log.Printf("failed to publish created event for reservation %s: %v", created.ID, err)
+	}
 
 	return created, nil
 }
@@ -113,7 +116,7 @@ func (s *ReservationService) ReturnBook(ctx context.Context, reservationID uuid.
 	}
 
 	if res.UserID != userID {
-		return nil, fmt.Errorf("permission denied")
+		return nil, model.ErrPermissionDenied
 	}
 
 	if res.Status != model.StatusActive {
@@ -129,13 +132,15 @@ func (s *ReservationService) ReturnBook(ctx context.Context, reservationID uuid.
 		return nil, fmt.Errorf("update reservation: %w", err)
 	}
 
-	_ = s.publisher.Publish(ctx, ReservationEvent{
+	if err := s.publisher.Publish(ctx, ReservationEvent{
 		Type:          "reservation.returned",
 		ReservationID: updated.ID.String(),
 		UserID:        userID.String(),
 		BookID:        updated.BookID.String(),
 		Timestamp:     now,
-	})
+	}); err != nil {
+		log.Printf("failed to publish returned event for reservation %s: %v", updated.ID, err)
+	}
 
 	return updated, nil
 }
@@ -152,7 +157,7 @@ func (s *ReservationService) GetReservation(ctx context.Context, reservationID u
 	}
 
 	if res.UserID != userID {
-		return nil, fmt.Errorf("permission denied")
+		return nil, model.ErrPermissionDenied
 	}
 
 	s.expireIfDue(ctx, res)
@@ -183,14 +188,20 @@ func (s *ReservationService) expireIfDue(ctx context.Context, r *model.Reservati
 	}
 
 	r.Status = model.StatusExpired
-	s.repo.Update(ctx, r)
+	if _, err := s.repo.Update(ctx, r); err != nil {
+		log.Printf("failed to expire reservation %s: %v", r.ID, err)
+		r.Status = model.StatusActive // revert in-memory change
+		return
+	}
 
 	userID, _ := pkgauth.UserIDFromContext(ctx)
-	_ = s.publisher.Publish(ctx, ReservationEvent{
+	if err := s.publisher.Publish(ctx, ReservationEvent{
 		Type:          "reservation.expired",
 		ReservationID: r.ID.String(),
 		UserID:        userID.String(),
 		BookID:        r.BookID.String(),
 		Timestamp:     time.Now(),
-	})
+	}); err != nil {
+		log.Printf("failed to publish expired event for reservation %s: %v", r.ID, err)
+	}
 }

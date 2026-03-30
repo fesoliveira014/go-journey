@@ -28,4 +28,5 @@ var (
 	ErrAlreadyReturned     = errors.New("reservation already returned or expired")
 	ErrMaxReservations     = errors.New("maximum active reservations reached")
 	ErrNoAvailableCopies   = errors.New("no available copies")
+	ErrPermissionDenied    = errors.New("permission denied")
 )

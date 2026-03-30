@@ -110,10 +110,9 @@ func toGRPCError(err error) error {
 		return status.Error(codes.FailedPrecondition, "no copies available")
 	case errors.Is(err, model.ErrAlreadyReturned):
 		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, model.ErrPermissionDenied):
+		return status.Error(codes.PermissionDenied, "permission denied")
 	default:
-		if err.Error() == "permission denied" {
-			return status.Error(codes.PermissionDenied, "permission denied")
-		}
 		return status.Error(codes.Internal, "internal error")
 	}
 }
