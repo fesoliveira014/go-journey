@@ -1,0 +1,49 @@
+syntax = "proto3";
+package reservation.v1;
+
+option go_package = "github.com/fesoliveira014/library-system/gen/reservation/v1;reservationv1";
+
+import "google/protobuf/timestamp.proto";
+
+service ReservationService {
+  rpc CreateReservation(CreateReservationRequest) returns (CreateReservationResponse);
+  rpc ReturnBook(ReturnBookRequest) returns (ReturnBookResponse);
+  rpc GetReservation(GetReservationRequest) returns (Reservation);
+  rpc ListUserReservations(ListUserReservationsRequest) returns (ListUserReservationsResponse);
+}
+
+message CreateReservationRequest {
+  string book_id = 1;
+}
+
+message CreateReservationResponse {
+  Reservation reservation = 1;
+}
+
+message ReturnBookRequest {
+  string reservation_id = 1;
+}
+
+message ReturnBookResponse {
+  Reservation reservation = 1;
+}
+
+message GetReservationRequest {
+  string reservation_id = 1;
+}
+
+message ListUserReservationsRequest {}
+
+message ListUserReservationsResponse {
+  repeated Reservation reservations = 1;
+}
+
+message Reservation {
+  string id = 1;
+  string user_id = 2;
+  string book_id = 3;
+  string status = 4;
+  google.protobuf.Timestamp reserved_at = 5;
+  google.protobuf.Timestamp due_at = 6;
+  google.protobuf.Timestamp returned_at = 7;
+}
