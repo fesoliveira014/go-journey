@@ -1,9 +1,14 @@
 FROM golang:1.26-alpine
 
+ENV GOWORK=off
+
 RUN go install github.com/air-verse/air@latest
 
 WORKDIR /app
-COPY services/gateway/ ./services/gateway/
+
+COPY gen/go.mod gen/go.sum* ./gen/
+COPY pkg/auth/go.mod pkg/auth/go.sum* ./pkg/auth/
+COPY services/gateway/go.mod services/gateway/go.sum* ./services/gateway/
 
 WORKDIR /app/services/gateway
 RUN go mod download

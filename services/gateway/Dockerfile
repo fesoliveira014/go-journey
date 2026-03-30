@@ -2,15 +2,20 @@
 FROM golang:1.26-alpine AS builder
 WORKDIR /app
 
-# Copy only go.mod first for dependency caching
+ENV GOWORK=off
+
+# Copy go.mod files first for dependency caching
+COPY gen/go.mod gen/go.sum* ./gen/
+COPY pkg/auth/go.mod pkg/auth/go.sum* ./pkg/auth/
 COPY services/gateway/go.mod services/gateway/go.sum* ./services/gateway/
 
-# Download dependencies (currently none, but pattern is correct for future)
 WORKDIR /app/services/gateway
 RUN go mod download
 
-# Copy source code
+# Copy full source
 WORKDIR /app
+COPY gen/ ./gen/
+COPY pkg/auth/ ./pkg/auth/
 COPY services/gateway/ ./services/gateway/
 
 # Build static binary
@@ -20,5 +25,8 @@ RUN CGO_ENABLED=0 go build -o /bin/gateway ./cmd/
 # Stage 2: Runtime
 FROM alpine:3.19
 COPY --from=builder /bin/gateway /usr/local/bin/gateway
+COPY --from=builder /app/services/gateway/templates/ /app/templates/
+COPY --from=builder /app/services/gateway/static/ /app/static/
+WORKDIR /app
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/gateway"]
