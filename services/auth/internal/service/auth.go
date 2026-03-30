@@ -2,6 +2,7 @@ package service
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -83,8 +84,11 @@ func (s *AuthService) Register(ctx context.Context, email, password, name string
 func (s *AuthService) Login(ctx context.Context, email, password string) (string, *model.User, error) {
 	user, err := s.repo.GetByEmail(ctx, email)
 	if err != nil {
-		// Don't leak whether the email exists
-		return "", nil, model.ErrInvalidCredentials
+		if errors.Is(err, model.ErrUserNotFound) {
+			// Don't leak whether the email exists
+			return "", nil, model.ErrInvalidCredentials
+		}
+		return "", nil, err
 	}
 
 	if user.PasswordHash == nil {
@@ -129,6 +133,9 @@ func (s *AuthService) FindOrCreateOAuthUser(ctx context.Context, provider, oauth
 			return "", nil, fmt.Errorf("failed to generate token: %w", err)
 		}
 		return token, user, nil
+	}
+	if !errors.Is(err, model.ErrUserNotFound) {
+		return "", nil, fmt.Errorf("lookup oauth user: %w", err)
 	}
 
 	// Create new OAuth user (no password)
