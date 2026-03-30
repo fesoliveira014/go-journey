@@ -22,3 +22,8 @@
   - [4.2 The Auth Service](./ch04/auth-service.md)
   - [4.3 OAuth2 with Google](./ch04/oauth2.md)
   - [4.4 Protecting Services with Interceptors](./ch04/interceptors.md)
+- [Chapter 5: Gateway & Frontend](./ch05/index.md)
+  - [5.1 The BFF Pattern](./ch05/bff-pattern.md)
+  - [5.2 Templates & HTMX](./ch05/templates-htmx.md)
+  - [5.3 Session Management](./ch05/session-management.md)
+  - [5.4 Admin CRUD](./ch05/admin-crud.md)
