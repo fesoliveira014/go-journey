@@ -1,0 +1,65 @@
+syntax = "proto3";
+
+package auth.v1;
+
+import "google/protobuf/timestamp.proto";
+
+option go_package = "github.com/fesoliveira014/library-system/gen/auth/v1;authv1";
+
+service AuthService {
+  rpc Register(RegisterRequest) returns (AuthResponse);
+  rpc Login(LoginRequest) returns (AuthResponse);
+  rpc ValidateToken(ValidateTokenRequest) returns (ValidateTokenResponse);
+  rpc GetUser(GetUserRequest) returns (User);
+  rpc InitOAuth2(InitOAuth2Request) returns (InitOAuth2Response);
+  rpc CompleteOAuth2(CompleteOAuth2Request) returns (AuthResponse);
+}
+
+message User {
+  string id = 1;
+  string email = 2;
+  string name = 3;
+  string role = 4;
+  google.protobuf.Timestamp created_at = 5;
+  google.protobuf.Timestamp updated_at = 6;
+}
+
+message RegisterRequest {
+  string email = 1;
+  string password = 2;
+  string name = 3;
+}
+
+message LoginRequest {
+  string email = 1;
+  string password = 2;
+}
+
+message AuthResponse {
+  string token = 1;
+  User user = 2;
+}
+
+message ValidateTokenRequest {
+  string token = 1;
+}
+
+message ValidateTokenResponse {
+  string user_id = 1;
+  string role = 2;
+}
+
+message GetUserRequest {
+  string id = 1;
+}
+
+message InitOAuth2Request {}
+
+message InitOAuth2Response {
+  string redirect_url = 1;
+}
+
+message CompleteOAuth2Request {
+  string code = 1;
+  string state = 2;
+}
