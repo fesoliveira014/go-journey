@@ -27,3 +27,8 @@
   - [5.2 Templates & HTMX](./ch05/templates-htmx.md)
   - [5.3 Session Management](./ch05/session-management.md)
   - [5.4 Admin CRUD](./ch05/admin-crud.md)
+- [Chapter 6: Event-Driven Architecture](./ch06/index.md)
+  - [6.1 Event-Driven Architecture](./ch06/event-driven-architecture.md)
+  - [6.2 Reservation Service](./ch06/reservation-service.md)
+  - [6.3 Kafka Consumer](./ch06/kafka-consumer.md)
+  - [6.4 Reservation UI](./ch06/reservation-ui.md)
