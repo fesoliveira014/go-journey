@@ -15,9 +15,11 @@ func main() {
 		port = "8080"
 	}
 
+	// TODO(Task 6): wire gRPC clients and parsed templates; register all routes.
+	srv := handler.New(nil, nil, nil)
+
 	mux := http.NewServeMux()
-	mux.HandleFunc("/healthz", handler.Health)
-	mux.HandleFunc("/books", handler.Books)
+	mux.HandleFunc("/healthz", srv.Health)
 
 	addr := fmt.Sprintf(":%s", port)
 	log.Printf("gateway listening on %s", addr)

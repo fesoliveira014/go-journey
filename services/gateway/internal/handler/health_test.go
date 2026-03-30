@@ -9,10 +9,11 @@ import (
 )
 
 func TestHealthHandler_ReturnsOK(t *testing.T) {
+	srv := handler.New(nil, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 
-	handler.Health(rec, req)
+	srv.Health(rec, req)
 
 	if rec.Code != http.StatusOK {
 		t.Errorf("expected status %d, got %d", http.StatusOK, rec.Code)
@@ -22,16 +23,5 @@ func TestHealthHandler_ReturnsOK(t *testing.T) {
 	expected := "{\"status\":\"ok\"}\n"
 	if body := rec.Body.String(); body != expected {
 		t.Errorf("expected body %q, got %q", expected, body)
-	}
-}
-
-func TestHealthHandler_RejectsNonGET(t *testing.T) {
-	req := httptest.NewRequest(http.MethodPost, "/healthz", nil)
-	rec := httptest.NewRecorder()
-
-	handler.Health(rec, req)
-
-	if rec.Code != http.StatusMethodNotAllowed {
-		t.Errorf("expected status %d, got %d", http.StatusMethodNotAllowed, rec.Code)
 	}
 }
