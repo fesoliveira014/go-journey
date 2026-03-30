@@ -32,7 +32,7 @@ Reads are synchronous (gRPC). Writes are asynchronous (Kafka). This creates a br
 
 ### Known Simplification: TOCTOU Race
 
-The `CreateReservation` flow checks availability via gRPC, then creates the reservation. There is no distributed lock between the check and the insert. Two concurrent users could both see `available_copies == 1`, both create reservations, and drive availability negative. This is acceptable for a learning project — the tutorial should document this as a known simplification and note that production systems solve it with either (a) a database-level constraint, (b) optimistic concurrency with retry, or (c) a saga pattern. Adding the `available_copies > 0` guard to the catalog's `UpdateAvailability` repository method (see Catalog Changes below) provides a safety net: the decrement will silently fail if copies reach 0, preventing true negative values even under race conditions.
+The `CreateReservation` flow checks availability via gRPC, then creates the reservation. There is no distributed lock between the check and the insert. Two concurrent users could both see `available_copies == 1`, both create reservations, and drive availability negative. This is acceptable for a learning project — the tutorial should document this as a known simplification and note that production systems solve it with either (a) a database-level constraint, (b) optimistic concurrency with retry, or (c) a saga pattern. Adding the `available_copies > 0` guard to the catalog's `UpdateAvailability` repository method (see Catalog Changes below) provides a safety net: the decrement will silently do nothing if `available_copies` is already 0 (i.e., would go negative), preventing negative values even under race conditions.
 
 ## Reservation Service
 
@@ -233,7 +233,7 @@ The consumer runs as a goroutine started from the catalog service's `main.go`. A
 
 The catalog service already has `UpdateAvailability(ctx context.Context, id uuid.UUID, delta int) error` in `services/catalog/internal/service/catalog.go`, which delegates to the repository's `UpdateAvailability`. The consumer calls this directly since it's co-located. No new service-layer methods are needed.
 
-**Repository change:** The existing `BookRepository.UpdateAvailability` in `services/catalog/internal/repository/book.go` does not guard against negative `available_copies`. Add a `WHERE available_copies + ? >= 0` clause to the UPDATE so decrements that would go negative silently affect zero rows instead. Check `RowsAffected == 0` when `delta < 0` to detect this case (the consumer can log a warning and skip).
+**Repository change:** The existing `BookRepository.UpdateAvailability` in `services/catalog/internal/repository/book.go` does not guard against negative `available_copies`. Add a `WHERE available_copies + ? >= 0` clause to the UPDATE so decrements that would go negative silently affect zero rows instead. When `delta < 0` and `RowsAffected == 0`, the repository returns `nil` (not an error) — the guard silently prevents negative values without propagating an error through the service layer. The consumer treats all `nil` returns as success.
 
 ### Error Handling
 
