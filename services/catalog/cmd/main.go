@@ -1,10 +1,14 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"os/signal"
+	"strings"
+	"syscall"
 
 	"github.com/golang-migrate/migrate/v4"
 	pgmigrate "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -17,6 +21,7 @@ import (
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
+	"github.com/fesoliveira014/library-system/services/catalog/internal/consumer"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/handler"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/repository"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/service"
@@ -24,7 +29,6 @@ import (
 )
 
 func main() {
-	// Configuration from environment
 	dbDSN := os.Getenv("DATABASE_URL")
 	if dbDSN == "" {
 		dbDSN = "host=localhost port=5432 user=postgres password=postgres dbname=catalog sslmode=disable"
@@ -37,26 +41,36 @@ func main() {
 	if jwtSecret == "" {
 		jwtSecret = "dev-secret-change-in-production"
 	}
+	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
-	// Connect to PostgreSQL via GORM
 	db, err := gorm.Open(postgres.Open(dbDSN), &gorm.Config{})
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 	log.Println("connected to PostgreSQL")
 
-	// Run migrations
 	if err := runMigrations(db); err != nil {
 		log.Fatalf("failed to run migrations: %v", err)
 	}
 	log.Println("migrations completed")
 
-	// Wire dependencies
 	bookRepo := repository.NewBookRepository(db)
 	catalogSvc := service.NewCatalogService(bookRepo)
 	catalogHandler := handler.NewCatalogHandler(catalogSvc)
 
-	// Methods that don't require authentication
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
+	if kafkaBrokers != "" {
+		brokers := strings.Split(kafkaBrokers, ",")
+		go func() {
+			log.Println("starting kafka consumer for reservations topic")
+			if err := consumer.Run(ctx, brokers, "reservations", catalogSvc); err != nil {
+				log.Printf("kafka consumer error: %v", err)
+			}
+		}()
+	}
+
 	skipMethods := []string{
 		"/catalog.v1.CatalogService/GetBook",
 		"/catalog.v1.CatalogService/ListBooks",
@@ -64,7 +78,6 @@ func main() {
 	}
 	interceptor := pkgauth.UnaryAuthInterceptor(jwtSecret, skipMethods)
 
-	// Start gRPC server
 	lis, err := net.Listen("tcp", ":"+grpcPort)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
@@ -72,7 +85,7 @@ func main() {
 
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 	catalogv1.RegisterCatalogServiceServer(grpcServer, catalogHandler)
-	reflection.Register(grpcServer) // Enable grpcurl and gRPC reflection
+	reflection.Register(grpcServer)
 
 	log.Printf("catalog service listening on :%s", grpcPort)
 	if err := grpcServer.Serve(lis); err != nil {
@@ -80,7 +93,6 @@ func main() {
 	}
 }
 
-// runMigrations runs embedded SQL migrations using golang-migrate.
 func runMigrations(db *gorm.DB) error {
 	sqlDB, err := db.DB()
 	if err != nil {

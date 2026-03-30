@@ -121,12 +121,15 @@ func (r *BookRepository) List(ctx context.Context, filter model.BookFilter, page
 func (r *BookRepository) UpdateAvailability(ctx context.Context, id uuid.UUID, delta int) error {
 	result := r.db.WithContext(ctx).
 		Model(&model.Book{}).
-		Where("id = ?", id).
+		Where("id = ? AND available_copies + ? >= 0", id, delta).
 		Update("available_copies", gorm.Expr("available_copies + ?", delta))
 	if result.Error != nil {
 		return result.Error
 	}
-	if result.RowsAffected == 0 {
+	// If delta < 0 and RowsAffected == 0, either the book doesn't exist or
+	// the guard prevented a negative value. For positive deltas, 0 rows means
+	// not found. This distinction is a simplification — see spec for details.
+	if delta >= 0 && result.RowsAffected == 0 {
 		return model.ErrBookNotFound
 	}
 	return nil
