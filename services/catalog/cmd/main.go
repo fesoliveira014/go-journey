@@ -16,6 +16,7 @@ import (
 	"gorm.io/gorm"
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
+	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/handler"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/repository"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/service"
@@ -31,6 +32,10 @@ func main() {
 	grpcPort := os.Getenv("GRPC_PORT")
 	if grpcPort == "" {
 		grpcPort = "50052"
+	}
+	jwtSecret := os.Getenv("JWT_SECRET")
+	if jwtSecret == "" {
+		jwtSecret = "dev-secret-change-in-production"
 	}
 
 	// Connect to PostgreSQL via GORM
@@ -51,13 +56,21 @@ func main() {
 	catalogSvc := service.NewCatalogService(bookRepo)
 	catalogHandler := handler.NewCatalogHandler(catalogSvc)
 
+	// Methods that don't require authentication
+	skipMethods := []string{
+		"/catalog.v1.CatalogService/GetBook",
+		"/catalog.v1.CatalogService/ListBooks",
+		"/catalog.v1.CatalogService/UpdateAvailability",
+	}
+	interceptor := pkgauth.UnaryAuthInterceptor(jwtSecret, skipMethods)
+
 	// Start gRPC server
 	lis, err := net.Listen("tcp", ":"+grpcPort)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}
 
-	grpcServer := grpc.NewServer()
+	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 	catalogv1.RegisterCatalogServiceServer(grpcServer, catalogHandler)
 	reflection.Register(grpcServer) // Enable grpcurl and gRPC reflection
 

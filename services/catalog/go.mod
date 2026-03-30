@@ -4,6 +4,7 @@ go 1.26.1
 
 require (
 	github.com/fesoliveira014/library-system/gen v0.0.0
+	github.com/fesoliveira014/library-system/pkg/auth v0.0.0-00010101000000-000000000000
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	google.golang.org/grpc v1.79.3
@@ -13,6 +14,7 @@ require (
 )
 
 require (
+	github.com/golang-jwt/jwt/v5 v5.3.1 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
 	github.com/jackc/pgx/v5 v5.6.0 // indirect
@@ -29,3 +31,5 @@ require (
 )
 
 replace github.com/fesoliveira014/library-system/gen => ../../gen
+
+replace github.com/fesoliveira014/library-system/pkg/auth => ../../pkg/auth

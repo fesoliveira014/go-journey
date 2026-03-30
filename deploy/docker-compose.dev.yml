@@ -6,6 +6,7 @@ services:
     volumes:
       - ../services/catalog:/app/services/catalog
       - ../gen:/app/gen
+      - ../pkg/auth:/app/pkg/auth
 
   gateway:
     build:

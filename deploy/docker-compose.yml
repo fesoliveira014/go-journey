@@ -24,6 +24,7 @@ services:
     environment:
       DATABASE_URL: "host=postgres-catalog port=5432 user=${POSTGRES_CATALOG_USER:-postgres} password=${POSTGRES_CATALOG_PASSWORD:-postgres} dbname=${POSTGRES_CATALOG_DB:-catalog} sslmode=disable"
       GRPC_PORT: "50052"
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
     ports:
       - "${CATALOG_GRPC_PORT:-50052}:50052"
     depends_on:

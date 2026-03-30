@@ -9,6 +9,7 @@ ENV GOWORK=off
 
 # Copy shared modules and service source
 COPY gen/ ./gen/
+COPY pkg/auth/ ./pkg/auth/
 COPY services/catalog/ ./services/catalog/
 
 WORKDIR /app/services/catalog

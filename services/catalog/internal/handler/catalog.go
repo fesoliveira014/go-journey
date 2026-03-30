@@ -10,6 +10,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
+	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/model"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/service"
 )
@@ -26,6 +27,9 @@ func NewCatalogHandler(svc *service.CatalogService) *CatalogHandler {
 }
 
 func (h *CatalogHandler) CreateBook(ctx context.Context, req *catalogv1.CreateBookRequest) (*catalogv1.Book, error) {
+	if err := pkgauth.RequireRole(ctx, "admin"); err != nil {
+		return nil, err
+	}
 	if req.GetTitle() == "" {
 		return nil, status.Error(codes.InvalidArgument, "title is required")
 	}
@@ -64,6 +68,9 @@ func (h *CatalogHandler) GetBook(ctx context.Context, req *catalogv1.GetBookRequ
 }
 
 func (h *CatalogHandler) UpdateBook(ctx context.Context, req *catalogv1.UpdateBookRequest) (*catalogv1.Book, error) {
+	if err := pkgauth.RequireRole(ctx, "admin"); err != nil {
+		return nil, err
+	}
 	id, err := uuid.Parse(req.GetId())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid book ID")
@@ -88,6 +95,9 @@ func (h *CatalogHandler) UpdateBook(ctx context.Context, req *catalogv1.UpdateBo
 }
 
 func (h *CatalogHandler) DeleteBook(ctx context.Context, req *catalogv1.DeleteBookRequest) (*catalogv1.DeleteBookResponse, error) {
+	if err := pkgauth.RequireRole(ctx, "admin"); err != nil {
+		return nil, err
+	}
 	id, err := uuid.Parse(req.GetId())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid book ID")
