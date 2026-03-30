@@ -17,3 +17,8 @@
   - [3.2 Writing Dockerfiles](./ch03/writing-dockerfiles.md)
   - [3.3 Docker Compose](./ch03/docker-compose.md)
   - [3.4 Development Workflow](./ch03/dev-workflow.md)
+- [Chapter 4: Authentication](./ch04/index.md)
+  - [4.1 Authentication Fundamentals](./ch04/auth-fundamentals.md)
+  - [4.2 The Auth Service](./ch04/auth-service.md)
+  - [4.3 OAuth2 with Google](./ch04/oauth2.md)
+  - [4.4 Protecting Services with Interceptors](./ch04/interceptors.md)
