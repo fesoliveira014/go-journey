@@ -16,7 +16,7 @@ func (s *Server) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 	email := r.FormValue("email")
 	password := r.FormValue("password")
 	if email == "" || password == "" {
-		s.render(w, r, "login.html", map[string]any{"Error": "Email and password are required"})
+		s.render(w, r, "login.html", map[string]any{"Error": "Email and password are required", "Email": email})
 		return
 	}
 	resp, err := s.auth.Login(r.Context(), &authv1.LoginRequest{Email: email, Password: password})
