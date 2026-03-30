@@ -11,6 +11,7 @@ import (
 
 	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
+	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
 	"github.com/fesoliveira014/library-system/services/gateway/internal/handler"
 	"github.com/fesoliveira014/library-system/services/gateway/internal/middleware"
 )
@@ -26,7 +27,6 @@ func main() {
 		log.Fatal("JWT_SECRET is required")
 	}
 
-	// gRPC connections
 	authAddr := os.Getenv("AUTH_GRPC_ADDR")
 	if authAddr == "" {
 		authAddr = "localhost:50051"
@@ -47,25 +47,32 @@ func main() {
 	}
 	defer catalogConn.Close()
 
-	// Parse templates using the clone-per-page pattern
+	reservationAddr := os.Getenv("RESERVATION_GRPC_ADDR")
+	if reservationAddr == "" {
+		reservationAddr = "localhost:50053"
+	}
+	reservationConn, err := grpc.NewClient(reservationAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("connect to reservation service: %v", err)
+	}
+	defer reservationConn.Close()
+
 	tmpl, err := handler.ParseTemplates("templates")
 	if err != nil {
 		log.Fatalf("parse templates: %v", err)
 	}
 
-	// Create server
 	authClient := authv1.NewAuthServiceClient(authConn)
 	catalogClient := catalogv1.NewCatalogServiceClient(catalogConn)
-	srv := handler.New(authClient, catalogClient, tmpl)
+	reservationClient := reservationv1.NewReservationServiceClient(reservationConn)
+	srv := handler.New(authClient, catalogClient, reservationClient, tmpl)
 
-	// Routes
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
 
 	mux.HandleFunc("GET /healthz", srv.Health)
 	mux.HandleFunc("GET /{$}", srv.Home)
 
-	// Auth routes
 	mux.HandleFunc("GET /login", srv.LoginPage)
 	mux.HandleFunc("POST /login", srv.LoginSubmit)
 	mux.HandleFunc("GET /register", srv.RegisterPage)
@@ -74,18 +81,19 @@ func main() {
 	mux.HandleFunc("GET /auth/oauth2/google", srv.OAuth2Start)
 	mux.HandleFunc("GET /auth/oauth2/google/callback", srv.OAuth2Callback)
 
-	// Catalog routes
 	mux.HandleFunc("GET /books", srv.BookList)
 	mux.HandleFunc("GET /books/{id}", srv.BookDetail)
 
-	// Admin routes
+	mux.HandleFunc("POST /books/{id}/reserve", srv.ReserveBook)
+	mux.HandleFunc("GET /reservations", srv.MyReservations)
+	mux.HandleFunc("POST /reservations/{id}/return", srv.ReturnBook)
+
 	mux.HandleFunc("GET /admin/books/new", srv.AdminBookNew)
 	mux.HandleFunc("POST /admin/books", srv.AdminBookCreate)
 	mux.HandleFunc("GET /admin/books/{id}/edit", srv.AdminBookEdit)
 	mux.HandleFunc("POST /admin/books/{id}", srv.AdminBookUpdate)
 	mux.HandleFunc("POST /admin/books/{id}/delete", srv.AdminBookDelete)
 
-	// Middleware chain
 	var h http.Handler = mux
 	h = middleware.Auth(h, jwtSecret)
 	h = middleware.Logging(h)

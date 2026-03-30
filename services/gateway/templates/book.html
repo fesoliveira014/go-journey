@@ -7,5 +7,10 @@
 <p><strong>Published:</strong> {{.Data.PublishedYear}}</p>
 <p><strong>Available:</strong> {{.Data.AvailableCopies}} / {{.Data.TotalCopies}}</p>
 {{if .Data.Description}}<p>{{.Data.Description}}</p>{{end}}
+{{if and .User (gt .Data.AvailableCopies 0)}}
+<form method="POST" action="/books/{{.Data.Id}}/reserve">
+    <button type="submit">Reserve This Book</button>
+</form>
+{{end}}
 <a href="/books">Back to catalog</a>
 {{end}}

@@ -3,6 +3,7 @@
     <a href="/">Library System</a>
     <a href="/books">Catalog</a>
     {{if .User}}
+        <a href="/reservations">My Reservations</a>
         {{if eq .User.Role "admin"}}
             <a href="/admin/books/new">Add Book</a>
         {{end}}

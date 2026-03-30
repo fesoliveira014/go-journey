@@ -116,7 +116,7 @@ func registerTemplates(t *testing.T) map[string]*template.Template {
 
 func TestLoginPage_RendersForm(t *testing.T) {
 	tmpl := loginTemplates(t)
-	srv := handler.New(nil, nil, tmpl)
+	srv := handler.New(nil, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/login", nil)
 	rec := httptest.NewRecorder()
@@ -138,7 +138,7 @@ func TestLoginSubmit_Success(t *testing.T) {
 		},
 	}
 	tmpl := loginTemplates(t)
-	srv := handler.New(mock, nil, tmpl)
+	srv := handler.New(mock, nil, nil, tmpl)
 
 	form := url.Values{"email": {"user@example.com"}, "password": {"secret"}}
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
@@ -177,7 +177,7 @@ func TestLoginSubmit_InvalidCredentials(t *testing.T) {
 		},
 	}
 	tmpl := loginTemplates(t)
-	srv := handler.New(mock, nil, tmpl)
+	srv := handler.New(mock, nil, nil, tmpl)
 
 	form := url.Values{"email": {"user@example.com"}, "password": {"wrong"}}
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
@@ -196,7 +196,7 @@ func TestLoginSubmit_InvalidCredentials(t *testing.T) {
 
 func TestLoginSubmit_EmptyFields(t *testing.T) {
 	tmpl := loginTemplates(t)
-	srv := handler.New(nil, nil, tmpl)
+	srv := handler.New(nil, nil, nil, tmpl)
 
 	form := url.Values{"email": {""}, "password": {""}}
 	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
@@ -220,7 +220,7 @@ func TestRegisterSubmit_Success(t *testing.T) {
 		},
 	}
 	tmpl := registerTemplates(t)
-	srv := handler.New(mock, nil, tmpl)
+	srv := handler.New(mock, nil, nil, tmpl)
 
 	form := url.Values{
 		"email":    {"new@example.com"},
@@ -256,7 +256,7 @@ func TestRegisterSubmit_Success(t *testing.T) {
 }
 
 func TestLogout_ClearsCookie(t *testing.T) {
-	srv := handler.New(nil, nil, nil)
+	srv := handler.New(nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
 	req.AddCookie(&http.Cookie{Name: "session", Value: "tok-abc"})
@@ -294,7 +294,7 @@ func TestOAuth2Start_RedirectsToGoogle(t *testing.T) {
 		},
 	}
 	tmpl := authTestTemplates(t, "error.html")
-	srv := handler.New(mock, nil, tmpl)
+	srv := handler.New(mock, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/oauth2/google", nil)
 	rec := httptest.NewRecorder()
@@ -319,7 +319,7 @@ func TestOAuth2Callback_Success(t *testing.T) {
 		},
 	}
 	tmpl := authTestTemplates(t, "error.html")
-	srv := handler.New(mock, nil, tmpl)
+	srv := handler.New(mock, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/auth/oauth2/google/callback?code=mycode&state=mystate", nil)
 	rec := httptest.NewRecorder()

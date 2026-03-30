@@ -56,6 +56,17 @@ func (s *Server) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	return true
 }
 
+// requireAuth checks that the current user is authenticated (any role).
+// Returns true if the check passes; otherwise redirects to /login and returns false.
+func (s *Server) requireAuth(w http.ResponseWriter, r *http.Request) bool {
+	u := userFromContext(r.Context())
+	if u == nil {
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+		return false
+	}
+	return true
+}
+
 func (s *Server) AdminBookNew(w http.ResponseWriter, r *http.Request) {
 	if !s.requireAdmin(w, r) {
 		return

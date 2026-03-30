@@ -7,23 +7,25 @@ import (
 
 	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
+	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
 )
 
 type Server struct {
-	auth    authv1.AuthServiceClient
-	catalog catalogv1.CatalogServiceClient
-	tmpl    map[string]*template.Template
-	baseTmpl *template.Template // base set for rendering partials
+	auth        authv1.AuthServiceClient
+	catalog     catalogv1.CatalogServiceClient
+	reservation reservationv1.ReservationServiceClient
+	tmpl        map[string]*template.Template
+	baseTmpl    *template.Template // base set for rendering partials
 }
 
-func New(auth authv1.AuthServiceClient, catalog catalogv1.CatalogServiceClient, tmpl map[string]*template.Template) *Server {
+func New(auth authv1.AuthServiceClient, catalog catalogv1.CatalogServiceClient, reservation reservationv1.ReservationServiceClient, tmpl map[string]*template.Template) *Server {
 	// Pick any entry for partial rendering — all share the same partial definitions.
 	var base *template.Template
 	for _, t := range tmpl {
 		base = t
 		break
 	}
-	return &Server{auth: auth, catalog: catalog, tmpl: tmpl, baseTmpl: base}
+	return &Server{auth: auth, catalog: catalog, reservation: reservation, tmpl: tmpl, baseTmpl: base}
 }
 
 // ParseTemplates builds a map of page name → cloned template set.

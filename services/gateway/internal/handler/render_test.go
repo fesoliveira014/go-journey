@@ -37,7 +37,7 @@ func testTemplates(t *testing.T) map[string]*template.Template {
 
 func TestRender_WritesTemplateOutput(t *testing.T) {
 	tmpl := testTemplates(t)
-	srv := handler.New(nil, nil, tmpl)
+	srv := handler.New(nil, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
@@ -54,7 +54,7 @@ func TestRender_WritesTemplateOutput(t *testing.T) {
 
 func TestRenderError_SetsStatusCode(t *testing.T) {
 	tmpl := testTemplates(t)
-	srv := handler.New(nil, nil, tmpl)
+	srv := handler.New(nil, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()

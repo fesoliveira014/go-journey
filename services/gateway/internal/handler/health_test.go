@@ -9,7 +9,7 @@ import (
 )
 
 func TestHealthHandler_ReturnsOK(t *testing.T) {
-	srv := handler.New(nil, nil, nil)
+	srv := handler.New(nil, nil, nil, nil)
 	req := httptest.NewRequest(http.MethodGet, "/healthz", nil)
 	rec := httptest.NewRecorder()
 

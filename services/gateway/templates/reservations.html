@@ -1,0 +1,38 @@
+{{define "title"}}My Reservations{{end}}
+{{define "content"}}
+<h1>My Reservations</h1>
+{{if not .Data.Reservations}}
+    <p>You have no reservations.</p>
+{{else}}
+    <table>
+        <thead>
+            <tr>
+                <th>Book ID</th>
+                <th>Status</th>
+                <th>Reserved</th>
+                <th>Due</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {{range .Data.Reservations}}
+            <tr>
+                <td><a href="/books/{{.BookId}}">{{.BookId}}</a></td>
+                <td>{{.Status}}</td>
+                <td>{{.ReservedAt.AsTime.Format "2006-01-02"}}</td>
+                <td>{{.DueAt.AsTime.Format "2006-01-02"}}</td>
+                <td>
+                    {{if eq .Status "active"}}
+                    <form method="POST" action="/reservations/{{.Id}}/return" style="display:inline">
+                        <button type="submit">Return</button>
+                    </form>
+                    {{else}}
+                        {{.Status}}
+                    {{end}}
+                </td>
+            </tr>
+            {{end}}
+        </tbody>
+    </table>
+{{end}}
+{{end}}

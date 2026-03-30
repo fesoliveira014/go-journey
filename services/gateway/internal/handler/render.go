@@ -110,6 +110,10 @@ func (s *Server) handleGRPCError(w http.ResponseWriter, r *http.Request, err err
 		http.Redirect(w, r, "/login", http.StatusSeeOther)
 	case codes.PermissionDenied:
 		s.renderError(w, r, http.StatusForbidden, "Access denied")
+	case codes.ResourceExhausted:
+		s.renderError(w, r, http.StatusTooManyRequests, "You have reached the maximum number of active reservations")
+	case codes.FailedPrecondition:
+		s.renderError(w, r, http.StatusPreconditionFailed, st.Message())
 	default:
 		s.renderError(w, r, http.StatusInternalServerError, fallbackMsg)
 	}
