@@ -30,6 +30,10 @@ The reservation service does NOT call `UpdateAvailability` directly. Instead, it
 
 Reads are synchronous (gRPC). Writes are asynchronous (Kafka). This creates a brief window of eventual consistency between reservation creation and availability update. In practice the delay is milliseconds, but the tutorial documents this explicitly.
 
+### Known Simplification: TOCTOU Race
+
+The `CreateReservation` flow checks availability via gRPC, then creates the reservation. There is no distributed lock between the check and the insert. Two concurrent users could both see `available_copies == 1`, both create reservations, and drive availability negative. This is acceptable for a learning project — the tutorial should document this as a known simplification and note that production systems solve it with either (a) a database-level constraint, (b) optimistic concurrency with retry, or (c) a saga pattern. Adding the `available_copies > 0` guard to the catalog's `UpdateAvailability` repository method (see Catalog Changes below) provides a safety net: the decrement will silently fail if copies reach 0, preventing true negative values even under race conditions.
+
 ## Reservation Service
 
 ### Proto Definition
@@ -90,7 +94,7 @@ message Reservation {
 
 Notes:
 - `user_id` is NOT in `CreateReservationRequest` — it comes from the JWT context (users can only create their own reservations).
-- `ListUserReservationsRequest` has no fields — the user ID comes from context.
+- `ListUserReservationsRequest` has no fields — the user ID comes from context. Pagination is omitted as a deliberate simplification; production would add `page_size`/`page_token` fields.
 - All four RPCs are protected by the `pkg/auth` interceptor (no anonymous access).
 
 ### Data Model
@@ -144,7 +148,7 @@ Two terminal states. No `CANCELLED` state — once a reservation is active, the 
 2. For each `active` reservation where `due_at < now`: transition to `expired`, publish `reservation.expired` event.
 3. Return the (possibly updated) reservation(s).
 
-This "expiration on read" pattern avoids introducing a background worker or cron job. The tradeoff is that expiration only happens when someone queries — if no one reads, expiration events are delayed. This is acceptable for a learning project and the tutorial should note it as a simplification.
+This "expiration on read" pattern avoids introducing a background worker or cron job. The tradeoff is that expiration only happens when someone queries — if no one reads, expiration events are delayed. This means `available_copies` in the catalog will remain decremented indefinitely for abandoned reservations until someone queries that user's reservations. This is acceptable for a learning project and the tutorial should note it as a simplification, with a future chapter adding a background worker to handle expiration proactively.
 
 ### Architecture
 
@@ -219,23 +223,17 @@ func Run(ctx context.Context, brokers []string, topic string, svc *service.Catal
 
 - Creates a `sarama.ConsumerGroup` with group ID `catalog-availability-updater`.
 - Listens on the `reservations` topic.
-- On `reservation.created`: calls `svc.DecrementAvailability(ctx, bookID)`.
-- On `reservation.returned` or `reservation.expired`: calls `svc.IncrementAvailability(ctx, bookID)`.
+- Parses the JSON event, extracts `book_id` (string), converts to `uuid.UUID`.
+- On `reservation.created`: calls `svc.UpdateAvailability(ctx, bookID, -1)`.
+- On `reservation.returned` or `reservation.expired`: calls `svc.UpdateAvailability(ctx, bookID, +1)`.
 
 The consumer runs as a goroutine started from the catalog service's `main.go`. A `context.Context` with cancel controls graceful shutdown.
 
-### New Catalog Service Layer Methods
+### Catalog Service Changes
 
-Two new methods on the catalog service:
+The catalog service already has `UpdateAvailability(ctx context.Context, id uuid.UUID, delta int) error` in `services/catalog/internal/service/catalog.go`, which delegates to the repository's `UpdateAvailability`. The consumer calls this directly since it's co-located. No new service-layer methods are needed.
 
-```go
-func (s *CatalogService) IncrementAvailability(ctx context.Context, bookID string) error
-func (s *CatalogService) DecrementAvailability(ctx context.Context, bookID string) error
-```
-
-These perform atomic `UPDATE books SET available_copies = available_copies + 1 WHERE id = ?` (or `- 1`) operations. The decrement includes a check `available_copies > 0` to prevent negative values.
-
-These are internal-only methods used by the co-located consumer — not exposed via gRPC. When the consumer is eventually extracted to its own service, it would call the existing `UpdateAvailability` gRPC endpoint instead.
+**Repository change:** The existing `BookRepository.UpdateAvailability` in `services/catalog/internal/repository/book.go` does not guard against negative `available_copies`. Add a `WHERE available_copies + ? >= 0` clause to the UPDATE so decrements that would go negative silently affect zero rows instead. Check `RowsAffected == 0` when `delta < 0` to detect this case (the consumer can log a warning and skip).
 
 ### Error Handling
 
@@ -279,13 +277,24 @@ type Server struct {
 }
 ```
 
-The `New()` constructor adds the reservation client parameter.
+The `New()` constructor signature changes to:
+
+```go
+func New(
+    auth authv1.AuthServiceClient,
+    catalog catalogv1.CatalogServiceClient,
+    reservation reservationv1.ReservationServiceClient,
+    tmpl map[string]*template.Template,
+) *Server
+```
+
+All existing callers (`main.go` and all test files that create `Server` instances) must be updated. Test files that don't need the reservation client pass `nil`.
 
 ### gRPC Error Mapping
 
 `handleGRPCError` already handles the relevant codes. Two additions:
 - `codes.ResourceExhausted` → 429 with message "You have reached the maximum number of active reservations"
-- `codes.FailedPrecondition` → 409 with message from gRPC status (e.g., "no copies available")
+- `codes.FailedPrecondition` → 412 with message from gRPC status (e.g., "no copies available"). Note: 412 (Precondition Failed) is the standard HTTP mapping for gRPC `FailedPrecondition`.
 
 ## Docker & Infrastructure
 
@@ -294,7 +303,7 @@ The `New()` constructor adds the reservation client parameter.
 | Service | Image | Ports | Networks |
 |---------|-------|-------|----------|
 | kafka | `apache/kafka:3.9` | 9092:9092 | library-net |
-| postgres-reservation | `postgres:16-alpine` | 5435:5432 | library-net |
+| postgres-reservation | `postgres:16-alpine` | 5435:5432 | library-net (+ `reservation-data` volume) |
 | reservation | `services/reservation/Dockerfile` | 50053:50053 | library-net |
 
 ### Kafka Environment
@@ -313,14 +322,22 @@ kafka:
     KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
   ports:
     - "9092:9092"
+  healthcheck:
+    test: ["CMD-SHELL", "/opt/kafka/bin/kafka-topics.sh --bootstrap-server localhost:9092 --list || exit 1"]
+    interval: 10s
+    timeout: 5s
+    retries: 5
+    start_period: 30s
   networks:
     - library-net
 ```
 
+The healthcheck ensures dependent services (reservation, catalog) only start once Kafka is actually accepting connections, not just when the container is running.
+
 ### Updated Dependencies
 
-- **reservation** depends on: `postgres-reservation` (healthy), `kafka`
-- **catalog** gains dependency on: `kafka`
+- **reservation** depends on: `postgres-reservation` (healthy), `kafka` (healthy)
+- **catalog** gains dependency on: `kafka` (healthy)
 - **gateway** gains dependency on: `reservation`
 
 ### New Environment Variables
@@ -342,12 +359,12 @@ POSTGRES_RESERVATION_DB=reservation
 `services/reservation/Dockerfile` and `Dockerfile.dev` follow the same pattern as auth and catalog:
 - Multi-stage build
 - `GOWORK=off`
-- Copy `gen/`, `pkg/auth/`
+- Copy `gen/`, `pkg/auth/` (the reservation service imports `gen/catalog/v1` for the `GetBook` gRPC client, and `pkg/auth` for context helpers)
 - Dependency caching via `go.mod` first
 
 ### Earthfile
 
-Add reservation service to `+lint` and `+test` targets.
+Add reservation service to `+lint` and `+test` targets. Also add auth service, which is currently missing from the Earthfile (pre-existing omission from Chapter 4).
 
 ## Testing Strategy
 
@@ -359,7 +376,7 @@ Add reservation service to `+lint` and `+test` targets.
 
 ### Catalog Consumer
 
-- Mock the catalog service layer. Feed test JSON messages to the consumer handler. Verify `IncrementAvailability` / `DecrementAvailability` called with correct book IDs and correct direction per event type.
+- Mock the catalog service layer (or the `BookRepository` interface). Feed test JSON messages to the consumer handler. Verify `UpdateAvailability` is called with correct book IDs and correct delta (+1 or -1) per event type.
 
 ### Gateway
 
@@ -432,8 +449,7 @@ docs/src/ch06/
 ```
 go.work                                      (add services/reservation)
 services/catalog/cmd/main.go                 (start consumer goroutine)
-services/catalog/internal/service/service.go (add Increment/DecrementAvailability)
-services/catalog/internal/service/service_test.go
+services/catalog/internal/repository/book.go  (add available_copies > 0 guard to UpdateAvailability)
 services/gateway/internal/handler/server.go  (add reservation client)
 services/gateway/internal/handler/render.go  (add ResourceExhausted/FailedPrecondition mappings)
 services/gateway/templates/book.html         (add Reserve button)
