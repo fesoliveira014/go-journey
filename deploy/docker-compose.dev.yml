@@ -13,3 +13,12 @@ services:
       dockerfile: services/gateway/Dockerfile.dev
     volumes:
       - ../services/gateway:/app/services/gateway
+
+  auth:
+    build:
+      context: ..
+      dockerfile: services/auth/Dockerfile.dev
+    volumes:
+      - ../services/auth:/app/services/auth
+      - ../gen:/app/gen
+      - ../pkg/auth:/app/pkg/auth

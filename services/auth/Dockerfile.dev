@@ -1,0 +1,18 @@
+FROM golang:1.26-alpine
+
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+
+# Disable workspace mode
+ENV GOWORK=off
+
+# Copy shared modules and service source
+COPY gen/ ./gen/
+COPY pkg/auth/ ./pkg/auth/
+COPY services/auth/ ./services/auth/
+
+WORKDIR /app/services/auth
+RUN go mod download
+
+CMD ["air", "-c", ".air.toml"]

@@ -43,8 +43,47 @@ services:
     networks:
       - library-net
 
+  postgres-auth:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_AUTH_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_AUTH_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_AUTH_DB:-auth}
+    ports:
+      - "${POSTGRES_AUTH_PORT:-5434}:5432"
+    volumes:
+      - auth-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - library-net
+
+  auth:
+    build:
+      context: ..
+      dockerfile: services/auth/Dockerfile
+    environment:
+      DATABASE_URL: "host=postgres-auth port=5432 user=${POSTGRES_AUTH_USER:-postgres} password=${POSTGRES_AUTH_PASSWORD:-postgres} dbname=${POSTGRES_AUTH_DB:-auth} sslmode=disable"
+      GRPC_PORT: "50051"
+      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_EXPIRY: ${JWT_EXPIRY:-24h}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-http://localhost:8080/oauth2/callback}
+    ports:
+      - "${AUTH_GRPC_PORT:-50051}:50051"
+    depends_on:
+      postgres-auth:
+        condition: service_healthy
+    networks:
+      - library-net
+
 volumes:
   catalog-data:
+  auth-data:
 
 networks:
   library-net:
