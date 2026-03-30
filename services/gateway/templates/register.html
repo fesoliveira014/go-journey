@@ -1,0 +1,16 @@
+{{define "title"}}Register{{end}}
+{{define "content"}}
+<h1>Create an Account</h1>
+{{if .Data.Error}}<p class="form-error">{{.Data.Error}}</p>{{end}}
+<form method="POST" action="/register" class="auth-form">
+    <label for="name">Name</label>
+    <input type="text" name="name" id="name" value="{{if .Data.Name}}{{.Data.Name}}{{end}}" required>
+    <label for="email">Email</label>
+    <input type="email" name="email" id="email" value="{{if .Data.Email}}{{.Data.Email}}{{end}}" required>
+    <label for="password">Password</label>
+    <input type="password" name="password" id="password" required>
+    <button type="submit">Register</button>
+</form>
+<p>Already have an account? <a href="/login">Login</a></p>
+<p>Or <a href="/auth/oauth2/google">sign up with Google</a></p>
+{{end}}

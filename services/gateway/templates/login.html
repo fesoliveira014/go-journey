@@ -1,0 +1,14 @@
+{{define "title"}}Login{{end}}
+{{define "content"}}
+<h1>Login</h1>
+{{if .Data.Error}}<p class="form-error">{{.Data.Error}}</p>{{end}}
+<form method="POST" action="/login" class="auth-form">
+    <label for="email">Email</label>
+    <input type="email" name="email" id="email" value="{{if .Data.Email}}{{.Data.Email}}{{end}}" required>
+    <label for="password">Password</label>
+    <input type="password" name="password" id="password" required>
+    <button type="submit">Login</button>
+</form>
+<p>Don't have an account? <a href="/register">Register</a></p>
+<p>Or <a href="/auth/oauth2/google">sign in with Google</a></p>
+{{end}}
