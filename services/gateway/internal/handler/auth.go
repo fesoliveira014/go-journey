@@ -8,7 +8,7 @@ import (
 
 // LoginPage renders the login form.
 func (s *Server) LoginPage(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "login.html", nil)
+	s.render(w, r, "login.html", map[string]any{})
 }
 
 // LoginSubmit handles POST /login.
@@ -31,7 +31,7 @@ func (s *Server) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 
 // RegisterPage renders the registration form.
 func (s *Server) RegisterPage(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "register.html", nil)
+	s.render(w, r, "register.html", map[string]any{})
 }
 
 // RegisterSubmit handles POST /register.

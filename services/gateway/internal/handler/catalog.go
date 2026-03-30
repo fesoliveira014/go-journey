@@ -8,7 +8,7 @@ import (
 )
 
 func (s *Server) Home(w http.ResponseWriter, r *http.Request) {
-	s.render(w, r, "home.html", nil)
+	s.render(w, r, "home.html", map[string]any{})
 }
 
 func (s *Server) BookList(w http.ResponseWriter, r *http.Request) {
@@ -155,20 +155,29 @@ func (s *Server) AdminBookUpdate(w http.ResponseWriter, r *http.Request) {
 	publishedYearStr := r.FormValue("published_year")
 	totalCopiesStr := r.FormValue("total_copies")
 
+	formData := map[string]any{
+		"Id": id, "Title": title, "Author": author, "Isbn": isbn,
+		"Genre": genre, "Description": description,
+		"PublishedYear": publishedYearStr, "TotalCopies": totalCopiesStr,
+	}
+
 	if title == "" || author == "" || isbn == "" || genre == "" || publishedYearStr == "" || totalCopiesStr == "" {
-		s.renderError(w, r, http.StatusBadRequest, "Title, author, ISBN, genre, published year, and total copies are required")
+		formData["Error"] = "Title, author, ISBN, genre, published year, and total copies are required"
+		s.render(w, r, "admin_book_edit.html", formData)
 		return
 	}
 
 	publishedYear, err := strconv.Atoi(publishedYearStr)
 	if err != nil {
-		s.renderError(w, r, http.StatusBadRequest, "Published year must be a number")
+		formData["Error"] = "Published year must be a number"
+		s.render(w, r, "admin_book_edit.html", formData)
 		return
 	}
 
 	totalCopies, err := strconv.Atoi(totalCopiesStr)
 	if err != nil {
-		s.renderError(w, r, http.StatusBadRequest, "Total copies must be a number")
+		formData["Error"] = "Total copies must be a number"
+		s.render(w, r, "admin_book_edit.html", formData)
 		return
 	}
 

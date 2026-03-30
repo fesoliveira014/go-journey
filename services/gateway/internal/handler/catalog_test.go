@@ -90,10 +90,16 @@ func catalogTestTemplates(t *testing.T) map[string]*template.Template {
 	bookSet := template.Must(template.New("base.html").Parse(
 		`DETAIL:{{.Data.Title}}:{{.Data.Author}}`,
 	))
+	template.Must(bookSet.New("book_cards").Parse(
+		`{{define "book_cards"}}{{range .}}CARD:{{.Title}} {{end}}{{end}}`,
+	))
 
 	// error.html: used by renderError / handleGRPCError
 	errSet := template.Must(template.New("base.html").Parse(
 		`ERROR:{{.Data.Status}}:{{.Data.Message}}`,
+	))
+	template.Must(errSet.New("book_cards").Parse(
+		`{{define "book_cards"}}{{range .}}CARD:{{.Title}} {{end}}{{end}}`,
 	))
 
 	return map[string]*template.Template{
@@ -274,10 +280,16 @@ func adminTestTemplates(t *testing.T) map[string]*template.Template {
 	newSet := template.Must(template.New("base.html").Parse(
 		`ADMIN_NEW:{{if .Data.Error}}ERR:{{.Data.Error}}{{end}}`,
 	))
+	template.Must(newSet.New("book_cards").Parse(
+		`{{define "book_cards"}}{{range .}}CARD:{{.Title}} {{end}}{{end}}`,
+	))
 	m["admin_book_new.html"] = newSet
 
 	editSet := template.Must(template.New("base.html").Parse(
-		`ADMIN_EDIT:{{.Data.Title}}:{{.Data.Author}}`,
+		`ADMIN_EDIT:{{.Data.Title}}:{{.Data.Author}}{{if .Data.Error}} ERR:{{.Data.Error}}{{end}}`,
+	))
+	template.Must(editSet.New("book_cards").Parse(
+		`{{define "book_cards"}}{{range .}}CARD:{{.Title}} {{end}}{{end}}`,
 	))
 	m["admin_book_edit.html"] = editSet
 
