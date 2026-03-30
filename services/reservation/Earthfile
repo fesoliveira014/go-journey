@@ -1,0 +1,41 @@
+VERSION 0.8
+
+FROM golang:1.26-alpine
+
+WORKDIR /app
+
+deps:
+    COPY go.mod go.sum* ./
+    # Copy local module dependencies (replace directives)
+    COPY ../../gen/go.mod ../../gen/go.sum* ../gen/
+    COPY ../../pkg/auth/go.mod ../../pkg/auth/go.sum* ../pkg/auth/
+    ENV GOWORK=off
+    RUN go mod download
+    SAVE ARTIFACT go.mod AS LOCAL go.mod
+    SAVE ARTIFACT go.sum AS LOCAL go.sum
+
+src:
+    FROM +deps
+    COPY --dir cmd internal migrations ./
+    COPY ../../gen/ ../gen/
+    COPY ../../pkg/auth/ ../pkg/auth/
+
+lint:
+    FROM +src
+    RUN go vet ./...
+
+test:
+    FROM +src
+    RUN go test ./internal/service/... ./internal/handler/... -v -count=1
+
+build:
+    FROM +src
+    RUN CGO_ENABLED=0 go build -o /bin/reservation ./cmd/
+    SAVE ARTIFACT /bin/reservation
+
+docker:
+    FROM alpine:3.19
+    COPY +build/reservation /usr/local/bin/reservation
+    EXPOSE 50053
+    ENTRYPOINT ["/usr/local/bin/reservation"]
+    SAVE IMAGE reservation:latest
