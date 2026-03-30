@@ -1,0 +1,10 @@
+{{define "book_card"}}
+<div class="book-card">
+    <h3><a href="/books/{{.Id}}">{{.Title}}</a></h3>
+    <p class="meta">{{.Author}} · {{.PublishedYear}}</p>
+    <p class="meta">{{.Genre}} · {{.AvailableCopies}}/{{.TotalCopies}} available</p>
+</div>
+{{end}}
+{{define "book_cards"}}
+{{range .}}{{template "book_card" .}}{{end}}
+{{end}}

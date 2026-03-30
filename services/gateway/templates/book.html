@@ -1,0 +1,11 @@
+{{define "title"}}{{.Data.Title}}{{end}}
+{{define "content"}}
+<h1>{{.Data.Title}}</h1>
+<p><strong>Author:</strong> {{.Data.Author}}</p>
+<p><strong>ISBN:</strong> {{.Data.Isbn}}</p>
+<p><strong>Genre:</strong> {{.Data.Genre}}</p>
+<p><strong>Published:</strong> {{.Data.PublishedYear}}</p>
+<p><strong>Available:</strong> {{.Data.AvailableCopies}} / {{.Data.TotalCopies}}</p>
+{{if .Data.Description}}<p>{{.Data.Description}}</p>{{end}}
+<a href="/books">Back to catalog</a>
+{{end}}

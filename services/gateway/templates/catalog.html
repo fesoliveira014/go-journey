@@ -1,0 +1,21 @@
+{{define "title"}}Catalog{{end}}
+{{define "content"}}
+<h1>Book Catalog</h1>
+<div class="filter-bar">
+    <label for="genre">Filter by genre:</label>
+    <select name="genre" id="genre"
+            hx-get="/books"
+            hx-target="#book-list"
+            hx-swap="innerHTML">
+        <option value="">All Genres</option>
+        <option value="Programming" {{if eq .Data.SelectedGenre "Programming"}}selected{{end}}>Programming</option>
+        <option value="Architecture" {{if eq .Data.SelectedGenre "Architecture"}}selected{{end}}>Architecture</option>
+        <option value="Distributed Systems" {{if eq .Data.SelectedGenre "Distributed Systems"}}selected{{end}}>Distributed Systems</option>
+    </select>
+</div>
+<div id="book-list" class="book-list">
+    {{range .Data.Books}}
+        {{template "book_card" .}}
+    {{end}}
+</div>
+{{end}}

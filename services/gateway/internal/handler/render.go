@@ -6,6 +6,8 @@ import (
 	"net/http"
 
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 type UserInfo struct {
@@ -89,6 +91,28 @@ func setFlash(w http.ResponseWriter, message string) {
 		MaxAge:   10,
 		HttpOnly: true,
 	})
+}
+
+func (s *Server) handleGRPCError(w http.ResponseWriter, r *http.Request, err error, fallbackMsg string) {
+	st, ok := status.FromError(err)
+	if !ok {
+		s.renderError(w, r, http.StatusInternalServerError, fallbackMsg)
+		return
+	}
+	switch st.Code() {
+	case codes.NotFound:
+		s.renderError(w, r, http.StatusNotFound, "Not found")
+	case codes.InvalidArgument:
+		s.renderError(w, r, http.StatusBadRequest, st.Message())
+	case codes.AlreadyExists:
+		s.renderError(w, r, http.StatusConflict, st.Message())
+	case codes.Unauthenticated:
+		http.Redirect(w, r, "/login", http.StatusSeeOther)
+	case codes.PermissionDenied:
+		s.renderError(w, r, http.StatusForbidden, "Access denied")
+	default:
+		s.renderError(w, r, http.StatusInternalServerError, fallbackMsg)
+	}
 }
 
 func consumeFlash(w http.ResponseWriter, r *http.Request) string {
