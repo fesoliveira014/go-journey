@@ -2,7 +2,6 @@
 title = "Building Microservices in Go"
 authors = ["fesoliveira014"]
 language = "en"
-multilingual = false
 src = "src"
 
 [build]
