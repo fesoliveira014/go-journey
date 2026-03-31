@@ -9,15 +9,19 @@ ci:
     BUILD ./services/gateway+test
     BUILD ./services/reservation+lint
     BUILD ./services/reservation+test
+    BUILD ./services/search+lint
+    BUILD ./services/search+test
 
 lint:
     BUILD ./services/auth+lint
     BUILD ./services/catalog+lint
     BUILD ./services/gateway+lint
     BUILD ./services/reservation+lint
+    BUILD ./services/search+lint
 
 test:
     BUILD ./services/auth+test
     BUILD ./services/catalog+test
     BUILD ./services/gateway+test
     BUILD ./services/reservation+test
+    BUILD ./services/search+test
