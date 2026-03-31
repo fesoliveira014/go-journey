@@ -1988,7 +1988,7 @@ type mockCatalogClient struct {
 }
 
 func (m *mockCatalogClient) ListBooks(_ context.Context, req *catalogv1.ListBooksRequest, _ ...grpc.CallOption) (*catalogv1.ListBooksResponse, error) {
-	return &catalogv1.ListBooksResponse{Books: m.books, TotalCount: int64(len(m.books))}, nil
+	return &catalogv1.ListBooksResponse{Books: m.books, TotalCount: int32(len(m.books))}, nil
 }
 
 func TestBootstrap_SkipsWhenIndexHasDocuments(t *testing.T) {
