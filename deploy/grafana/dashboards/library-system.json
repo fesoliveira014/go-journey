@@ -1,0 +1,59 @@
+{
+  "id": null,
+  "uid": "library-system-overview",
+  "title": "Library System Overview",
+  "tags": ["library-system"],
+  "timezone": "browser",
+  "schemaVersion": 39,
+  "version": 1,
+  "refresh": "10s",
+  "panels": [
+    {
+      "title": "Request Rate by Service",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "" },
+      "targets": [
+        {
+          "expr": "rate(http_server_request_duration_seconds_count[5m])",
+          "legendFormat": "{{http_route}} {{http_method}}"
+        }
+      ]
+    },
+    {
+      "title": "Request Latency p95",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 0 },
+      "datasource": { "type": "prometheus", "uid": "" },
+      "targets": [
+        {
+          "expr": "histogram_quantile(0.95, rate(http_server_request_duration_seconds_bucket[5m]))",
+          "legendFormat": "p95"
+        }
+      ]
+    },
+    {
+      "title": "gRPC Server Latency by Method",
+      "type": "timeseries",
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 8 },
+      "datasource": { "type": "prometheus", "uid": "" },
+      "targets": [
+        {
+          "expr": "rate(rpc_server_duration_seconds_sum[5m]) / rate(rpc_server_duration_seconds_count[5m])",
+          "legendFormat": "{{rpc_method}}"
+        }
+      ]
+    },
+    {
+      "title": "Recent Logs",
+      "type": "logs",
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 8 },
+      "datasource": { "type": "loki", "uid": "loki" },
+      "targets": [
+        {
+          "expr": "{container_name=~\".*catalog.*|.*gateway.*|.*reservation.*\"}"
+        }
+      ]
+    }
+  ]
+}
