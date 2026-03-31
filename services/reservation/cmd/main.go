@@ -1,8 +1,9 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net"
 	"os"
 	"strconv"
@@ -12,15 +13,18 @@ import (
 	pgmigrate "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/reflection"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
+	"gorm.io/plugin/opentelemetry/tracing"
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
+	pkgotel "github.com/fesoliveira014/library-system/pkg/otel"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/handler"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/kafka"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/repository"
@@ -29,6 +33,14 @@ import (
 )
 
 func main() {
+	otelCtx := context.Background()
+	shutdown, err := pkgotel.Init(otelCtx, "reservation", os.Getenv("OTEL_COLLECTOR_ENDPOINT"))
+	if err != nil {
+		slog.Error("failed to init otel", "error", err)
+	} else {
+		defer shutdown(otelCtx)
+	}
+
 	dbDSN := os.Getenv("DATABASE_URL")
 	if dbDSN == "" {
 		dbDSN = "host=localhost port=5435 user=postgres password=postgres dbname=reservation sslmode=disable"
@@ -59,18 +71,28 @@ func main() {
 
 	db, err := gorm.Open(postgres.Open(dbDSN), &gorm.Config{})
 	if err != nil {
-		log.Fatalf("failed to connect to database: %v", err)
+		slog.Error("failed to connect to database", "error", err)
+		os.Exit(1)
 	}
-	log.Println("connected to PostgreSQL")
+	slog.Info("connected to PostgreSQL")
+
+	if err := db.Use(tracing.NewPlugin()); err != nil {
+		slog.Error("failed to add otel gorm plugin", "error", err)
+	}
 
 	if err := runMigrations(db); err != nil {
-		log.Fatalf("failed to run migrations: %v", err)
+		slog.Error("failed to run migrations", "error", err)
+		os.Exit(1)
 	}
-	log.Println("migrations completed")
+	slog.Info("migrations completed")
 
-	catalogConn, err := grpc.NewClient(catalogAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	catalogConn, err := grpc.NewClient(catalogAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
-		log.Fatalf("connect to catalog service: %v", err)
+		slog.Error("connect to catalog service", "error", err)
+		os.Exit(1)
 	}
 	defer catalogConn.Close()
 	catalogClient := catalogv1.NewCatalogServiceClient(catalogConn)
@@ -78,7 +100,8 @@ func main() {
 	brokers := strings.Split(kafkaBrokers, ",")
 	publisher, err := kafka.NewPublisher(brokers, "reservations")
 	if err != nil {
-		log.Fatalf("create kafka publisher: %v", err)
+		slog.Error("create kafka publisher", "error", err)
+		os.Exit(1)
 	}
 	defer publisher.Close()
 
@@ -90,16 +113,21 @@ func main() {
 
 	lis, err := net.Listen("tcp", ":"+grpcPort)
 	if err != nil {
-		log.Fatalf("failed to listen: %v", err)
+		slog.Error("failed to listen", "error", err)
+		os.Exit(1)
 	}
 
-	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
+	grpcServer := grpc.NewServer(
+		grpc.StatsHandler(otelgrpc.NewServerHandler()),
+		grpc.UnaryInterceptor(interceptor),
+	)
 	reservationv1.RegisterReservationServiceServer(grpcServer, reservationHandler)
 	reflection.Register(grpcServer)
 
-	log.Printf("reservation service listening on :%s", grpcPort)
+	slog.Info("reservation service listening", "port", grpcPort)
 	if err := grpcServer.Serve(lis); err != nil {
-		log.Fatalf("failed to serve: %v", err)
+		slog.Error("failed to serve", "error", err)
+		os.Exit(1)
 	}
 }
 
