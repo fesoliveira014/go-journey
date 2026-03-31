@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+
+	"github.com/fesoliveira014/library-system/services/catalog/internal/model"
 )
 
 // Note: this file uses internal tests (package consumer, not consumer_test)
@@ -18,12 +20,12 @@ type mockCatalogService struct {
 	}
 }
 
-func (m *mockCatalogService) UpdateAvailability(_ context.Context, id uuid.UUID, delta int) error {
+func (m *mockCatalogService) UpdateAvailability(_ context.Context, id uuid.UUID, delta int) (*model.Book, error) {
 	m.calls = append(m.calls, struct {
 		ID    uuid.UUID
 		Delta int
 	}{id, delta})
-	return nil
+	return nil, nil
 }
 
 func TestHandleEvent_Created(t *testing.T) {

@@ -8,11 +8,13 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
+
+	"github.com/fesoliveira014/library-system/services/catalog/internal/model"
 )
 
 // AvailabilityUpdater is the subset of the catalog service the consumer needs.
 type AvailabilityUpdater interface {
-	UpdateAvailability(ctx context.Context, id uuid.UUID, delta int) error
+	UpdateAvailability(ctx context.Context, id uuid.UUID, delta int) (*model.Book, error)
 }
 
 type reservationEvent struct {
@@ -87,5 +89,6 @@ func handleEvent(ctx context.Context, svc AvailabilityUpdater, data []byte) erro
 		return nil
 	}
 
-	return svc.UpdateAvailability(ctx, bookID, delta)
+	_, err = svc.UpdateAvailability(ctx, bookID, delta)
+	return err
 }

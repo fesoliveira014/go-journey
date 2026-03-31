@@ -141,15 +141,11 @@ func (h *CatalogHandler) UpdateAvailability(ctx context.Context, req *catalogv1.
 		return nil, status.Error(codes.InvalidArgument, "invalid book ID")
 	}
 
-	if err := h.svc.UpdateAvailability(ctx, id, int(req.GetDelta())); err != nil {
-		return nil, toGRPCError(err)
-	}
-
-	// Fetch current availability
-	book, err := h.svc.GetBook(ctx, id)
+	book, err := h.svc.UpdateAvailability(ctx, id, int(req.GetDelta()))
 	if err != nil {
 		return nil, toGRPCError(err)
 	}
+
 	return &catalogv1.UpdateAvailabilityResponse{
 		AvailableCopies: int32(book.AvailableCopies),
 	}, nil

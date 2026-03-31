@@ -28,6 +28,11 @@ import (
 	"github.com/fesoliveira014/library-system/services/catalog/migrations"
 )
 
+// noopPublisher is a placeholder until Task 3 wires the real Kafka publisher.
+type noopPublisher struct{}
+
+func (n *noopPublisher) Publish(_ context.Context, _ service.BookEvent) error { return nil }
+
 func main() {
 	dbDSN := os.Getenv("DATABASE_URL")
 	if dbDSN == "" {
@@ -55,7 +60,8 @@ func main() {
 	log.Println("migrations completed")
 
 	bookRepo := repository.NewBookRepository(db)
-	catalogSvc := service.NewCatalogService(bookRepo)
+	// TODO(Task 3): replace noopPublisher with a real Kafka publisher.
+	catalogSvc := service.NewCatalogService(bookRepo, &noopPublisher{})
 	catalogHandler := handler.NewCatalogHandler(catalogSvc)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

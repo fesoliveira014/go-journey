@@ -72,8 +72,12 @@ func (r *inMemoryRepo) UpdateAvailability(ctx context.Context, id uuid.UUID, del
 	return nil
 }
 
+type noopPublisher struct{}
+
+func (n *noopPublisher) Publish(_ context.Context, _ service.BookEvent) error { return nil }
+
 func TestCatalogHandler_CreateBook_Success(t *testing.T) {
-	svc := service.NewCatalogService(newInMemoryRepo())
+	svc := service.NewCatalogService(newInMemoryRepo(), &noopPublisher{})
 	h := handler.NewCatalogHandler(svc)
 
 	resp, err := h.CreateBook(context.Background(), &catalogv1.CreateBookRequest{
@@ -93,7 +97,7 @@ func TestCatalogHandler_CreateBook_Success(t *testing.T) {
 }
 
 func TestCatalogHandler_CreateBook_MissingTitle(t *testing.T) {
-	svc := service.NewCatalogService(newInMemoryRepo())
+	svc := service.NewCatalogService(newInMemoryRepo(), &noopPublisher{})
 	h := handler.NewCatalogHandler(svc)
 
 	_, err := h.CreateBook(context.Background(), &catalogv1.CreateBookRequest{
@@ -112,7 +116,7 @@ func TestCatalogHandler_CreateBook_MissingTitle(t *testing.T) {
 }
 
 func TestCatalogHandler_GetBook_NotFound(t *testing.T) {
-	svc := service.NewCatalogService(newInMemoryRepo())
+	svc := service.NewCatalogService(newInMemoryRepo(), &noopPublisher{})
 	h := handler.NewCatalogHandler(svc)
 
 	_, err := h.GetBook(context.Background(), &catalogv1.GetBookRequest{
@@ -131,7 +135,7 @@ func TestCatalogHandler_GetBook_NotFound(t *testing.T) {
 }
 
 func TestCatalogHandler_GetBook_InvalidID(t *testing.T) {
-	svc := service.NewCatalogService(newInMemoryRepo())
+	svc := service.NewCatalogService(newInMemoryRepo(), &noopPublisher{})
 	h := handler.NewCatalogHandler(svc)
 
 	_, err := h.GetBook(context.Background(), &catalogv1.GetBookRequest{
