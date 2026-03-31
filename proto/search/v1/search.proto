@@ -1,0 +1,50 @@
+syntax = "proto3";
+package search.v1;
+option go_package = "github.com/fesoliveira014/library-system/gen/search/v1;searchv1";
+
+service SearchService {
+  rpc Search(SearchRequest) returns (SearchResponse);
+  rpc Suggest(SuggestRequest) returns (SuggestResponse);
+}
+
+message SearchRequest {
+  string query = 1;
+  string genre = 2;
+  string author = 3;
+  bool available_only = 4;
+  int32 page = 5;
+  int32 page_size = 6;
+}
+
+message SearchResponse {
+  repeated BookResult books = 1;
+  int64 total_hits = 2;
+  int64 query_time_ms = 3;
+}
+
+message BookResult {
+  string id = 1;
+  string title = 2;
+  string author = 3;
+  string isbn = 4;
+  string genre = 5;
+  string description = 6;
+  int32 published_year = 7;
+  int32 total_copies = 8;
+  int32 available_copies = 9;
+}
+
+message SuggestRequest {
+  string prefix = 1;
+  int32 limit = 2;
+}
+
+message SuggestResponse {
+  repeated Suggestion suggestions = 1;
+}
+
+message Suggestion {
+  string book_id = 1;
+  string title = 2;
+  string author = 3;
+}
