@@ -59,7 +59,7 @@ type BookEvent struct {
 - `book.updated` — after successful `Update` or `UpdateAvailability`. Carries full book state.
 - `book.deleted` — after successful `Delete`. Carries only `book_id`, `event_type`, `timestamp`.
 
-**Kafka topic:** `catalog-books-changed`
+**Kafka topic:** `catalog.books.changed`
 
 **Message key:** `book_id` (ensures per-book ordering within a partition).
 
@@ -75,9 +75,22 @@ type BookEvent struct {
 - `services/catalog/internal/service/catalog_test.go` — Add mock publisher, verify events are published with correct type and fields.
 - `services/catalog/cmd/main.go` — Wire Kafka producer, pass to `NewCatalogService`.
 
-### UpdateAvailability event detail
+### UpdateAvailability refactoring
 
-When the Catalog consumer processes a reservation event and calls `UpdateAvailability`, the service needs the full book state for the event payload. After the availability delta is applied, the service calls `repo.GetByID` to fetch the updated book, then publishes `book.updated`. This means each reservation event that changes availability triggers a `catalog.books.changed` event — this is how Search learns about availability changes.
+The current `UpdateAvailability` method simply delegates to `repo.UpdateAvailability` and returns only an error. To publish an event with full book state, refactor the method to:
+
+1. Call `s.repo.UpdateAvailability(ctx, id, delta)` to apply the delta
+2. Call `s.repo.GetByID(ctx, id)` to fetch the full updated book
+3. Publish a `book.updated` event with the complete book fields
+4. Return the updated `*model.Book` (signature changes from `error` to `(*model.Book, error)`)
+
+The handler's `UpdateAvailability` method currently does its own `GetBook` call after the service call to build the response. After this refactoring, the handler can use the book returned by the service directly and remove its separate `GetBook` call.
+
+This means each reservation event that changes availability triggers a `catalog.books.changed` event — this is how Search learns about availability changes.
+
+### Publisher Close()
+
+The Kafka publisher must implement a `Close()` method (same as Reservation's publisher). The Catalog `main.go` wires it with `defer publisher.Close()` for clean shutdown.
 
 ---
 
@@ -222,6 +235,8 @@ func (s *SearchService) Search(ctx, query, filters, page, pageSize) → ([]BookD
 func (s *SearchService) Suggest(ctx, prefix, limit) → ([]Suggestion, error)
 func (s *SearchService) Upsert(ctx, BookDocument) → error
 func (s *SearchService) Delete(ctx, id) → error
+func (s *SearchService) EnsureIndex(ctx) → error       // delegates to index.EnsureIndex
+func (s *SearchService) Count(ctx) → (int64, error)     // delegates to index.Count
 ```
 
 The service layer is thin — mostly delegates to the index. Its value is as the dependency boundary: the handler depends on a `Service` interface, the consumer depends on an `Indexer` interface (subset: `Upsert` + `Delete`), and the bootstrap depends on the full service.
@@ -234,8 +249,8 @@ Maps proto requests to service calls. Applies default pagination (page 1, size 2
 
 Same pattern as Catalog's consumer from Chapter 6:
 - Consumer group: `search-indexer`
-- Topic: `catalog-books-changed`
-- Deserializes JSON payload into `BookEvent`
+- Topic: `catalog.books.changed`
+- Defines its own `bookEvent` struct for JSON deserialization (same fields as Catalog's `BookEvent`, but a separate type — these are separate Go modules and should not import from each other, matching the pattern where Catalog's consumer defines its own `reservationEvent` struct)
 - `book.created` / `book.updated` → `Upsert` with `BookDocument` built from event fields
 - `book.deleted` → `Delete` with `book_id`
 - Uses `session.Context()` for cancellation propagation
@@ -244,11 +259,13 @@ Same pattern as Catalog's consumer from Chapter 6:
 ### Bootstrap
 
 ```go
-func Bootstrap(ctx context.Context, catalog catalogv1.CatalogServiceClient, svc *service.SearchService, index index.IndexRepository) error
+func Bootstrap(ctx context.Context, catalog catalogv1.CatalogServiceClient, svc *service.SearchService) error
 ```
 
-1. Call `index.EnsureIndex(ctx)` to create index + configure attributes
-2. Call `index.Count(ctx)` — if > 0, skip (index already populated)
+The `SearchService` exposes `EnsureIndex`, `Count`, and `Upsert` methods, so bootstrap only needs the service (not the raw index repository).
+
+1. Call `svc.EnsureIndex(ctx)` to create index + configure attributes
+2. Call `svc.Count(ctx)` — if > 0, skip (index already populated)
 3. Paginate through `catalog.ListBooks(ctx, page)` until all books fetched
 4. For each book, call `svc.Upsert(ctx, bookDocument)`
 5. Log progress (every 100 books)
@@ -295,8 +312,8 @@ Called from `main.go` before starting the Kafka consumer and gRPC server. If Cat
 ### Server Changes
 
 - `Server` struct gains `search searchv1.SearchServiceClient` field (5th field)
-- `New()` takes 5 arguments: auth, catalog, reservation, search, tmpl
-- All existing test files update `handler.New()` calls to pass `nil` for search client
+- `New()` takes 5 arguments: auth, catalog, reservation, search, tmpl. The existing `baseTmpl` extraction logic inside `New()` stays as-is.
+- All existing test files update `handler.New()` calls to pass `nil` for the search client (same pattern as the reservation client update in Chapter 6)
 
 ### New Files
 
@@ -415,6 +432,8 @@ SEARCH_GRPC_PORT=50054
 5. **Eventual consistency.** Search results may be slightly stale. The reservation flow validates availability via gRPC to Catalog before confirming, so correctness is maintained despite stale search results.
 
 6. **UpdateAvailability double-event.** Each reservation triggers both a `reservations.*` event (consumed by Catalog) and a resulting `catalog.books.changed` event (consumed by Search). This is intentional — it decouples the event chains and means Search never needs to understand reservation semantics.
+
+7. **No timestamps in search index.** The `BookResult` proto and `BookDocument` model omit `created_at`/`updated_at`. Sorting by recency is not supported. If needed later, add these fields to both the event payload and the Meilisearch document.
 
 ---
 
