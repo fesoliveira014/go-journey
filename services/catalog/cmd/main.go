@@ -23,6 +23,7 @@ import (
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/consumer"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/handler"
+	catalogkafka "github.com/fesoliveira014/library-system/services/catalog/internal/kafka"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/repository"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/service"
 	"github.com/fesoliveira014/library-system/services/catalog/migrations"
@@ -60,15 +61,27 @@ func main() {
 	log.Println("migrations completed")
 
 	bookRepo := repository.NewBookRepository(db)
-	// TODO(Task 3): replace noopPublisher with a real Kafka publisher.
-	catalogSvc := service.NewCatalogService(bookRepo, &noopPublisher{})
+
+	var publisher service.EventPublisher = &noopPublisher{}
+	var brokers []string
+	if kafkaBrokers != "" {
+		brokers = strings.Split(kafkaBrokers, ",")
+		pub, err := catalogkafka.NewPublisher(brokers, "catalog.books.changed")
+		if err != nil {
+			log.Fatalf("failed to create kafka publisher: %v", err)
+		}
+		defer pub.Close()
+		publisher = pub
+		log.Println("kafka publisher initialized for catalog.books.changed topic")
+	}
+
+	catalogSvc := service.NewCatalogService(bookRepo, publisher)
 	catalogHandler := handler.NewCatalogHandler(catalogSvc)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	if kafkaBrokers != "" {
-		brokers := strings.Split(kafkaBrokers, ",")
+	if len(brokers) > 0 {
 		go func() {
 			log.Println("starting kafka consumer for reservations topic")
 			if err := consumer.Run(ctx, brokers, "reservations", catalogSvc); err != nil {
