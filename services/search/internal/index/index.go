@@ -40,6 +40,10 @@ func NewMeilisearchIndex(url, apiKey string) *MeilisearchIndex {
 	return &MeilisearchIndex{client: client}
 }
 
+// EnsureIndex creates the "books" index (if it doesn't exist) and configures
+// searchable, filterable, and sortable attributes. Meilisearch operations are
+// asynchronous — they enqueue tasks and return immediately. Newly indexed
+// documents may not be searchable until the task completes (usually <1s).
 func (m *MeilisearchIndex) EnsureIndex(_ context.Context) error {
 	_, err := m.client.CreateIndex(&meilisearch.IndexConfig{
 		Uid:        indexName,

@@ -29,7 +29,7 @@ import (
 	"github.com/fesoliveira014/library-system/services/catalog/migrations"
 )
 
-// noopPublisher is a placeholder until Task 3 wires the real Kafka publisher.
+// noopPublisher is used when KAFKA_BROKERS is not configured.
 type noopPublisher struct{}
 
 func (n *noopPublisher) Publish(_ context.Context, _ service.BookEvent) error { return nil }
