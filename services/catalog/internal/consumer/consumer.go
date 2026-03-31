@@ -8,6 +8,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
+	otelgo "go.opentelemetry.io/otel"
 
 	"github.com/fesoliveira014/library-system/services/catalog/internal/model"
 )
@@ -47,6 +48,30 @@ func Run(ctx context.Context, brokers []string, topic string, svc AvailabilityUp
 	}
 }
 
+// consumerHeaderCarrier adapts sarama consumer message headers to propagation.TextMapCarrier.
+type consumerHeaderCarrier []*sarama.RecordHeader
+
+func (c consumerHeaderCarrier) Get(key string) string {
+	for _, h := range c {
+		if string(h.Key) == key {
+			return string(h.Value)
+		}
+	}
+	return ""
+}
+
+func (c consumerHeaderCarrier) Set(key, value string) {
+	// Consumer carrier is read-only; Set is a no-op.
+}
+
+func (c consumerHeaderCarrier) Keys() []string {
+	keys := make([]string, len(c))
+	for i, h := range c {
+		keys[i] = string(h.Key)
+	}
+	return keys
+}
+
 type consumerHandler struct {
 	svc AvailabilityUpdater
 }
@@ -57,8 +82,9 @@ func (h *consumerHandler) Cleanup(_ sarama.ConsumerGroupSession) error { return 
 func (h *consumerHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim) error {
 	ctx := session.Context()
 	for msg := range claim.Messages() {
-		if err := handleEvent(ctx, h.svc, msg.Value); err != nil {
-			slog.ErrorContext(ctx, "failed to handle event", "error", err)
+		msgCtx := otelgo.GetTextMapPropagator().Extract(ctx, consumerHeaderCarrier(msg.Headers))
+		if err := handleEvent(msgCtx, h.svc, msg.Value); err != nil {
+			slog.ErrorContext(msgCtx, "failed to handle event", "error", err)
 			continue
 		}
 		session.MarkMessage(msg, "")

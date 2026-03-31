@@ -6,6 +6,7 @@ import (
 	"fmt"
 
 	"github.com/IBM/sarama"
+	otelgo "go.opentelemetry.io/otel"
 
 	"github.com/fesoliveira014/library-system/services/catalog/internal/service"
 )
@@ -29,8 +30,37 @@ func NewPublisher(brokers []string, topic string) (*Publisher, error) {
 	return &Publisher{producer: producer, topic: topic}, nil
 }
 
+// headerCarrier adapts sarama message headers to propagation.TextMapCarrier.
+type headerCarrier struct {
+	msg *sarama.ProducerMessage
+}
+
+func (c *headerCarrier) Get(key string) string {
+	for _, h := range c.msg.Headers {
+		if string(h.Key) == key {
+			return string(h.Value)
+		}
+	}
+	return ""
+}
+
+func (c *headerCarrier) Set(key, value string) {
+	c.msg.Headers = append(c.msg.Headers, sarama.RecordHeader{
+		Key:   []byte(key),
+		Value: []byte(value),
+	})
+}
+
+func (c *headerCarrier) Keys() []string {
+	keys := make([]string, len(c.msg.Headers))
+	for i, h := range c.msg.Headers {
+		keys[i] = string(h.Key)
+	}
+	return keys
+}
+
 // Publish sends a book event to Kafka, keyed by book_id.
-func (p *Publisher) Publish(_ context.Context, event service.BookEvent) error {
+func (p *Publisher) Publish(ctx context.Context, event service.BookEvent) error {
 	value, err := json.Marshal(event)
 	if err != nil {
 		return fmt.Errorf("marshal event: %w", err)
@@ -41,6 +71,8 @@ func (p *Publisher) Publish(_ context.Context, event service.BookEvent) error {
 		Key:   sarama.StringEncoder(event.BookID),
 		Value: sarama.ByteEncoder(value),
 	}
+
+	otelgo.GetTextMapPropagator().Inject(ctx, &headerCarrier{msg: msg})
 
 	_, _, err = p.producer.SendMessage(msg)
 	if err != nil {
