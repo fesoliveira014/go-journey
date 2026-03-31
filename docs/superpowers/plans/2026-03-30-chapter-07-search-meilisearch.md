@@ -31,6 +31,7 @@
 | `services/search/internal/consumer/consumer.go` | Kafka consumer for catalog events |
 | `services/search/internal/consumer/consumer_test.go` | Consumer tests |
 | `services/search/internal/bootstrap/bootstrap.go` | Full sync from Catalog on startup |
+| `services/search/internal/bootstrap/bootstrap_test.go` | Bootstrap tests |
 | `services/search/Dockerfile` | Production multi-stage build |
 | `services/search/Dockerfile.dev` | Dev image with hot reload |
 | `services/search/.air.toml` | Air config |
@@ -917,7 +918,7 @@ git commit -m "feat: add Kafka publisher to catalog service for book change even
 
 - [ ] **Step 1: Create search service module**
 
-Create `services/search/go.mod`:
+Create a minimal `services/search/go.mod` with just the module declaration and replace directives — `go mod tidy` will resolve all dependencies:
 
 ```
 module github.com/fesoliveira014/library-system/services/search
@@ -927,19 +928,9 @@ go 1.26.1
 replace github.com/fesoliveira014/library-system/gen => ../../gen
 
 replace github.com/fesoliveira014/library-system/pkg/auth => ../../pkg/auth
-
-require (
-	github.com/IBM/sarama v1.47.0
-	github.com/fesoliveira014/library-system/gen v0.0.0-00010101000000-000000000000
-	github.com/fesoliveira014/library-system/pkg/auth v0.0.0-00010101000000-000000000000
-	github.com/google/uuid v1.6.0
-	github.com/meilisearch/meilisearch-go v0.31.0
-	google.golang.org/grpc v1.79.3
-	google.golang.org/protobuf v1.36.11
-)
 ```
 
-Then run `go mod tidy` from the search directory to resolve all transitive deps.
+Then run `go mod tidy` from the search directory to resolve all dependencies.
 
 - [ ] **Step 2: Update go.work**
 
@@ -1951,9 +1942,101 @@ git commit -m "feat: add search Kafka consumer for catalog book events"
 
 **Files:**
 - Create: `services/search/internal/bootstrap/bootstrap.go`
+- Create: `services/search/internal/bootstrap/bootstrap_test.go`
 - Create: `services/search/cmd/main.go`
 
-- [ ] **Step 1: Create bootstrap**
+- [ ] **Step 1: Write bootstrap tests**
+
+Create `services/search/internal/bootstrap/bootstrap_test.go`:
+
+```go
+package bootstrap_test
+
+import (
+	"context"
+	"testing"
+
+	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
+	"github.com/fesoliveira014/library-system/services/search/internal/bootstrap"
+	"github.com/fesoliveira014/library-system/services/search/internal/model"
+	"google.golang.org/grpc"
+)
+
+type mockSearchService struct {
+	ensured  bool
+	count    int64
+	upserted []model.BookDocument
+}
+
+func (m *mockSearchService) EnsureIndex(_ context.Context) error {
+	m.ensured = true
+	return nil
+}
+
+func (m *mockSearchService) Count(_ context.Context) (int64, error) {
+	return m.count, nil
+}
+
+func (m *mockSearchService) Upsert(_ context.Context, doc model.BookDocument) error {
+	m.upserted = append(m.upserted, doc)
+	return nil
+}
+
+type mockCatalogClient struct {
+	catalogv1.CatalogServiceClient
+	books []*catalogv1.Book
+}
+
+func (m *mockCatalogClient) ListBooks(_ context.Context, req *catalogv1.ListBooksRequest, _ ...grpc.CallOption) (*catalogv1.ListBooksResponse, error) {
+	return &catalogv1.ListBooksResponse{Books: m.books, TotalCount: int64(len(m.books))}, nil
+}
+
+func TestBootstrap_SkipsWhenIndexHasDocuments(t *testing.T) {
+	svc := &mockSearchService{count: 5}
+	catalog := &mockCatalogClient{}
+
+	err := bootstrap.Run(context.Background(), catalog, svc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !svc.ensured {
+		t.Error("expected EnsureIndex to be called")
+	}
+	if len(svc.upserted) != 0 {
+		t.Errorf("expected no upserts when index is populated, got %d", len(svc.upserted))
+	}
+}
+
+func TestBootstrap_IndexesAllBooksWhenEmpty(t *testing.T) {
+	svc := &mockSearchService{count: 0}
+	catalog := &mockCatalogClient{
+		books: []*catalogv1.Book{
+			{Id: "1", Title: "Go Book", Author: "Author1"},
+			{Id: "2", Title: "Rust Book", Author: "Author2"},
+		},
+	}
+
+	err := bootstrap.Run(context.Background(), catalog, svc)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(svc.upserted) != 2 {
+		t.Fatalf("expected 2 upserts, got %d", len(svc.upserted))
+	}
+	if svc.upserted[0].Title != "Go Book" {
+		t.Errorf("expected first book 'Go Book', got %s", svc.upserted[0].Title)
+	}
+}
+```
+
+- [ ] **Step 2: Run tests — expect failure**
+
+Run: `go test ./services/search/internal/bootstrap/... -v -count=1`
+Expected: FAIL — bootstrap package doesn't exist
+
+- [ ] **Step 3: Create bootstrap**
+
+The bootstrap function depends on an `IndexBootstrapper` interface (subset of SearchService) rather than the concrete type, enabling testability.
 
 Create `services/search/internal/bootstrap/bootstrap.go`:
 
@@ -1966,11 +2049,17 @@ import (
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	"github.com/fesoliveira014/library-system/services/search/internal/model"
-	"github.com/fesoliveira014/library-system/services/search/internal/service"
 )
 
+// IndexBootstrapper is the subset of SearchService that bootstrap needs.
+type IndexBootstrapper interface {
+	EnsureIndex(ctx context.Context) error
+	Count(ctx context.Context) (int64, error)
+	Upsert(ctx context.Context, doc model.BookDocument) error
+}
+
 // Run syncs the Meilisearch index from the Catalog service if the index is empty.
-func Run(ctx context.Context, catalog catalogv1.CatalogServiceClient, svc *service.SearchService) error {
+func Run(ctx context.Context, catalog catalogv1.CatalogServiceClient, svc IndexBootstrapper) error {
 	if err := svc.EnsureIndex(ctx); err != nil {
 		return err
 	}
@@ -2031,7 +2120,12 @@ func Run(ctx context.Context, catalog catalogv1.CatalogServiceClient, svc *servi
 }
 ```
 
-- [ ] **Step 2: Create search service main.go**
+- [ ] **Step 4: Run bootstrap tests — expect pass**
+
+Run: `go test ./services/search/internal/bootstrap/... -v -count=1`
+Expected: PASS — all 2 tests pass
+
+- [ ] **Step 5: Create search service main.go**
 
 Create `services/search/cmd/main.go`:
 
@@ -2125,7 +2219,7 @@ func main() {
 }
 ```
 
-- [ ] **Step 3: Run go mod tidy and verify build**
+- [ ] **Step 6: Run go mod tidy and verify build**
 
 Run:
 ```bash
@@ -2134,7 +2228,7 @@ go build -o /tmp/search-svc ./services/search/cmd/...
 ```
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add services/search/internal/bootstrap/ services/search/cmd/ services/search/go.mod services/search/go.sum
@@ -2459,6 +2553,8 @@ Create `services/gateway/templates/partials/suggestions.html`:
 
 - [ ] **Step 7: Update nav.html with search input**
 
+The nav input uses `name="prefix"` for HTMX suggest calls. Form submission to `/search?q=...` uses a separate hidden input populated by JavaScript on submit, keeping both endpoints clean.
+
 Replace `services/gateway/templates/partials/nav.html` with:
 
 ```html
@@ -2467,13 +2563,18 @@ Replace `services/gateway/templates/partials/nav.html` with:
     <a href="/">Library System</a>
     <a href="/books">Catalog</a>
     <a href="/search">Search</a>
-    <form method="GET" action="/search" style="display:inline;position:relative">
-        <input type="text" name="q" placeholder="Search..."
-               hx-get="/search/suggest" hx-trigger="keyup changed delay:300ms[this.value.length >= 2]"
-               hx-target="#suggestions" hx-swap="innerHTML"
-               hx-params="*" autocomplete="off">
+    <div style="display:inline;position:relative">
+        <form method="GET" action="/search" style="display:inline">
+            <input type="hidden" name="q" id="nav-search-q">
+            <input type="text" name="prefix" placeholder="Search..."
+                   hx-get="/search/suggest" hx-trigger="keyup changed delay:300ms[this.value.length >= 2]"
+                   hx-target="#suggestions" hx-swap="innerHTML"
+                   autocomplete="off"
+                   onchange="document.getElementById('nav-search-q').value=this.value"
+                   onkeydown="if(event.key==='Enter'){document.getElementById('nav-search-q').value=this.value}">
+        </form>
         <div id="suggestions" style="position:absolute;background:white;z-index:10"></div>
-    </form>
+    </div>
     {{if .User}}
         <a href="/reservations">My Reservations</a>
         {{if eq .User.Role "admin"}}
@@ -2488,25 +2589,6 @@ Replace `services/gateway/templates/partials/nav.html` with:
     {{end}}
 </nav>
 {{end}}
-```
-
-Note: The nav search input uses `name="q"` for form submission but `hx-params="*"` for HTMX — the suggest endpoint reads `q` as prefix since the input name is `q`. Wait — the suggest endpoint expects `prefix` param. Let me fix: the input needs `name="q"` for the form submission to `/search?q=...`, but the HTMX suggest call needs `prefix`. Use `hx-vals` to remap:
-
-Actually, simpler: use a separate hidden approach. The HTMX `hx-get` sends the input's value as the `q` parameter. The suggest handler should read `q` instead of `prefix`. Let me update the search handler to read `q` for suggest too:
-
-Actually no — keep it clean. The input `name="q"` sends `q` to both endpoints. Update `SearchSuggest` to read `q` instead of `prefix`:
-
-```go
-func (s *Server) SearchSuggest(w http.ResponseWriter, r *http.Request) {
-	prefix := r.URL.Query().Get("q")
-```
-
-And update the suggest test:
-```go
-req := httptest.NewRequest("GET", "/search/suggest?q=go", nil)
-```
-```go
-req := httptest.NewRequest("GET", "/search/suggest?q=g", nil)
 ```
 
 - [ ] **Step 8: Update gateway main.go**
@@ -2778,7 +2860,7 @@ lint:
 
 test:
     FROM +src
-    RUN go test ./internal/service/... ./internal/handler/... ./internal/consumer/... -v -count=1
+    RUN go test ./internal/service/... ./internal/handler/... ./internal/consumer/... ./internal/bootstrap/... -v -count=1
 
 build:
     FROM +src
