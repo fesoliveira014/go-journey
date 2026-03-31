@@ -2,7 +2,7 @@ package handler
 
 import (
 	"context"
-	"log"
+	"log/slog"
 	"net/http"
 
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
@@ -29,24 +29,24 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 	}
 	tmpl, ok := s.tmpl[name]
 	if !ok {
-		log.Printf("template not found: %q", name)
+		slog.ErrorContext(r.Context(), "template not found", "name", name)
 		http.Error(w, "internal server error", http.StatusInternalServerError)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if err := tmpl.ExecuteTemplate(w, "base.html", pd); err != nil {
-		log.Printf("template error: %v", err)
+		slog.ErrorContext(r.Context(), "template error", "error", err)
 	}
 }
 
 func (s *Server) renderPartial(w http.ResponseWriter, name string, data any) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	if s.baseTmpl == nil {
-		log.Printf("no templates loaded; cannot render partial %q", name)
+		slog.Error("no templates loaded", "partial", name)
 		return
 	}
 	if err := s.baseTmpl.ExecuteTemplate(w, name, data); err != nil {
-		log.Printf("template error: %v", err)
+		slog.Error("template error", "error", err)
 	}
 }
 
@@ -61,14 +61,14 @@ func (s *Server) renderError(w http.ResponseWriter, r *http.Request, code int, m
 	}
 	tmpl, ok := s.tmpl["error.html"]
 	if !ok {
-		log.Printf("error template not found")
+		slog.ErrorContext(r.Context(), "error template not found")
 		http.Error(w, message, code)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(code)
 	if err := tmpl.ExecuteTemplate(w, "base.html", pd); err != nil {
-		log.Printf("template error: %v", err)
+		slog.ErrorContext(r.Context(), "template error", "error", err)
 	}
 }
 
