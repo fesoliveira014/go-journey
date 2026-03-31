@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log"
+	"log/slog"
 
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
@@ -39,7 +39,7 @@ func Run(ctx context.Context, brokers []string, topic string, svc AvailabilityUp
 
 	for {
 		if err := group.Consume(ctx, []string{topic}, handler); err != nil {
-			log.Printf("consumer error: %v", err)
+			slog.Error("consumer error", "error", err)
 		}
 		if ctx.Err() != nil {
 			return nil
@@ -58,7 +58,7 @@ func (h *consumerHandler) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 	ctx := session.Context()
 	for msg := range claim.Messages() {
 		if err := handleEvent(ctx, h.svc, msg.Value); err != nil {
-			log.Printf("failed to handle event: %v", err)
+			slog.ErrorContext(ctx, "failed to handle event", "error", err)
 			continue
 		}
 		session.MarkMessage(msg, "")
@@ -85,7 +85,7 @@ func handleEvent(ctx context.Context, svc AvailabilityUpdater, data []byte) erro
 	case "reservation.returned", "reservation.expired":
 		delta = 1
 	default:
-		log.Printf("unknown event type: %s", event.EventType)
+		slog.WarnContext(ctx, "unknown event type", "event_type", event.EventType)
 		return nil
 	}
 

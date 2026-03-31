@@ -3,12 +3,18 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"github.com/google/uuid"
+	otelgo "go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 
 	"github.com/fesoliveira014/library-system/services/catalog/internal/model"
+)
+
+var bookCounter, _ = otelgo.Meter("catalog").Int64UpDownCounter("catalog.books.total",
+	metric.WithDescription("Total number of books in the catalog"),
 )
 
 // BookRepository defines the interface for book persistence.
@@ -62,8 +68,10 @@ func (s *CatalogService) CreateBook(ctx context.Context, book *model.Book) (*mod
 		return nil, err
 	}
 
+	bookCounter.Add(ctx, 1)
+
 	if err := s.publisher.Publish(ctx, bookToEvent("book.created", created)); err != nil {
-		log.Printf("failed to publish book.created event for book %s: %v", created.ID, err)
+		slog.ErrorContext(ctx, "failed to publish event", "event", "book.created", "book_id", created.ID, "error", err)
 	}
 
 	return created, nil
@@ -87,7 +95,7 @@ func (s *CatalogService) UpdateBook(ctx context.Context, book *model.Book) (*mod
 	}
 
 	if err := s.publisher.Publish(ctx, bookToEvent("book.updated", updated)); err != nil {
-		log.Printf("failed to publish book.updated event for book %s: %v", updated.ID, err)
+		slog.ErrorContext(ctx, "failed to publish event", "event", "book.updated", "book_id", updated.ID, "error", err)
 	}
 
 	return updated, nil
@@ -98,12 +106,14 @@ func (s *CatalogService) DeleteBook(ctx context.Context, id uuid.UUID) error {
 		return err
 	}
 
+	bookCounter.Add(ctx, -1)
+
 	if err := s.publisher.Publish(ctx, BookEvent{
 		EventType: "book.deleted",
 		BookID:    id.String(),
 		Timestamp: time.Now(),
 	}); err != nil {
-		log.Printf("failed to publish book.deleted event for book %s: %v", id, err)
+		slog.ErrorContext(ctx, "failed to publish event", "event", "book.deleted", "book_id", id, "error", err)
 	}
 
 	return nil
@@ -124,7 +134,7 @@ func (s *CatalogService) UpdateAvailability(ctx context.Context, id uuid.UUID, d
 	}
 
 	if err := s.publisher.Publish(ctx, bookToEvent("book.updated", book)); err != nil {
-		log.Printf("failed to publish book.updated event for book %s: %v", id, err)
+		slog.ErrorContext(ctx, "failed to publish event", "event", "book.updated", "book_id", id, "error", err)
 	}
 
 	return book, nil
