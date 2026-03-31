@@ -34,3 +34,12 @@ services:
       - ../services/reservation:/app/services/reservation
       - ../gen:/app/gen
       - ../pkg/auth:/app/pkg/auth
+
+  search:
+    build:
+      context: ..
+      dockerfile: services/search/Dockerfile.dev
+    volumes:
+      - ../services/search:/app/services/search
+      - ../gen:/app/gen
+      - ../pkg/auth:/app/pkg/auth

@@ -135,6 +135,44 @@ services:
     networks:
       - library-net
 
+  meilisearch:
+    image: getmeili/meilisearch:v1.12
+    environment:
+      MEILI_ENV: development
+      MEILI_NO_ANALYTICS: "true"
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-dev-master-key-change-in-production}
+    ports:
+      - "${MEILI_PORT:-7700}:7700"
+    volumes:
+      - meilisearch-data:/meili_data
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--spider", "http://localhost:7700/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - library-net
+
+  search:
+    build:
+      context: ..
+      dockerfile: services/search/Dockerfile
+    environment:
+      GRPC_PORT: "50054"
+      MEILI_URL: ${MEILI_URL:-http://meilisearch:7700}
+      MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-dev-master-key-change-in-production}
+      KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      CATALOG_GRPC_ADDR: ${CATALOG_GRPC_ADDR:-catalog:50052}
+    ports:
+      - "${SEARCH_GRPC_PORT:-50054}:50054"
+    depends_on:
+      meilisearch:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - library-net
+
   gateway:
     build:
       context: ..
@@ -144,6 +182,7 @@ services:
       AUTH_GRPC_ADDR: ${AUTH_GRPC_ADDR:-auth:50051}
       CATALOG_GRPC_ADDR: ${CATALOG_GRPC_ADDR:-catalog:50052}
       RESERVATION_GRPC_ADDR: ${RESERVATION_GRPC_ADDR:-reservation:50053}
+      SEARCH_GRPC_ADDR: ${SEARCH_GRPC_ADDR:-search:50054}
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
     ports:
       - "${GATEWAY_PORT:-8080}:8080"
@@ -151,6 +190,7 @@ services:
       - auth
       - catalog
       - reservation
+      - search
     networks:
       - library-net
 
@@ -158,6 +198,7 @@ volumes:
   catalog-data:
   auth-data:
   reservation-data:
+  meilisearch-data:
 
 networks:
   library-net:
