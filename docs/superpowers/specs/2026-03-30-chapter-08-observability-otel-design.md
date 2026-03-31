@@ -170,7 +170,7 @@ Where `ctx` is not available (startup code before server starts), use `slog.Info
 | Service | Image | Ports | Purpose |
 |---------|-------|-------|---------|
 | `otel-collector` | `otel/opentelemetry-collector-contrib:0.115.0` | 4317 (OTLP gRPC), 8889 (Prometheus scrape) | Central telemetry pipeline |
-| `tempo` | `grafana/tempo:2.7.0` | 3200 (API) | Distributed trace storage |
+| `tempo` | `grafana/tempo:2.7.0` | 4317 (OTLP gRPC), 3200 (API) | Distributed trace storage |
 | `prometheus` | `prom/prometheus:v3.1.0` | 9090 | Metrics storage, scrapes OTel Collector |
 | `loki` | `grafana/loki:3.3.0` | 3100 | Log aggregation |
 | `promtail` | `grafana/promtail:3.3.0` | — | Collects Docker container logs → Loki |
