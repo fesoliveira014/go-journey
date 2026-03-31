@@ -9,6 +9,7 @@ ENV GOWORK=off
 # 1. Copy only go.mod/go.sum for dependency caching
 COPY gen/go.mod gen/go.sum* ./gen/
 COPY pkg/auth/go.mod pkg/auth/go.sum* ./pkg/auth/
+COPY pkg/otel/go.mod pkg/otel/go.sum* ./pkg/otel/
 COPY services/catalog/go.mod services/catalog/go.sum* ./services/catalog/
 
 # 2. Download dependencies (cached unless go.mod changes)
@@ -19,6 +20,7 @@ RUN go mod download
 WORKDIR /app
 COPY gen/ ./gen/
 COPY pkg/auth/ ./pkg/auth/
+COPY pkg/otel/ ./pkg/otel/
 COPY services/catalog/ ./services/catalog/
 
 # 4. Build static binary

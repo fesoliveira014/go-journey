@@ -8,6 +8,7 @@ WORKDIR /app
 
 COPY gen/go.mod gen/go.sum* ./gen/
 COPY pkg/auth/go.mod pkg/auth/go.sum* ./pkg/auth/
+COPY pkg/otel/go.mod pkg/otel/go.sum* ./pkg/otel/
 COPY services/gateway/go.mod services/gateway/go.sum* ./services/gateway/
 
 WORKDIR /app/services/gateway

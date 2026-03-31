@@ -8,6 +8,7 @@ ENV GOWORK=off
 
 COPY gen/ ./gen/
 COPY pkg/auth/ ./pkg/auth/
+COPY pkg/otel/ ./pkg/otel/
 COPY services/reservation/ ./services/reservation/
 
 WORKDIR /app/services/reservation

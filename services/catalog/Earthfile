@@ -6,6 +6,11 @@ WORKDIR /app
 
 deps:
     COPY go.mod go.sum* ./
+    # Copy local module dependencies (replace directives)
+    COPY ../../gen/go.mod ../../gen/go.sum* ../gen/
+    COPY ../../pkg/auth/go.mod ../../pkg/auth/go.sum* ../pkg/auth/
+    COPY ../../pkg/otel/go.mod ../../pkg/otel/go.sum* ../pkg/otel/
+    ENV GOWORK=off
     RUN go mod download
     SAVE ARTIFACT go.mod AS LOCAL go.mod
     SAVE ARTIFACT go.sum AS LOCAL go.sum
@@ -13,6 +18,9 @@ deps:
 src:
     FROM +deps
     COPY --dir cmd internal migrations ./
+    COPY ../../gen/ ../gen/
+    COPY ../../pkg/auth/ ../pkg/auth/
+    COPY ../../pkg/otel/ ../pkg/otel/
 
 lint:
     FROM +src
