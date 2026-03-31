@@ -74,6 +74,9 @@ func (p *Publisher) Publish(ctx context.Context, event service.BookEvent) error 
 
 	otelgo.GetTextMapPropagator().Inject(ctx, &headerCarrier{msg: msg})
 
+	ctx, span := otelgo.Tracer("catalog").Start(ctx, "catalog.publish")
+	defer span.End()
+
 	_, _, err = p.producer.SendMessage(msg)
 	if err != nil {
 		return fmt.Errorf("send kafka message: %w", err)

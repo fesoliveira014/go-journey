@@ -83,10 +83,13 @@ func (h *consumerHandler) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 	ctx := session.Context()
 	for msg := range claim.Messages() {
 		msgCtx := otelgo.GetTextMapPropagator().Extract(ctx, consumerHeaderCarrier(msg.Headers))
+		msgCtx, span := otelgo.Tracer("catalog").Start(msgCtx, "catalog.consume.reservation")
 		if err := handleEvent(msgCtx, h.svc, msg.Value); err != nil {
 			slog.ErrorContext(msgCtx, "failed to handle event", "error", err)
+			span.End()
 			continue
 		}
+		span.End()
 		session.MarkMessage(msg, "")
 	}
 	return nil
