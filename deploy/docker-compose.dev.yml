@@ -7,6 +7,7 @@ services:
       - ../services/catalog:/app/services/catalog
       - ../gen:/app/gen
       - ../pkg/auth:/app/pkg/auth
+      - ../pkg/otel:/app/pkg/otel
 
   gateway:
     build:
@@ -16,6 +17,7 @@ services:
       - ../services/gateway:/app/services/gateway
       - ../gen:/app/gen
       - ../pkg/auth:/app/pkg/auth
+      - ../pkg/otel:/app/pkg/otel
 
   auth:
     build:
@@ -34,6 +36,7 @@ services:
       - ../services/reservation:/app/services/reservation
       - ../gen:/app/gen
       - ../pkg/auth:/app/pkg/auth
+      - ../pkg/otel:/app/pkg/otel
 
   search:
     build:
