@@ -1,23 +1,36 @@
 package main
 
 import (
+	"context"
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
 	"os"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+
 	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
 	searchv1 "github.com/fesoliveira014/library-system/gen/search/v1"
+	pkgotel "github.com/fesoliveira014/library-system/pkg/otel"
 	"github.com/fesoliveira014/library-system/services/gateway/internal/handler"
 	"github.com/fesoliveira014/library-system/services/gateway/internal/middleware"
 )
 
 func main() {
+	ctx := context.Background()
+	shutdown, err := pkgotel.Init(ctx, "gateway", os.Getenv("OTEL_COLLECTOR_ENDPOINT"))
+	if err != nil {
+		slog.Error("failed to init otel", "error", err)
+	} else {
+		defer shutdown(ctx)
+	}
+
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"
@@ -25,16 +38,21 @@ func main() {
 
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		log.Fatal("JWT_SECRET is required")
+		slog.Error("JWT_SECRET is required")
+		os.Exit(1)
 	}
 
 	authAddr := os.Getenv("AUTH_GRPC_ADDR")
 	if authAddr == "" {
 		authAddr = "localhost:50051"
 	}
-	authConn, err := grpc.NewClient(authAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	authConn, err := grpc.NewClient(authAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
-		log.Fatalf("connect to auth service: %v", err)
+		slog.Error("connect to auth service", "error", err)
+		os.Exit(1)
 	}
 	defer authConn.Close()
 
@@ -42,9 +60,13 @@ func main() {
 	if catalogAddr == "" {
 		catalogAddr = "localhost:50052"
 	}
-	catalogConn, err := grpc.NewClient(catalogAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	catalogConn, err := grpc.NewClient(catalogAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
-		log.Fatalf("connect to catalog service: %v", err)
+		slog.Error("connect to catalog service", "error", err)
+		os.Exit(1)
 	}
 	defer catalogConn.Close()
 
@@ -52,9 +74,13 @@ func main() {
 	if reservationAddr == "" {
 		reservationAddr = "localhost:50053"
 	}
-	reservationConn, err := grpc.NewClient(reservationAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	reservationConn, err := grpc.NewClient(reservationAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
-		log.Fatalf("connect to reservation service: %v", err)
+		slog.Error("connect to reservation service", "error", err)
+		os.Exit(1)
 	}
 	defer reservationConn.Close()
 
@@ -62,15 +88,20 @@ func main() {
 	if searchAddr == "" {
 		searchAddr = "localhost:50054"
 	}
-	searchConn, err := grpc.NewClient(searchAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	searchConn, err := grpc.NewClient(searchAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
 	if err != nil {
-		log.Fatalf("connect to search service: %v", err)
+		slog.Error("connect to search service", "error", err)
+		os.Exit(1)
 	}
 	defer searchConn.Close()
 
 	tmpl, err := handler.ParseTemplates("templates")
 	if err != nil {
-		log.Fatalf("parse templates: %v", err)
+		slog.Error("parse templates", "error", err)
+		os.Exit(1)
 	}
 
 	authClient := authv1.NewAuthServiceClient(authConn)
@@ -112,10 +143,12 @@ func main() {
 	var h http.Handler = mux
 	h = middleware.Auth(h, jwtSecret)
 	h = middleware.Logging(h)
+	h = otelhttp.NewHandler(h, "gateway")
 
 	addr := fmt.Sprintf(":%s", port)
-	log.Printf("gateway listening on %s", addr)
+	slog.Info("gateway listening", "addr", addr)
 	if err := http.ListenAndServe(addr, h); err != nil {
-		log.Fatalf("server failed: %v", err)
+		slog.Error("server failed", "error", err)
+		os.Exit(1)
 	}
 }
