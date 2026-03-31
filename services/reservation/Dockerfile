@@ -2,9 +2,11 @@
 FROM golang:1.26-alpine AS builder
 WORKDIR /app
 
+# Disable workspace mode — we only copy this service and gen/, not all
+# workspace members. The replace directive in go.mod handles the gen/ import.
 ENV GOWORK=off
 
-# 1. Copy go.mod files for dependency caching
+# 1. Copy only go.mod/go.sum for dependency caching
 COPY gen/go.mod gen/go.sum* ./gen/
 COPY pkg/auth/go.mod pkg/auth/go.sum* ./pkg/auth/
 COPY services/reservation/go.mod services/reservation/go.sum* ./services/reservation/
