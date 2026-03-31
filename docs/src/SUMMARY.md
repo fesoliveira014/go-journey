@@ -32,3 +32,8 @@
   - [6.2 Reservation Service](./ch06/reservation-service.md)
   - [6.3 Kafka Consumer](./ch06/kafka-consumer.md)
   - [6.4 Reservation UI](./ch06/reservation-ui.md)
+- [Chapter 7: Full-Text Search](./ch07/index.md)
+  - [7.1 Catalog Event Publishing](./ch07/catalog-events.md)
+  - [7.2 Search Service](./ch07/search-service.md)
+  - [7.3 Meilisearch Integration](./ch07/meilisearch.md)
+  - [7.4 Search UI](./ch07/search-ui.md)
