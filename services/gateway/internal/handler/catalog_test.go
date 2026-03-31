@@ -123,7 +123,7 @@ func TestBookList_RendersBooks(t *testing.T) {
 		},
 	}
 	tmpl := catalogTestTemplates(t)
-	srv := handler.New(nil, mock, nil, tmpl)
+	srv := handler.New(nil, mock, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/books", nil)
 	rec := httptest.NewRecorder()
@@ -153,7 +153,7 @@ func TestBookList_HTMXRequest(t *testing.T) {
 		},
 	}
 	tmpl := catalogTestTemplates(t)
-	srv := handler.New(nil, mock, nil, tmpl)
+	srv := handler.New(nil, mock, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/books", nil)
 	req.Header.Set("HX-Request", "true")
@@ -183,7 +183,7 @@ func TestBookList_GenreFilter(t *testing.T) {
 		},
 	}
 	tmpl := catalogTestTemplates(t)
-	srv := handler.New(nil, mock, nil, tmpl)
+	srv := handler.New(nil, mock, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/books?genre=Programming", nil)
 	rec := httptest.NewRecorder()
@@ -202,7 +202,7 @@ func TestBookList_GRPCError(t *testing.T) {
 		},
 	}
 	tmpl := catalogTestTemplates(t)
-	srv := handler.New(nil, mock, nil, tmpl)
+	srv := handler.New(nil, mock, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/books", nil)
 	rec := httptest.NewRecorder()
@@ -231,7 +231,7 @@ func TestBookDetail_Success(t *testing.T) {
 		},
 	}
 	tmpl := catalogTestTemplates(t)
-	srv := handler.New(nil, mock, nil, tmpl)
+	srv := handler.New(nil, mock, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/books/42", nil)
 	// Simulate PathValue by using a mux that supports it; here we set it manually
@@ -258,7 +258,7 @@ func TestBookDetail_NotFound(t *testing.T) {
 		},
 	}
 	tmpl := catalogTestTemplates(t)
-	srv := handler.New(nil, mock, nil, tmpl)
+	srv := handler.New(nil, mock, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/books/999", nil)
 	req.SetPathValue("id", "999")
@@ -312,7 +312,7 @@ func withMember(r *http.Request) *http.Request {
 
 func TestAdminBookNew_RequiresAdmin(t *testing.T) {
 	tmpl := adminTestTemplates(t)
-	srv := handler.New(nil, &mockCatalogClient{}, nil, tmpl)
+	srv := handler.New(nil, &mockCatalogClient{}, nil, nil, tmpl)
 
 	// No user in context → redirect to /login
 	req := httptest.NewRequest(http.MethodGet, "/admin/books/new", nil)
@@ -330,7 +330,7 @@ func TestAdminBookNew_RequiresAdmin(t *testing.T) {
 
 func TestAdminBookNew_NonAdmin(t *testing.T) {
 	tmpl := adminTestTemplates(t)
-	srv := handler.New(nil, &mockCatalogClient{}, nil, tmpl)
+	srv := handler.New(nil, &mockCatalogClient{}, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/books/new", nil)
 	req = withMember(req)
@@ -345,7 +345,7 @@ func TestAdminBookNew_NonAdmin(t *testing.T) {
 
 func TestAdminBookNew_Admin(t *testing.T) {
 	tmpl := adminTestTemplates(t)
-	srv := handler.New(nil, &mockCatalogClient{}, nil, tmpl)
+	srv := handler.New(nil, &mockCatalogClient{}, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/books/new", nil)
 	req = withAdmin(req)
@@ -370,7 +370,7 @@ func TestAdminBookCreate_Success(t *testing.T) {
 		},
 	}
 	tmpl := adminTestTemplates(t)
-	srv := handler.New(nil, mock, nil, tmpl)
+	srv := handler.New(nil, mock, nil, nil, tmpl)
 
 	form := url.Values{
 		"title":          {"The Pragmatic Programmer"},
@@ -427,7 +427,7 @@ func TestAdminBookEdit_LoadsBook(t *testing.T) {
 		},
 	}
 	tmpl := adminTestTemplates(t)
-	srv := handler.New(nil, mock, nil, tmpl)
+	srv := handler.New(nil, mock, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/admin/books/42", nil)
 	req.SetPathValue("id", "42")
@@ -454,7 +454,7 @@ func TestAdminBookUpdate_Success(t *testing.T) {
 		},
 	}
 	tmpl := adminTestTemplates(t)
-	srv := handler.New(nil, mock, nil, tmpl)
+	srv := handler.New(nil, mock, nil, nil, tmpl)
 
 	form := url.Values{
 		"title":          {"Clean Code (2nd ed)"},
@@ -503,7 +503,7 @@ func TestAdminBookDelete_Success(t *testing.T) {
 		},
 	}
 	tmpl := adminTestTemplates(t)
-	srv := handler.New(nil, mock, nil, tmpl)
+	srv := handler.New(nil, mock, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodPost, "/admin/books/42/delete", nil)
 	req.SetPathValue("id", "42")

@@ -2,6 +2,19 @@
 <nav>
     <a href="/">Library System</a>
     <a href="/books">Catalog</a>
+    <a href="/search">Search</a>
+    <div style="display:inline;position:relative">
+        <form method="GET" action="/search" style="display:inline">
+            <input type="hidden" name="q" id="nav-search-q">
+            <input type="text" name="prefix" placeholder="Search..."
+                   hx-get="/search/suggest" hx-trigger="keyup changed delay:300ms[this.value.length >= 2]"
+                   hx-target="#suggestions" hx-swap="innerHTML"
+                   autocomplete="off"
+                   onchange="document.getElementById('nav-search-q').value=this.value"
+                   onkeydown="if(event.key==='Enter'){document.getElementById('nav-search-q').value=this.value}">
+        </form>
+        <div id="suggestions" style="position:absolute;background:white;z-index:10"></div>
+    </div>
     {{if .User}}
         <a href="/reservations">My Reservations</a>
         {{if eq .User.Role "admin"}}

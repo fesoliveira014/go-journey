@@ -12,6 +12,7 @@ import (
 	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
+	searchv1 "github.com/fesoliveira014/library-system/gen/search/v1"
 	"github.com/fesoliveira014/library-system/services/gateway/internal/handler"
 	"github.com/fesoliveira014/library-system/services/gateway/internal/middleware"
 )
@@ -57,6 +58,16 @@ func main() {
 	}
 	defer reservationConn.Close()
 
+	searchAddr := os.Getenv("SEARCH_GRPC_ADDR")
+	if searchAddr == "" {
+		searchAddr = "localhost:50054"
+	}
+	searchConn, err := grpc.NewClient(searchAddr, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	if err != nil {
+		log.Fatalf("connect to search service: %v", err)
+	}
+	defer searchConn.Close()
+
 	tmpl, err := handler.ParseTemplates("templates")
 	if err != nil {
 		log.Fatalf("parse templates: %v", err)
@@ -65,7 +76,8 @@ func main() {
 	authClient := authv1.NewAuthServiceClient(authConn)
 	catalogClient := catalogv1.NewCatalogServiceClient(catalogConn)
 	reservationClient := reservationv1.NewReservationServiceClient(reservationConn)
-	srv := handler.New(authClient, catalogClient, reservationClient, tmpl)
+	searchClient := searchv1.NewSearchServiceClient(searchConn)
+	srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl)
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
@@ -87,6 +99,9 @@ func main() {
 	mux.HandleFunc("POST /books/{id}/reserve", srv.ReserveBook)
 	mux.HandleFunc("GET /reservations", srv.MyReservations)
 	mux.HandleFunc("POST /reservations/{id}/return", srv.ReturnBook)
+
+	mux.HandleFunc("GET /search", srv.SearchPage)
+	mux.HandleFunc("GET /search/suggest", srv.SearchSuggest)
 
 	mux.HandleFunc("GET /admin/books/new", srv.AdminBookNew)
 	mux.HandleFunc("POST /admin/books", srv.AdminBookCreate)

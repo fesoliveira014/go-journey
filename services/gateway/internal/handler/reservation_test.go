@@ -84,7 +84,7 @@ func reservationTestTemplates(t *testing.T) map[string]*template.Template {
 
 func TestReserveBook_RequiresAuth(t *testing.T) {
 	tmpl := reservationTestTemplates(t)
-	srv := handler.New(nil, nil, nil, tmpl)
+	srv := handler.New(nil, nil, nil, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodPost, "/books/123/reserve", nil)
 	req.SetPathValue("id", "123")
@@ -109,7 +109,7 @@ func TestReserveBook_Success(t *testing.T) {
 		},
 	}
 	tmpl := reservationTestTemplates(t)
-	srv := handler.New(nil, nil, mock, tmpl)
+	srv := handler.New(nil, nil, mock, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodPost, "/books/abc/reserve", nil)
 	req.SetPathValue("id", "abc")
@@ -133,7 +133,7 @@ func TestReserveBook_ResourceExhausted(t *testing.T) {
 		},
 	}
 	tmpl := reservationTestTemplates(t)
-	srv := handler.New(nil, nil, mock, tmpl)
+	srv := handler.New(nil, nil, mock, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodPost, "/books/abc/reserve", nil)
 	req.SetPathValue("id", "abc")
@@ -154,7 +154,7 @@ func TestReserveBook_FailedPrecondition(t *testing.T) {
 		},
 	}
 	tmpl := reservationTestTemplates(t)
-	srv := handler.New(nil, nil, mock, tmpl)
+	srv := handler.New(nil, nil, mock, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodPost, "/books/abc/reserve", nil)
 	req.SetPathValue("id", "abc")
@@ -180,7 +180,7 @@ func TestMyReservations_Success(t *testing.T) {
 		},
 	}
 	tmpl := reservationTestTemplates(t)
-	srv := handler.New(nil, nil, mock, tmpl)
+	srv := handler.New(nil, nil, mock, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodGet, "/reservations", nil)
 	req = withMember(req)
@@ -206,7 +206,7 @@ func TestReturnBook_Success(t *testing.T) {
 		},
 	}
 	tmpl := reservationTestTemplates(t)
-	srv := handler.New(nil, nil, mock, tmpl)
+	srv := handler.New(nil, nil, mock, nil, tmpl)
 
 	req := httptest.NewRequest(http.MethodPost, "/reservations/r1/return", nil)
 	req.SetPathValue("id", "r1")

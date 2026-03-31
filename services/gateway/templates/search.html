@@ -1,0 +1,37 @@
+{{define "title"}}Search{{end}}
+{{define "content"}}
+<h1>Search Books</h1>
+<form method="GET" action="/search">
+    <input type="text" name="q" value="{{.Data.Query}}" placeholder="Search books...">
+    <input type="text" name="genre" value="{{.Data.Genre}}" placeholder="Genre">
+    <input type="text" name="author" value="{{.Data.Author}}" placeholder="Author">
+    <label><input type="checkbox" name="available" {{if .Data.Available}}checked{{end}}> Available only</label>
+    <button type="submit">Search</button>
+</form>
+
+{{if .Data.HasResults}}
+<p>{{.Data.TotalHits}} results in {{.Data.QueryTimeMs}}ms</p>
+<table>
+    <thead>
+        <tr>
+            <th>Title</th>
+            <th>Author</th>
+            <th>Genre</th>
+            <th>Available</th>
+        </tr>
+    </thead>
+    <tbody>
+        {{range .Data.Books}}
+        <tr>
+            <td><a href="/books/{{.Id}}">{{.Title}}</a></td>
+            <td>{{.Author}}</td>
+            <td>{{.Genre}}</td>
+            <td>{{.AvailableCopies}} / {{.TotalCopies}}</td>
+        </tr>
+        {{end}}
+    </tbody>
+</table>
+{{else if .Data.Query}}
+<p>No results found for "{{.Data.Query}}".</p>
+{{end}}
+{{end}}

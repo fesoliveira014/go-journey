@@ -1,0 +1,7 @@
+{{define "suggestions.html"}}
+{{range .}}
+<a href="/books/{{.BookId}}" class="suggestion">
+    <strong>{{.Title}}</strong> — {{.Author}}
+</a>
+{{end}}
+{{end}}
