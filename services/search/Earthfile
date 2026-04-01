@@ -21,7 +21,9 @@ src:
 
 lint:
     FROM +src
-    RUN go vet ./...
+    COPY ../../.golangci.yml ./
+    RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
+    RUN golangci-lint run ./...
 
 test:
     FROM +src

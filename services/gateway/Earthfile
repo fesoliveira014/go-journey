@@ -15,13 +15,16 @@ deps:
 
 src:
     FROM +deps
-    COPY --dir cmd internal ./
+    COPY --dir cmd internal templates static ./
     COPY ../../gen/ ../gen/
     COPY ../../pkg/auth/ ../pkg/auth/
     COPY ../../pkg/otel/ ../pkg/otel/
+    SAVE ARTIFACT ./templates
+    SAVE ARTIFACT ./static
 
 lint:
     FROM +src
+    COPY ../../.golangci.yml ./
     RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
     RUN golangci-lint run ./...
 
@@ -36,7 +39,10 @@ build:
 
 docker:
     FROM alpine:3.19
+    WORKDIR /app
     COPY +build/gateway /usr/local/bin/gateway
+    COPY +src/templates /app/templates
+    COPY +src/static /app/static
     EXPOSE 8080
     ENTRYPOINT ["/usr/local/bin/gateway"]
     SAVE IMAGE gateway:latest

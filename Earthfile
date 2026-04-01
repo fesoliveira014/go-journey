@@ -25,3 +25,10 @@ test:
     BUILD ./services/gateway+test
     BUILD ./services/reservation+test
     BUILD ./services/search+test
+
+docker:
+    BUILD ./services/auth+docker
+    BUILD ./services/catalog+docker
+    BUILD ./services/gateway+docker
+    BUILD ./services/reservation+docker
+    BUILD ./services/search+docker
