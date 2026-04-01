@@ -97,20 +97,20 @@ Developer Push
 
 1. **Create `services/auth/Earthfile`** — same pattern as catalog:
    - `deps`: copy `go.mod`, `gen/go.mod`, `pkg/auth/go.mod` (auth does not depend on `pkg/otel`)
-   - `src`: copy `cmd`, `internal`, `migrations`, plus `gen/` and `pkg/auth/`
-   - `lint`: golangci-lint
+   - `src`: `COPY --dir cmd internal migrations ./` plus `gen/` and `pkg/auth/`
+   - `lint`: golangci-lint `@v1.57.2`
    - `test`: `go test ./internal/service/... ./internal/handler/... -v -count=1`
-   - `build`: `CGO_ENABLED=0 go build -o /bin/auth ./cmd/`
-   - `docker`: alpine + binary, expose 50051
+   - `build`: `CGO_ENABLED=0 go build -o /bin/auth ./cmd/`, then `SAVE ARTIFACT /bin/auth`
+   - `docker`: alpine + binary, expose 50051, `SAVE IMAGE auth:latest`
 
-2. **Update `services/catalog/Earthfile`** — replace `go vet` with golangci-lint install + run
+2. **Update `services/catalog/Earthfile`** — replace `go vet` with golangci-lint `@v1.57.2` install + run
 
-3. **Update `services/reservation/Earthfile`** — replace `go vet` with golangci-lint install + run
+3. **Update `services/reservation/Earthfile`** — replace `go vet` with golangci-lint `@v1.57.2` install + run
 
-4. **Update `services/search/Earthfile`** — replace `go vet` with golangci-lint install + run (no other dependency changes needed — search does not import `pkg/otel`)
+4. **Update `services/search/Earthfile`** — replace `go vet` with golangci-lint `@v1.57.2` install + run (no other dependency changes needed — search does not import `pkg/otel`)
 
 5. **Update `services/gateway/Earthfile`** — fix bug: add `templates/` and `static/` dirs to `src` and `docker` targets:
-   - `src` target: `COPY --dir cmd internal templates static ./`
+   - `src` target: `COPY --dir cmd internal templates static ./`, add `SAVE ARTIFACT ./templates` and `SAVE ARTIFACT ./static`
    - `docker` target: add `COPY +build/gateway /usr/local/bin/gateway` (already exists), plus `COPY +src/templates /app/templates` and `COPY +src/static /app/static`, set `WORKDIR /app`
 
 6. **Update root `Earthfile`** — add `+docker` target:
