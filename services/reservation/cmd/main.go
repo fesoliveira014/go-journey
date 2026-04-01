@@ -38,7 +38,7 @@ func main() {
 	if err != nil {
 		slog.Error("failed to init otel", "error", err)
 	} else {
-		defer shutdown(otelCtx)
+		defer func() { _ = shutdown(otelCtx) }()
 	}
 
 	dbDSN := os.Getenv("DATABASE_URL")

@@ -28,10 +28,16 @@ func setupTestDB(t *testing.T) *gorm.DB {
 		t.Fatalf("connect to test db: %v", err)
 	}
 	sqlDB, _ := db.DB()
-	sqlDB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\"")
-	db.AutoMigrate(&model.Reservation{})
+	if _, err := sqlDB.Exec("CREATE EXTENSION IF NOT EXISTS \"uuid-ossp\""); err != nil {
+		t.Fatalf("create extension: %v", err)
+	}
+	if err := db.AutoMigrate(&model.Reservation{}); err != nil {
+		t.Fatalf("auto migrate: %v", err)
+	}
 	t.Cleanup(func() {
-		sqlDB.Exec("DELETE FROM reservations")
+		if _, err := sqlDB.Exec("DELETE FROM reservations"); err != nil {
+			t.Errorf("cleanup: %v", err)
+		}
 	})
 	return db
 }
@@ -63,18 +69,22 @@ func TestCountActive(t *testing.T) {
 	userID := uuid.New()
 
 	for i := 0; i < 3; i++ {
-		repo.Create(context.Background(), &model.Reservation{
+		if _, err := repo.Create(context.Background(), &model.Reservation{
 			UserID: userID, BookID: uuid.New(),
 			Status: model.StatusActive, ReservedAt: time.Now(),
 			DueAt: time.Now().Add(14 * 24 * time.Hour),
-		})
+		}); err != nil {
+			t.Fatalf("setup: create active reservation: %v", err)
+		}
 	}
 	// One returned reservation — should not count
-	repo.Create(context.Background(), &model.Reservation{
+	if _, err := repo.Create(context.Background(), &model.Reservation{
 		UserID: userID, BookID: uuid.New(),
 		Status: model.StatusReturned, ReservedAt: time.Now(),
 		DueAt: time.Now().Add(14 * 24 * time.Hour),
-	})
+	}); err != nil {
+		t.Fatalf("setup: create returned reservation: %v", err)
+	}
 
 	count, err := repo.CountActive(context.Background(), userID)
 	if err != nil {
@@ -121,18 +131,22 @@ func TestListByUser(t *testing.T) {
 	userID := uuid.New()
 
 	for i := 0; i < 2; i++ {
-		repo.Create(context.Background(), &model.Reservation{
+		if _, err := repo.Create(context.Background(), &model.Reservation{
 			UserID: userID, BookID: uuid.New(),
 			Status: model.StatusActive, ReservedAt: time.Now(),
 			DueAt: time.Now().Add(14 * 24 * time.Hour),
-		})
+		}); err != nil {
+			t.Fatalf("setup: create reservation: %v", err)
+		}
 	}
 	// Different user
-	repo.Create(context.Background(), &model.Reservation{
+	if _, err := repo.Create(context.Background(), &model.Reservation{
 		UserID: uuid.New(), BookID: uuid.New(),
 		Status: model.StatusActive, ReservedAt: time.Now(),
 		DueAt: time.Now().Add(14 * 24 * time.Hour),
-	})
+	}); err != nil {
+		t.Fatalf("setup: create other user reservation: %v", err)
+	}
 
 	list, err := repo.ListByUser(context.Background(), userID)
 	if err != nil {

@@ -93,7 +93,9 @@ func TestAuthService_Register_Success(t *testing.T) {
 func TestAuthService_Register_DuplicateEmail(t *testing.T) {
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
-	svc.Register(context.Background(), "dup@example.com", "pass1", "User 1")
+	if _, _, err := svc.Register(context.Background(), "dup@example.com", "pass1", "User 1"); err != nil {
+		t.Fatalf("setup: failed to register first user: %v", err)
+	}
 	_, _, err := svc.Register(context.Background(), "dup@example.com", "pass2", "User 2")
 	if !errors.Is(err, model.ErrDuplicateEmail) {
 		t.Errorf("expected ErrDuplicateEmail, got %v", err)
@@ -122,7 +124,9 @@ func TestAuthService_Login_Success(t *testing.T) {
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	// Register first
-	svc.Register(context.Background(), "login@example.com", "mypassword", "Login User")
+	if _, _, err := svc.Register(context.Background(), "login@example.com", "mypassword", "Login User"); err != nil {
+		t.Fatalf("setup: failed to register user: %v", err)
+	}
 
 	// Login
 	token, user, err := svc.Login(context.Background(), "login@example.com", "mypassword")
@@ -140,7 +144,9 @@ func TestAuthService_Login_Success(t *testing.T) {
 func TestAuthService_Login_WrongPassword(t *testing.T) {
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
-	svc.Register(context.Background(), "wrong@example.com", "correct", "User")
+	if _, _, err := svc.Register(context.Background(), "wrong@example.com", "correct", "User"); err != nil {
+		t.Fatalf("setup: failed to register user: %v", err)
+	}
 	_, _, err := svc.Login(context.Background(), "wrong@example.com", "incorrect")
 	if !errors.Is(err, model.ErrInvalidCredentials) {
 		t.Errorf("expected ErrInvalidCredentials, got %v", err)

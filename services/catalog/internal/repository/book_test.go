@@ -57,7 +57,9 @@ func testDB(t *testing.T) *gorm.DB {
 	}
 
 	// Clean table before each test
-	db.Exec("TRUNCATE TABLE books CASCADE")
+	if err := db.Exec("TRUNCATE TABLE books CASCADE").Error; err != nil {
+		t.Fatalf("truncate books: %v", err)
+	}
 
 	return db
 }
@@ -117,7 +119,10 @@ func TestBookRepository_GetByID(t *testing.T) {
 	ctx := context.Background()
 
 	book := newTestBook("0004")
-	created, _ := repo.Create(ctx, book)
+	created, err := repo.Create(ctx, book)
+	if err != nil {
+		t.Fatalf("setup: create book: %v", err)
+	}
 
 	found, err := repo.GetByID(ctx, created.ID)
 	if err != nil {
@@ -145,7 +150,10 @@ func TestBookRepository_Update(t *testing.T) {
 	ctx := context.Background()
 
 	book := newTestBook("0005")
-	created, _ := repo.Create(ctx, book)
+	created, err := repo.Create(ctx, book)
+	if err != nil {
+		t.Fatalf("setup: create book: %v", err)
+	}
 
 	created.Title = "Updated Title"
 	updated, err := repo.Update(ctx, created)
@@ -163,13 +171,16 @@ func TestBookRepository_Delete(t *testing.T) {
 	ctx := context.Background()
 
 	book := newTestBook("0006")
-	created, _ := repo.Create(ctx, book)
+	created, err := repo.Create(ctx, book)
+	if err != nil {
+		t.Fatalf("setup: create book: %v", err)
+	}
 
 	if err := repo.Delete(ctx, created.ID); err != nil {
 		t.Fatalf("expected no error, got %v", err)
 	}
 
-	_, err := repo.GetByID(ctx, created.ID)
+	_, err = repo.GetByID(ctx, created.ID)
 	if err != model.ErrBookNotFound {
 		t.Errorf("expected ErrBookNotFound after delete, got %v", err)
 	}
@@ -195,12 +206,16 @@ func TestBookRepository_List(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		b := newTestBook(fmt.Sprintf("%04d", 100+i))
 		b.Genre = "Fiction"
-		repo.Create(ctx, b)
+		if _, err := repo.Create(ctx, b); err != nil {
+			t.Fatalf("setup: create fiction book: %v", err)
+		}
 	}
 	for i := 0; i < 2; i++ {
 		b := newTestBook(fmt.Sprintf("%04d", 200+i))
 		b.Genre = "Science"
-		repo.Create(ctx, b)
+		if _, err := repo.Create(ctx, b); err != nil {
+			t.Fatalf("setup: create science book: %v", err)
+		}
 	}
 
 	// List all
@@ -223,6 +238,9 @@ func TestBookRepository_List(t *testing.T) {
 	if total != 3 {
 		t.Errorf("expected total 3 for Fiction, got %d", total)
 	}
+	if len(books) != 3 {
+		t.Errorf("expected 3 fiction books, got %d", len(books))
+	}
 }
 
 func TestBookRepository_UpdateAvailability(t *testing.T) {
@@ -233,7 +251,10 @@ func TestBookRepository_UpdateAvailability(t *testing.T) {
 	book := newTestBook("0007")
 	book.TotalCopies = 5
 	book.AvailableCopies = 5
-	created, _ := repo.Create(ctx, book)
+	created, err := repo.Create(ctx, book)
+	if err != nil {
+		t.Fatalf("setup: create book: %v", err)
+	}
 
 	// Decrement
 	if err := repo.UpdateAvailability(ctx, created.ID, -1); err != nil {

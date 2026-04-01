@@ -130,7 +130,9 @@ func TestUserRepository_GetByEmail(t *testing.T) {
 	ctx := context.Background()
 
 	user := &model.User{Email: "email@example.com", PasswordHash: strPtr("hash"), Name: "Email User", Role: "user"}
-	repo.Create(ctx, user)
+	if _, err := repo.Create(ctx, user); err != nil {
+		t.Fatalf("setup: failed to create user: %v", err)
+	}
 
 	found, err := repo.GetByEmail(ctx, "email@example.com")
 	if err != nil {
@@ -166,7 +168,9 @@ func TestUserRepository_GetByOAuthID(t *testing.T) {
 		OAuthProvider: &provider,
 		OAuthID:       &oauthID,
 	}
-	repo.Create(ctx, user)
+	if _, err := repo.Create(ctx, user); err != nil {
+		t.Fatalf("setup: failed to create user: %v", err)
+	}
 
 	found, err := repo.GetByOAuthID(ctx, "google", "google-123")
 	if err != nil {

@@ -52,25 +52,27 @@ WORKDIR /app
 
 deps:
     COPY go.mod go.sum* ./
-    COPY ../../gen/go.mod ../../gen/go.sum* ../gen/
-    COPY ../../pkg/auth/go.mod ../../pkg/auth/go.sum* ../pkg/auth/
-    COPY ../../pkg/otel/go.mod ../../pkg/otel/go.sum* ../pkg/otel/
+    # Copy local module go.mod files via root Earthfile artifact targets
+    COPY ../../+gen-mod/gen ../gen
+    COPY ../../+pkg-auth-mod/pkg-auth ../pkg/auth
+    COPY ../../+pkg-otel-mod/pkg-otel ../pkg/otel
     ENV GOWORK=off
-    RUN go mod download
+    RUN go mod download && (cd ../gen && go mod download) && (cd ../pkg/auth && go mod download) && (cd ../pkg/otel && go mod download)
     SAVE ARTIFACT go.mod AS LOCAL go.mod
     SAVE ARTIFACT go.sum AS LOCAL go.sum
 
 src:
     FROM +deps
     COPY --dir cmd internal migrations ./
-    COPY ../../gen/ ../gen/
-    COPY ../../pkg/auth/ ../pkg/auth/
-    COPY ../../pkg/otel/ ../pkg/otel/
+    COPY ../../+gen-src/gen ../gen
+    COPY ../../+pkg-auth-src/pkg-auth ../pkg/auth
+    COPY ../../+pkg-otel-src/pkg-otel ../pkg/otel
 
 lint:
     FROM +src
-    COPY ../../.golangci.yml ./
-    RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
+    COPY ../../+golangci-config/.golangci.yml ./
+    RUN go build ./...
+    RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
     RUN golangci-lint run ./...
 
 test:
@@ -95,11 +97,12 @@ docker:
 ```earthfile
 deps:
     COPY go.mod go.sum* ./
-    COPY ../../gen/go.mod ../../gen/go.sum* ../gen/
-    COPY ../../pkg/auth/go.mod ../../pkg/auth/go.sum* ../pkg/auth/
-    COPY ../../pkg/otel/go.mod ../../pkg/otel/go.sum* ../pkg/otel/
+    # Copy local module go.mod files via root Earthfile artifact targets
+    COPY ../../+gen-mod/gen ../gen
+    COPY ../../+pkg-auth-mod/pkg-auth ../pkg/auth
+    COPY ../../+pkg-otel-mod/pkg-otel ../pkg/otel
     ENV GOWORK=off
-    RUN go mod download
+    RUN go mod download && (cd ../gen && go mod download) && (cd ../pkg/auth && go mod download) && (cd ../pkg/otel && go mod download)
     SAVE ARTIFACT go.mod AS LOCAL go.mod
     SAVE ARTIFACT go.sum AS LOCAL go.sum
 ```
@@ -109,6 +112,10 @@ This target copies only the `go.mod` and `go.sum` files -- nothing else -- and t
 Docker (and Earthly) cache build layers. If the inputs to a step have not changed since the last run, the cached layer is reused. By copying only the module files first and running `go mod download` before copying any application source, you ensure that dependency downloads only happen when dependencies actually change -- not every time you edit a `.go` file.
 
 If you have ever written a Java Dockerfile, you have done the same thing: copy `pom.xml` or `build.gradle` first, run the dependency download step, then copy the source.
+
+The `COPY ../../+gen-mod/gen ../gen` syntax is a cross-Earthfile artifact reference. Instead of directly copying `../../gen/go.mod` (which would fail because Earthly's build context is scoped to the service directory), the service Earthfile references artifact targets defined in the root Earthfile. The root `+gen-mod` target copies `gen/go.mod` and `gen/go.sum` into a `scratch` container and saves them as a named artifact. The service then pulls that artifact into its own container. This indirection is necessary in monorepos where local modules live outside the service's build context.
+
+The `go mod download` command is chained with subshell calls for each local module: `(cd ../gen && go mod download)`. Each replace'd module has its own `go.mod` with its own dependencies, and Go does not transitively download them. Without these subshells, the build would fail later when the compiler tries to resolve imports from the local modules.
 
 The project uses Go workspaces for local development, but `GOWORK=off` disables that inside the container. Inside the container, the local modules (`gen`, `pkg/auth`, `pkg/otel`) are placed at paths that match the `replace` directives in `go.mod`, so Go resolves them locally without needing the workspace. This is a deliberate design: workspaces are a developer convenience, but the container build should be explicit about module resolution.
 
@@ -120,12 +127,14 @@ The project uses Go workspaces for local development, but `GOWORK=off` disables 
 src:
     FROM +deps
     COPY --dir cmd internal migrations ./
-    COPY ../../gen/ ../gen/
-    COPY ../../pkg/auth/ ../pkg/auth/
-    COPY ../../pkg/otel/ ../pkg/otel/
+    COPY ../../+gen-src/gen ../gen
+    COPY ../../+pkg-auth-src/pkg-auth ../pkg/auth
+    COPY ../../+pkg-otel-src/pkg-otel ../pkg/otel
 ```
 
 `FROM +deps` starts this target from the state of the `deps` target -- the base image with all Go modules already downloaded. Now we copy the actual source code.
+
+The source copy uses the `+gen-src`, `+pkg-auth-src`, and `+pkg-otel-src` artifact targets from the root Earthfile, following the same cross-Earthfile pattern as `deps`. The `-src` variants copy the full source trees (not just `go.mod` files).
 
 This target is invalidated whenever any `.go` file in `cmd/`, `internal/`, `migrations/`, `gen/`, `pkg/auth/`, or `pkg/otel/` changes. That is fine, because copying source is fast. What matters is that the `deps` layer below it stays cached as long as dependencies have not changed.
 
@@ -138,16 +147,19 @@ In Gradle terms, this is like a `compileClasspath` configuration that `test` and
 ```earthfile
 lint:
     FROM +src
-    COPY ../../.golangci.yml ./
-    RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
+    COPY ../../+golangci-config/.golangci.yml ./
+    RUN go build ./...
+    RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
     RUN golangci-lint run ./...
 ```
 
 The linter is installed inside the container at a pinned version. This means every developer and every CI run uses exactly the same linter version -- no drift, no "works on my machine" lint failures.
 
-The `.golangci.yml` configuration is copied from the repository root. It lives at the root (not inside the service directory) so all services share the same lint rules. If you added a new rule to `.golangci.yml`, all five services would pick it up the next time `+lint` ran.
+The `.golangci.yml` configuration is copied from the root Earthfile's `+golangci-config` artifact target. It lives at the repository root (not inside the service directory) so all services share the same lint rules. If you added a new rule to `.golangci.yml`, all five services would pick it up the next time `+lint` ran.
 
-Note that `.golangci.yml` is copied after `+src`. This means a change to lint configuration invalidates the lint layer but not the source layer -- the compiled package cache (from `go vet` internals) is still reused.
+The `RUN go build ./...` step before `golangci-lint run` is deliberate. Some linters (notably those based on `go/analysis`) need compiled export data for dependencies to perform type-aware checks. When the replace'd local modules (`gen`, `pkg/auth`, `pkg/otel`) have not been built, golangci-lint may report "could not load export data" errors. Running `go build` first populates the build cache with the necessary export data.
+
+Note that `.golangci.yml` is copied after `+src`. This means a change to lint configuration invalidates the lint layer but not the source layer -- the compiled package cache is still reused.
 
 ### `test` — Unit Tests
 
@@ -204,11 +216,11 @@ The auth Earthfile omits the `pkg/otel` dependency. The auth service uses struct
 ```earthfile
 deps:
     COPY go.mod go.sum* ./
-    COPY ../../gen/go.mod ../../gen/go.sum* ../gen/
-    COPY ../../pkg/auth/go.mod ../../pkg/auth/go.sum* ../pkg/auth/
+    COPY ../../+gen-mod/gen ../gen
+    COPY ../../+pkg-auth-mod/pkg-auth ../pkg/auth
     # No pkg/otel here
     ENV GOWORK=off
-    RUN go mod download
+    RUN go mod download && (cd ../gen && go mod download) && (cd ../pkg/auth && go mod download)
 ```
 
 The rest of the targets (`lint`, `test`, `build`, `docker`) are identical in structure to catalog.
@@ -221,11 +233,16 @@ The gateway serves HTTP and includes HTML templates and static assets alongside 
 src:
     FROM +deps
     COPY --dir cmd internal templates static ./
-    COPY ../../gen/ ../gen/
-    COPY ../../pkg/auth/ ../pkg/auth/
-    COPY ../../pkg/otel/ ../pkg/otel/
+    COPY ../../+gen-src/gen ../gen
+    COPY ../../+pkg-auth-src/pkg-auth ../pkg/auth
+    COPY ../../+pkg-otel-src/pkg-otel ../pkg/otel
     SAVE ARTIFACT ./templates
     SAVE ARTIFACT ./static
+
+test:
+    FROM +src
+    RUN apk add --no-cache gcc musl-dev
+    RUN CGO_ENABLED=1 go test -v -race -cover ./...
 
 docker:
     FROM alpine:3.19
@@ -237,6 +254,8 @@ docker:
     ENTRYPOINT ["/usr/local/bin/gateway"]
     SAVE IMAGE gateway:latest
 ```
+
+The gateway's `test` target differs from the other services. The `-race` flag enables the Go race detector, which requires CGO. On Alpine, CGO needs `gcc` and `musl-dev` installed, plus `CGO_ENABLED=1` explicitly set. The other services skip the race detector and run with `CGO_ENABLED=0` by default.
 
 The gateway image exposes port 8080 instead of a gRPC port. It also sets `WORKDIR /app` so that the templates and static directories are at predictable relative paths when the binary looks for them at runtime.
 
@@ -252,11 +271,65 @@ Reservation follows the same pattern as catalog, exposing port 50053. It depends
 
 ## The Root Earthfile
 
-The root Earthfile does not build anything directly. It is an orchestrator that delegates to the service Earthfiles using `BUILD` directives with cross-directory target references:
+The root Earthfile serves two roles: it defines shared artifact targets that service Earthfiles depend on, and it orchestrates builds across all five services.
+
+### Shared Artifact Targets
+
+In a monorepo, service Earthfiles cannot directly `COPY` files from outside their directory. Earthly scopes each Earthfile's build context to its own directory, so `COPY ../../gen/go.mod` would fail. The solution is to define artifact targets in the root Earthfile that package shared modules and make them available via cross-Earthfile references:
 
 ```earthfile
 VERSION 0.8
 
+# Shared module artifacts — service Earthfiles COPY from these targets
+# instead of using ../../ relative paths (which exceed the build context).
+
+gen-mod:
+    FROM scratch
+    COPY gen/go.mod gen/go.sum* /gen/
+    SAVE ARTIFACT /gen gen
+
+gen-src:
+    FROM scratch
+    COPY gen/ /gen/
+    SAVE ARTIFACT /gen gen
+
+pkg-auth-mod:
+    FROM scratch
+    COPY pkg/auth/go.mod pkg/auth/go.sum* /pkg-auth/
+    SAVE ARTIFACT /pkg-auth pkg-auth
+
+pkg-auth-src:
+    FROM scratch
+    COPY pkg/auth/ /pkg-auth/
+    SAVE ARTIFACT /pkg-auth pkg-auth
+
+pkg-otel-mod:
+    FROM scratch
+    COPY pkg/otel/go.mod pkg/otel/go.sum* /pkg-otel/
+    SAVE ARTIFACT /pkg-otel pkg-otel
+
+pkg-otel-src:
+    FROM scratch
+    COPY pkg/otel/ /pkg-otel/
+    SAVE ARTIFACT /pkg-otel pkg-otel
+
+golangci-config:
+    FROM scratch
+    COPY .golangci.yml /
+    SAVE ARTIFACT /.golangci.yml
+```
+
+Each shared module has two artifact targets: a `-mod` target (just `go.mod` and `go.sum`, for the `deps` layer) and a `-src` target (the full source tree, for the `src` layer). This split preserves the layer caching strategy -- changes to source files do not invalidate the dependency download layer.
+
+The `golangci-config` target does the same for the shared lint configuration. All service `+lint` targets reference `../../+golangci-config/.golangci.yml` instead of copying the file directly.
+
+Service Earthfiles reference these artifacts with the syntax `COPY ../../+gen-mod/gen ../gen`. The `../../` points to the root Earthfile's directory, `+gen-mod` is the target name, and `/gen` is the artifact name declared in `SAVE ARTIFACT`.
+
+### Orchestration Targets
+
+The remaining targets delegate to the service Earthfiles using `BUILD` directives with cross-directory target references:
+
+```earthfile
 ci:
     BUILD ./services/auth+lint
     BUILD ./services/auth+test

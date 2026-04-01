@@ -6,23 +6,24 @@ WORKDIR /app
 
 deps:
     COPY go.mod go.sum* ./
-    COPY ../../gen/go.mod ../../gen/go.sum* ../gen/
-    COPY ../../pkg/auth/go.mod ../../pkg/auth/go.sum* ../pkg/auth/
+    COPY ../../+gen-mod/gen ../gen
+    COPY ../../+pkg-auth-mod/pkg-auth ../pkg/auth
     ENV GOWORK=off
-    RUN go mod download
+    RUN go mod download && (cd ../gen && go mod download) && (cd ../pkg/auth && go mod download)
     SAVE ARTIFACT go.mod AS LOCAL go.mod
     SAVE ARTIFACT go.sum AS LOCAL go.sum
 
 src:
     FROM +deps
     COPY --dir cmd internal ./
-    COPY ../../gen/ ../gen/
-    COPY ../../pkg/auth/ ../pkg/auth/
+    COPY ../../+gen-src/gen ../gen
+    COPY ../../+pkg-auth-src/pkg-auth ../pkg/auth
 
 lint:
     FROM +src
-    COPY ../../.golangci.yml ./
-    RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
+    COPY ../../+golangci-config/.golangci.yml ./
+    RUN go build ./...
+    RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
     RUN golangci-lint run ./...
 
 test:

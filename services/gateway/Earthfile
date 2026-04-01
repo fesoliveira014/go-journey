@@ -6,31 +6,33 @@ WORKDIR /app
 
 deps:
     COPY go.mod go.sum* ./
-    # Copy local module dependencies (replace directives)
-    COPY ../../gen/go.mod ../../gen/go.sum* ../gen/
-    COPY ../../pkg/auth/go.mod ../../pkg/auth/go.sum* ../pkg/auth/
-    COPY ../../pkg/otel/go.mod ../../pkg/otel/go.sum* ../pkg/otel/
+    # Copy local module go.mod files via root Earthfile artifact targets
+    COPY ../../+gen-mod/gen ../gen
+    COPY ../../+pkg-auth-mod/pkg-auth ../pkg/auth
+    COPY ../../+pkg-otel-mod/pkg-otel ../pkg/otel
     ENV GOWORK=off
-    RUN go mod download
+    RUN go mod download && (cd ../gen && go mod download) && (cd ../pkg/auth && go mod download) && (cd ../pkg/otel && go mod download)
 
 src:
     FROM +deps
     COPY --dir cmd internal templates static ./
-    COPY ../../gen/ ../gen/
-    COPY ../../pkg/auth/ ../pkg/auth/
-    COPY ../../pkg/otel/ ../pkg/otel/
+    COPY ../../+gen-src/gen ../gen
+    COPY ../../+pkg-auth-src/pkg-auth ../pkg/auth
+    COPY ../../+pkg-otel-src/pkg-otel ../pkg/otel
     SAVE ARTIFACT ./templates
     SAVE ARTIFACT ./static
 
 lint:
     FROM +src
-    COPY ../../.golangci.yml ./
-    RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
+    COPY ../../+golangci-config/.golangci.yml ./
+    RUN go build ./...
+    RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.64.8
     RUN golangci-lint run ./...
 
 test:
     FROM +src
-    RUN go test -v -race -cover ./...
+    RUN apk add --no-cache gcc musl-dev
+    RUN CGO_ENABLED=1 go test -v -race -cover ./...
 
 build:
     FROM +src

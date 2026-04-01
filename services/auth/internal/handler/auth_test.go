@@ -122,9 +122,11 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 	h := handler.NewAuthHandler(svc)
 
 	// Register
-	h.Register(context.Background(), &authv1.RegisterRequest{
+	if _, err := h.Register(context.Background(), &authv1.RegisterRequest{
 		Email: "login@example.com", Password: "pass123", Name: "User",
-	})
+	}); err != nil {
+		t.Fatalf("setup: failed to register user: %v", err)
+	}
 
 	// Login
 	resp, err := h.Login(context.Background(), &authv1.LoginRequest{
@@ -142,9 +144,11 @@ func TestAuthHandler_Login_WrongPassword(t *testing.T) {
 	svc := service.NewAuthService(newInMemoryRepo(), "test-secret", "24h")
 	h := handler.NewAuthHandler(svc)
 
-	h.Register(context.Background(), &authv1.RegisterRequest{
+	if _, err := h.Register(context.Background(), &authv1.RegisterRequest{
 		Email: "wrong@example.com", Password: "correct", Name: "User",
-	})
+	}); err != nil {
+		t.Fatalf("setup: failed to register user: %v", err)
+	}
 
 	_, err := h.Login(context.Background(), &authv1.LoginRequest{
 		Email: "wrong@example.com", Password: "incorrect",

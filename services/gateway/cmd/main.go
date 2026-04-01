@@ -28,7 +28,7 @@ func main() {
 	if err != nil {
 		slog.Error("failed to init otel", "error", err)
 	} else {
-		defer shutdown(ctx)
+		defer func() { _ = shutdown(ctx) }()
 	}
 
 	port := os.Getenv("PORT")
