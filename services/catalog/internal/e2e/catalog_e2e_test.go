@@ -106,54 +106,6 @@ func setupPostgres(t *testing.T) *gorm.DB {
 	return db
 }
 
-// setupKafka starts a Kafka testcontainer and returns its broker addresses.
-// The container is terminated via t.Cleanup.
-func setupKafka(t *testing.T) []string {
-	t.Helper()
-	ctx := context.Background()
-
-	req := testcontainers.ContainerRequest{
-		Image:        "confluentinc/cp-kafka:7.5.0",
-		ExposedPorts: []string{"9092/tcp"},
-		Env: map[string]string{
-			"KAFKA_NODE_ID":                        "1",
-			"KAFKA_PROCESS_ROLES":                  "broker,controller",
-			"KAFKA_LISTENERS":                      "PLAINTEXT://0.0.0.0:9092,CONTROLLER://0.0.0.0:9093",
-			"KAFKA_ADVERTISED_LISTENERS":            "PLAINTEXT://localhost:9092",
-			"KAFKA_CONTROLLER_QUORUM_VOTERS":        "1@localhost:9093",
-			"KAFKA_CONTROLLER_LISTENER_NAMES":       "CONTROLLER",
-			"KAFKA_LISTENER_SECURITY_PROTOCOL_MAP": "PLAINTEXT:PLAINTEXT,CONTROLLER:PLAINTEXT",
-			"KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
-			"CLUSTER_ID":                           "MkU3OEVBNTcwNTJENDM2Qg",
-		},
-		WaitingFor: wait.ForLog("Kafka Server started").WithStartupTimeout(60 * time.Second),
-	}
-
-	container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-		ContainerRequest: req,
-		Started:          true,
-	})
-	if err != nil {
-		t.Fatalf("failed to start kafka container: %v", err)
-	}
-	t.Cleanup(func() {
-		if err := container.Terminate(ctx); err != nil {
-			t.Logf("failed to terminate kafka container: %v", err)
-		}
-	})
-
-	host, err := container.Host(ctx)
-	if err != nil {
-		t.Fatalf("failed to get kafka host: %v", err)
-	}
-	port, err := container.MappedPort(ctx, "9092")
-	if err != nil {
-		t.Fatalf("failed to get kafka port: %v", err)
-	}
-
-	return []string{host + ":" + port.Port()}
-}
-
 // startCatalogServer spins up an in-process gRPC server over a bufconn listener,
 // registers the CatalogHandler backed by svc with the UnaryAuthInterceptor,
 // and returns a connected client. The server and connection are cleaned up via

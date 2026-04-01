@@ -23,7 +23,7 @@ func setupKafka(t *testing.T) []string {
 	ctx := context.Background()
 
 	kafkaContainer, err := kafkatc.Run(ctx,
-		"confluentinc/cp-kafka:7.6.1",
+		"confluentinc/confluent-local:7.6.0",
 	)
 	if err != nil {
 		t.Fatalf("failed to start kafka container: %v", err)

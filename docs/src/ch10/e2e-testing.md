@@ -84,7 +84,6 @@ import (
     "context"
     "testing"
 
-    "github.com/stretchr/testify/require"
     "github.com/testcontainers/testcontainers-go"
     "github.com/testcontainers/testcontainers-go/wait"
     "gorm.io/driver/postgres"
@@ -110,22 +109,32 @@ func setupPostgres(t *testing.T) *gorm.DB {
         },
         Started: true,
     })
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to start postgres container: %v", err)
+    }
     t.Cleanup(func() { _ = container.Terminate(ctx) })
 
     host, err := container.Host(ctx)
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to get container host: %v", err)
+    }
     port, err := container.MappedPort(ctx, "5432/tcp")
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to get mapped port: %v", err)
+    }
 
     dsn := fmt.Sprintf("host=%s port=%s user=test password=test dbname=catalog_test sslmode=disable",
         host, port.Port())
     db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to open gorm connection: %v", err)
+    }
 
     // Run migrations using the same path production uses.
     err = repository.RunMigrations(db)
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to run migrations: %v", err)
+    }
 
     return db
 }
@@ -155,13 +164,19 @@ func setupKafka(t *testing.T) []string {
         },
         Started: true,
     })
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to start kafka container: %v", err)
+    }
     t.Cleanup(func() { _ = container.Terminate(ctx) })
 
     host, err := container.Host(ctx)
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to get container host: %v", err)
+    }
     port, err := container.MappedPort(ctx, "9092/tcp")
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to get mapped port: %v", err)
+    }
 
     return []string{fmt.Sprintf("%s:%s", host, port.Port())}
 }
@@ -201,7 +216,9 @@ func startCatalogServer(t *testing.T, svc catalogpb.CatalogServiceServer, jwtSec
         }),
         grpc.WithTransportCredentials(insecure.NewCredentials()),
     )
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to dial bufconn: %v", err)
+    }
     t.Cleanup(func() { _ = conn.Close() })
 
     return catalogpb.NewCatalogServiceClient(conn)
@@ -225,8 +242,6 @@ import (
     "time"
 
     "github.com/google/uuid"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
     "google.golang.org/grpc/codes"
     "google.golang.org/grpc/metadata"
     "google.golang.org/grpc/status"
@@ -244,7 +259,9 @@ func TestCatalog_E2E(t *testing.T) {
 
     repo := repository.NewBookRepository(db)
     pub, err := kafkapkg.NewPublisher(brokers, "books")
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to create kafka publisher: %v", err)
+    }
     t.Cleanup(func() { _ = pub.Close() })
 
     svc := service.NewCatalogService(repo, pub)
@@ -253,7 +270,9 @@ func TestCatalog_E2E(t *testing.T) {
     // Build an authenticated context using a token signed with the same
     // secret the server's interceptor will verify.
     token, err := pkgauth.GenerateToken(uuid.New(), "admin", "test-secret", time.Hour)
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to generate token: %v", err)
+    }
     ctx := metadata.NewOutgoingContext(context.Background(),
         metadata.Pairs("authorization", "Bearer "+token))
 
@@ -263,20 +282,34 @@ func TestCatalog_E2E(t *testing.T) {
         Author: "Donovan & Kernighan",
         Isbn:   "978-0134190440",
     })
-    require.NoError(t, err)
-    require.NotEmpty(t, createResp.Book.Id)
+    if err != nil {
+        t.Fatalf("CreateBook failed: %v", err)
+    }
+    if createResp.Book.Id == "" {
+        t.Fatal("CreateBook: expected non-empty book ID")
+    }
     bookID := createResp.Book.Id
 
     // --- Step 2: Get the book back ---
     getResp, err := client.GetBook(ctx, &catalogpb.GetBookRequest{Id: bookID})
-    require.NoError(t, err)
-    assert.Equal(t, "The Go Programming Language", getResp.Book.Title)
-    assert.Equal(t, "978-0134190440", getResp.Book.Isbn)
+    if err != nil {
+        t.Fatalf("GetBook failed: %v", err)
+    }
+    if getResp.Book.Title != "The Go Programming Language" {
+        t.Errorf("GetBook: expected title %q, got %q", "The Go Programming Language", getResp.Book.Title)
+    }
+    if getResp.Book.Isbn != "978-0134190440" {
+        t.Errorf("GetBook: expected ISBN %q, got %q", "978-0134190440", getResp.Book.Isbn)
+    }
 
     // --- Step 3: List books — should contain our new entry ---
     listResp, err := client.ListBooks(ctx, &catalogpb.ListBooksRequest{PageSize: 10})
-    require.NoError(t, err)
-    require.GreaterOrEqual(t, len(listResp.Books), 1)
+    if err != nil {
+        t.Fatalf("ListBooks failed: %v", err)
+    }
+    if len(listResp.Books) < 1 {
+        t.Fatalf("ListBooks: expected at least 1 book, got %d", len(listResp.Books))
+    }
     found := false
     for _, b := range listResp.Books {
         if b.Id == bookID {
@@ -284,7 +317,9 @@ func TestCatalog_E2E(t *testing.T) {
             break
         }
     }
-    assert.True(t, found, "created book should appear in list response")
+    if !found {
+        t.Error("created book should appear in list response")
+    }
 
     // --- Step 4: Update the book ---
     _, err = client.UpdateBook(ctx, &catalogpb.UpdateBookRequest{
@@ -293,27 +328,43 @@ func TestCatalog_E2E(t *testing.T) {
         Author: "Donovan & Kernighan",
         Isbn:   "978-0134190440",
     })
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("UpdateBook failed: %v", err)
+    }
 
     // Verify the update persisted.
     updatedResp, err := client.GetBook(ctx, &catalogpb.GetBookRequest{Id: bookID})
-    require.NoError(t, err)
-    assert.Equal(t, "The Go Programming Language (2nd Ed.)", updatedResp.Book.Title)
+    if err != nil {
+        t.Fatalf("GetBook after update failed: %v", err)
+    }
+    if updatedResp.Book.Title != "The Go Programming Language (2nd Ed.)" {
+        t.Errorf("GetBook: expected updated title %q, got %q", "The Go Programming Language (2nd Ed.)", updatedResp.Book.Title)
+    }
 
     // --- Step 5: Delete the book ---
     _, err = client.DeleteBook(ctx, &catalogpb.DeleteBookRequest{Id: bookID})
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("DeleteBook failed: %v", err)
+    }
 
     // --- Step 6: Get after delete should return NotFound ---
     _, err = client.GetBook(ctx, &catalogpb.GetBookRequest{Id: bookID})
-    require.Error(t, err)
-    assert.Equal(t, codes.NotFound, status.Code(err))
+    if err == nil {
+        t.Fatal("GetBook after delete: expected error, got nil")
+    }
+    if status.Code(err) != codes.NotFound {
+        t.Errorf("GetBook after delete: expected NotFound, got %v", status.Code(err))
+    }
 
     // --- Step 7: Unauthenticated request should be rejected ---
     unauthCtx := context.Background() // no metadata
     _, err = client.ListBooks(unauthCtx, &catalogpb.ListBooksRequest{})
-    require.Error(t, err)
-    assert.Equal(t, codes.Unauthenticated, status.Code(err))
+    if err == nil {
+        t.Fatal("ListBooks unauthenticated: expected error, got nil")
+    }
+    if status.Code(err) != codes.Unauthenticated {
+        t.Errorf("ListBooks unauthenticated: expected Unauthenticated, got %v", status.Code(err))
+    }
 }
 ```
 
@@ -333,7 +384,7 @@ Walk through what each step is actually testing:
 
 ## Reservation e2e test
 
-The reservation service is structurally similar to catalog, with two differences. First, it has a dependency on the catalog service's gRPC API — it needs to look up book details when creating a reservation. For a service-level test we mock that outbound gRPC client: we are not testing the catalog service here. Second, the business logic includes a max-active-reservations rule that should return `codes.FailedPrecondition`. That rule cannot be tested by a unit test in isolation — it queries the reservation count from the real database.
+The reservation service is structurally similar to catalog, with two differences. First, it has a dependency on the catalog service's gRPC API — it needs to look up book details when creating a reservation. For a service-level test we mock that outbound gRPC client: we are not testing the catalog service here. Second, the business logic includes a max-active-reservations rule that should return `codes.ResourceExhausted`. That rule cannot be tested by a unit test in isolation — it queries the reservation count from the real database.
 
 ```go
 //go:build integration
@@ -346,8 +397,6 @@ import (
     "time"
 
     "github.com/google/uuid"
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
     "google.golang.org/grpc/codes"
     "google.golang.org/grpc/metadata"
     "google.golang.org/grpc/status"
@@ -381,7 +430,9 @@ func TestReservation_E2E(t *testing.T) {
 
     repo := repository.NewReservationRepository(db)
     pub, err := kafkapkg.NewPublisher(brokers, "reservations")
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to create kafka publisher: %v", err)
+    }
     t.Cleanup(func() { _ = pub.Close() })
 
     catalogClient := &mockCatalogClient{}
@@ -390,7 +441,9 @@ func TestReservation_E2E(t *testing.T) {
 
     userID := uuid.New()
     token, err := pkgauth.GenerateToken(userID, "user", "test-secret", time.Hour)
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to generate token: %v", err)
+    }
     ctx := metadata.NewOutgoingContext(context.Background(),
         metadata.Pairs("authorization", "Bearer "+token))
 
@@ -400,10 +453,16 @@ func TestReservation_E2E(t *testing.T) {
     createResp, err := client.CreateReservation(ctx, &reservationpb.CreateReservationRequest{
         BookId: bookID,
     })
-    require.NoError(t, err)
-    require.NotEmpty(t, createResp.Reservation.Id)
+    if err != nil {
+        t.Fatalf("CreateReservation failed: %v", err)
+    }
+    if createResp.Reservation.Id == "" {
+        t.Fatal("CreateReservation: expected non-empty reservation ID")
+    }
     reservationID := createResp.Reservation.Id
-    assert.Equal(t, reservationpb.ReservationStatus_ACTIVE, createResp.Reservation.Status)
+    if createResp.Reservation.Status != reservationpb.ReservationStatus_ACTIVE {
+        t.Errorf("CreateReservation: expected status ACTIVE, got %v", createResp.Reservation.Status)
+    }
 
     // --- Step 2: Verify persistence in DB ---
     // Read directly from the database to confirm the row was written with
@@ -413,36 +472,50 @@ func TestReservation_E2E(t *testing.T) {
     db.Model(&repository.ReservationRow{}).
         Where("id = ? AND user_id = ? AND status = 'active'", reservationID, userID.String()).
         Count(&count)
-    assert.Equal(t, int64(1), count, "reservation should be persisted as active")
+    if count != 1 {
+        t.Errorf("reservation should be persisted as active: expected count 1, got %d", count)
+    }
 
     // --- Step 3: Verify Kafka event was published ---
     // Consume from the reservations topic and assert that the event matches
     // the reservation we just created.
     event := consumeOneEvent(t, brokers, "reservations")
-    assert.Equal(t, "ReservationCreated", event.Type)
-    assert.Equal(t, reservationID, event.ReservationID)
+    if event.Type != "ReservationCreated" {
+        t.Errorf("expected event type %q, got %q", "ReservationCreated", event.Type)
+    }
+    if event.ReservationID != reservationID {
+        t.Errorf("expected event reservation ID %q, got %q", reservationID, event.ReservationID)
+    }
 
     // --- Step 4: Return the book ---
     _, err = client.ReturnReservation(ctx, &reservationpb.ReturnReservationRequest{
         ReservationId: reservationID,
     })
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("ReturnReservation failed: %v", err)
+    }
 
     // --- Step 5: Verify status changed to returned ---
     getResp, err := client.GetReservation(ctx, &reservationpb.GetReservationRequest{
         ReservationId: reservationID,
     })
-    require.NoError(t, err)
-    assert.Equal(t, reservationpb.ReservationStatus_RETURNED, getResp.Reservation.Status)
+    if err != nil {
+        t.Fatalf("GetReservation failed: %v", err)
+    }
+    if getResp.Reservation.Status != reservationpb.ReservationStatus_RETURNED {
+        t.Errorf("expected status RETURNED, got %v", getResp.Reservation.Status)
+    }
 
     // --- Step 6: Max-reservations rule ---
     // The service enforces a maximum of `maxActive` concurrent reservations
     // per user. Create that many reservations for a fresh user, then attempt
-    // one more and expect FailedPrecondition.
+    // one more and expect ResourceExhausted.
     const maxActive = 3
     limitedUserID := uuid.New()
     limitedToken, err := pkgauth.GenerateToken(limitedUserID, "user", "test-secret", time.Hour)
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to generate limited user token: %v", err)
+    }
     limitedCtx := metadata.NewOutgoingContext(context.Background(),
         metadata.Pairs("authorization", "Bearer "+limitedToken))
 
@@ -450,16 +523,21 @@ func TestReservation_E2E(t *testing.T) {
         _, err = client.CreateReservation(limitedCtx, &reservationpb.CreateReservationRequest{
             BookId: uuid.New().String(),
         })
-        require.NoError(t, err, "reservation %d of %d should succeed", i+1, maxActive)
+        if err != nil {
+            t.Fatalf("reservation %d of %d should succeed: %v", i+1, maxActive, err)
+        }
     }
 
     // One more should be rejected.
     _, err = client.CreateReservation(limitedCtx, &reservationpb.CreateReservationRequest{
         BookId: uuid.New().String(),
     })
-    require.Error(t, err)
-    assert.Equal(t, codes.FailedPrecondition, status.Code(err),
-        "exceeding max active reservations should return FailedPrecondition")
+    if err == nil {
+        t.Fatal("exceeding max active reservations: expected error, got nil")
+    }
+    if status.Code(err) != codes.ResourceExhausted {
+        t.Errorf("exceeding max active reservations: expected ResourceExhausted, got %v", status.Code(err))
+    }
 }
 ```
 
@@ -483,8 +561,6 @@ import (
     "testing"
     "time"
 
-    "github.com/stretchr/testify/assert"
-    "github.com/stretchr/testify/require"
     "google.golang.org/grpc/codes"
     "google.golang.org/grpc/status"
 
@@ -507,55 +583,85 @@ func TestAuth_E2E(t *testing.T) {
         Email:    "alice@example.com",
         Password: "correct-horse-battery-staple",
     })
-    require.NoError(t, err)
-    require.NotEmpty(t, registerResp.UserId)
+    if err != nil {
+        t.Fatalf("Register failed: %v", err)
+    }
+    if registerResp.UserId == "" {
+        t.Fatal("Register: expected non-empty user ID")
+    }
 
     // --- Step 2: Log in with correct credentials ---
     loginResp, err := client.Login(ctx, &authpb.LoginRequest{
         Email:    "alice@example.com",
         Password: "correct-horse-battery-staple",
     })
-    require.NoError(t, err)
-    require.NotEmpty(t, loginResp.Token)
+    if err != nil {
+        t.Fatalf("Login failed: %v", err)
+    }
+    if loginResp.Token == "" {
+        t.Fatal("Login: expected non-empty token")
+    }
 
     // --- Step 3: Validate the token ---
     // The token returned by Login should be verifiable by the same service.
     validateResp, err := client.ValidateToken(ctx, &authpb.ValidateTokenRequest{
         Token: loginResp.Token,
     })
-    require.NoError(t, err)
-    assert.Equal(t, registerResp.UserId, validateResp.UserId)
-    assert.Equal(t, "alice@example.com", validateResp.Email)
-    assert.False(t, validateResp.Expired)
+    if err != nil {
+        t.Fatalf("ValidateToken failed: %v", err)
+    }
+    if validateResp.UserId != registerResp.UserId {
+        t.Errorf("ValidateToken: expected user ID %q, got %q", registerResp.UserId, validateResp.UserId)
+    }
+    if validateResp.Email != "alice@example.com" {
+        t.Errorf("ValidateToken: expected email %q, got %q", "alice@example.com", validateResp.Email)
+    }
+    if validateResp.Expired {
+        t.Error("ValidateToken: expected Expired to be false")
+    }
 
     // --- Step 4: Duplicate email should be rejected ---
     _, err = client.Register(ctx, &authpb.RegisterRequest{
         Email:    "alice@example.com",
         Password: "different-password",
     })
-    require.Error(t, err)
-    assert.Equal(t, codes.AlreadyExists, status.Code(err))
+    if err == nil {
+        t.Fatal("Register duplicate email: expected error, got nil")
+    }
+    if status.Code(err) != codes.AlreadyExists {
+        t.Errorf("Register duplicate email: expected AlreadyExists, got %v", status.Code(err))
+    }
 
     // --- Step 5: Wrong password should be rejected ---
     _, err = client.Login(ctx, &authpb.LoginRequest{
         Email:    "alice@example.com",
         Password: "wrong-password",
     })
-    require.Error(t, err)
-    assert.Equal(t, codes.Unauthenticated, status.Code(err))
+    if err == nil {
+        t.Fatal("Login wrong password: expected error, got nil")
+    }
+    if status.Code(err) != codes.Unauthenticated {
+        t.Errorf("Login wrong password: expected Unauthenticated, got %v", status.Code(err))
+    }
 
     // --- Step 6: Expired token should be rejected ---
     expiredToken, err := pkgauth.GenerateToken(uuid.New(), "user", "test-jwt-secret", -1*time.Second)
-    require.NoError(t, err)
+    if err != nil {
+        t.Fatalf("failed to generate expired token: %v", err)
+    }
     validateExpiredResp, err := client.ValidateToken(ctx, &authpb.ValidateTokenRequest{
         Token: expiredToken,
     })
     // Depending on your API design, ValidateToken may return a response with
     // Expired: true rather than an error. Assert the design you chose.
     if err != nil {
-        assert.Equal(t, codes.Unauthenticated, status.Code(err))
+        if status.Code(err) != codes.Unauthenticated {
+            t.Errorf("ValidateToken expired: expected Unauthenticated, got %v", status.Code(err))
+        }
     } else {
-        assert.True(t, validateExpiredResp.Expired)
+        if !validateExpiredResp.Expired {
+            t.Error("ValidateToken expired: expected Expired to be true")
+        }
     }
 }
 ```
