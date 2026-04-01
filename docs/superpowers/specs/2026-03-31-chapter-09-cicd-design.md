@@ -47,14 +47,18 @@ Developer Push
 | Catalog | `services/catalog/Earthfile` | `go vet` | Has `deps`, `src`, `lint`, `test`, `build`, `docker`. Needs golangci-lint |
 | Gateway | `services/gateway/Earthfile` | `golangci-lint` | Already has golangci-lint. Missing `templates/` and `static/` in `docker` target |
 | Reservation | `services/reservation/Earthfile` | `go vet` | Needs golangci-lint |
-| Search | `services/search/Earthfile` | `go vet` | Missing `pkg/otel` in deps. Needs golangci-lint |
+| Search | `services/search/Earthfile` | `go vet` | Needs golangci-lint. Does not depend on `pkg/otel` (correct as-is) |
 | Auth | **Missing** | N/A | Must be created from scratch |
+
+### GitHub Actions workflow that exists
+
+`.github/workflows/ci.yml` — a combined push+PR workflow that runs `earthly +ci`. Pins Earthly v0.8.15. This file will be **deleted and replaced** by two separate workflows (`pr.yml` and `main.yml`) to teach the PR-gate vs. main-publish separation.
 
 ### What does not exist
 
-- No `.github/workflows/` directory
 - No `.golangci.yml` config
 - No auth service Earthfile
+- No image publishing pipeline
 
 ## Part 1: Chapter Sections
 
@@ -103,13 +107,25 @@ Developer Push
 
 3. **Update `services/reservation/Earthfile`** — replace `go vet` with golangci-lint install + run
 
-4. **Update `services/search/Earthfile`** — replace `go vet` with golangci-lint install + run; add `pkg/otel` to deps and src targets
+4. **Update `services/search/Earthfile`** — replace `go vet` with golangci-lint install + run (no other dependency changes needed — search does not import `pkg/otel`)
 
-5. **Update `services/gateway/Earthfile`** — add `templates/` and `static/` dirs to `src` and `docker` targets (bug fix); `COPY --dir cmd internal templates static ./` in `src`
+5. **Update `services/gateway/Earthfile`** — fix bug: add `templates/` and `static/` dirs to `src` and `docker` targets:
+   - `src` target: `COPY --dir cmd internal templates static ./`
+   - `docker` target: add `COPY +build/gateway /usr/local/bin/gateway` (already exists), plus `COPY +src/templates /app/templates` and `COPY +src/static /app/static`, set `WORKDIR /app`
 
-6. **Update root `Earthfile`** — add `+docker` target that builds all 5 service images
+6. **Update root `Earthfile`** — add `+docker` target:
+   ```
+   docker:
+       BUILD ./services/auth+docker
+       BUILD ./services/catalog+docker
+       BUILD ./services/gateway+docker
+       BUILD ./services/reservation+docker
+       BUILD ./services/search+docker
+   ```
 
-7. **Create `.golangci.yml`** at repo root:
+7. **Copy `.golangci.yml` into Earthly containers** — each service's `lint` target must `COPY` the root `.golangci.yml` into the container so the linter config takes effect. Add `COPY ../../.golangci.yml ./` (or equivalent relative path) to each lint target before running `golangci-lint run`.
+
+8. **Create `.golangci.yml`** at repo root:
    ```yaml
    run:
      timeout: 5m
@@ -158,6 +174,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Earthly
         uses: earthly/actions-setup@v1
+        with:
+          version: v0.8.15
       - name: Run CI
         run: earthly +ci
 ```
@@ -192,6 +210,8 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install Earthly
         uses: earthly/actions-setup@v1
+        with:
+          version: v0.8.15
       - name: Run CI
         run: earthly +ci
 
@@ -225,9 +245,12 @@ Inline callout showing the Earthly-push equivalent:
     earthly --push ./services/${{ matrix.service }}+docker
 ```
 
+**Design decision: Dockerfiles for publishing, Earthly for CI.** The `build-and-push` job uses `docker/build-push-action` with the existing Dockerfiles rather than `earthly --push`. Rationale: `docker/build-push-action` integrates natively with GHA's OIDC, caching, and provenance features, and is the standard pattern for GHCR publishing. The Earthly `+docker` target is used for local image building and verification. The chapter explicitly discusses this trade-off in Section 9.5.
+
 **Code changes:**
-1. `.github/workflows/pr.yml`
-2. `.github/workflows/main.yml`
+1. Delete `.github/workflows/ci.yml`
+2. Create `.github/workflows/pr.yml`
+3. Create `.github/workflows/main.yml`
 
 ### Section 9.4: Linting & Code Quality
 
@@ -291,14 +314,20 @@ Inline callout showing the Earthly-push equivalent:
 | `docs/src/ch09/linting.md` | Section 9.4 |
 | `docs/src/ch09/image-publishing.md` | Section 9.5 |
 
+### Deleted files
+
+| File | Reason |
+|------|--------|
+| `.github/workflows/ci.yml` | Replaced by `pr.yml` and `main.yml` |
+
 ### Modified files
 
 | File | Change |
 |------|--------|
-| `services/catalog/Earthfile` | Replace `go vet` with `golangci-lint` |
-| `services/reservation/Earthfile` | Replace `go vet` with `golangci-lint` |
-| `services/search/Earthfile` | Replace `go vet` with `golangci-lint`, add `pkg/otel` |
-| `services/gateway/Earthfile` | Add `templates/` and `static/` to `src` and `docker` targets |
+| `services/catalog/Earthfile` | Replace `go vet` with `golangci-lint`, copy `.golangci.yml` |
+| `services/reservation/Earthfile` | Replace `go vet` with `golangci-lint`, copy `.golangci.yml` |
+| `services/search/Earthfile` | Replace `go vet` with `golangci-lint`, copy `.golangci.yml` |
+| `services/gateway/Earthfile` | Add `templates/`+`static/` to `src` and `docker`, copy `.golangci.yml` into lint |
 | `Earthfile` (root) | Add `+docker` target |
 | `docs/src/SUMMARY.md` | Add Chapter 9 entries |
 
@@ -324,6 +353,16 @@ Chapter 9: CI/CD with GitHub Actions & Earthly
 ```
 
 Each section follows the established pattern: theory → implementation → exercises → references. Cross-language comparisons to JVM/Gradle/Jenkins throughout.
+
+**SUMMARY.md entries to add:**
+```markdown
+- [Chapter 9: CI/CD with GitHub Actions & Earthly](./ch09/index.md)
+  - [9.1 CI/CD Fundamentals](./ch09/cicd-fundamentals.md)
+  - [9.2 The Earthly Build System](./ch09/earthly.md)
+  - [9.3 GitHub Actions Workflows](./ch09/github-actions.md)
+  - [9.4 Linting & Code Quality](./ch09/linting.md)
+  - [9.5 Image Publishing & Versioning](./ch09/image-publishing.md)
+```
 
 ## Out of Scope
 
