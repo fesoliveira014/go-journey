@@ -9,7 +9,7 @@ Take the reader from the unit test patterns established in chapters 1-9 to integ
 ### What Exists
 
 - **Chapter 1.4** covers Go testing basics: `testing.T`, `-race`, `-cover`, `httptest`, black-box testing convention.
-- **All 5 services** have unit tests with hand-written mocks (28 test files total). Patterns: black-box `_test` packages, function-based mocks, `t.Helper()`.
+- **All 5 services** have unit tests with hand-written mocks (23 test files across services, plus 5 in shared packages `pkg/auth` and `pkg/otel`). Patterns: black-box `_test` packages, function-based mocks, `t.Helper()`.
 - **Repository tests** in catalog and reservation have `t.Skip("TEST_DATABASE_URL not set")` guards — they require manual Postgres setup and rarely run.
 - **No external test libraries** — no testify, no gomock. All mocking is interface-based stubs.
 - **Kafka producers/consumers** exist (reservation publishes, catalog and search consume) but have no integration tests against a real broker.
@@ -56,7 +56,7 @@ Builds on chapter 1's foundation with patterns the reader has seen but not forma
 - **Table-driven tests** — the canonical Go pattern. Refactor an existing test (e.g., catalog service `CreateBook` validation) into table-driven form. Show the `[]struct{ name string; ... }` pattern with `t.Run`.
 - **Subtests with `t.Run`** — naming conventions, selective execution with `-run "TestCreate/duplicate_isbn"`, parallel subtests with `t.Parallel()`.
 - **Test helpers and `t.Helper()`** — formalize the pattern already used in repository tests. Show how `t.Helper()` improves error reporting by attributing failures to the caller.
-- **Test fixtures** — when to use `testdata/` directories (e.g., JSON payloads for Kafka events) vs inline data. Mention `embed` for loading fixtures.
+- **Test fixtures** — when to use `testdata/` directories (e.g., JSON payloads for Kafka events) vs inline data.
 
 **New files:** None. Refactors existing tests.
 **New dependencies:** None.
@@ -72,14 +72,23 @@ The meatiest section. Replaces `t.Skip("TEST_DATABASE_URL not set")` with epheme
 - **Shared test helper** — a per-service `testutil` (or inline helper function) that:
   1. Starts a Postgres container with the service's database name.
   2. Runs the service's real migrations (using the embedded `migrations.FS`).
-  3. Returns a `*gorm.DB` (or `*sql.DB` for auth).
+  3. Returns a `*gorm.DB` (all three services use GORM).
   4. Registers `t.Cleanup()` to terminate the container.
   5. Container reuse across tests in the same package for speed (start once, truncate between tests).
 - **Catalog repository integration tests** — rewrite `book_test.go` to use testcontainers. Tests: CRUD, duplicate ISBN constraint (real unique index), pagination with `LIMIT`/`OFFSET`, `UpdateAvailability` with concurrent updates.
 - **Auth repository integration tests** — same pattern for user repository. Tests: create user, duplicate email (real unique constraint), lookup by email, OAuth user creation with provider fields.
 - **Reservation repository integration tests** — same pattern. Tests: create reservation, count active (real `WHERE status = 'active'`), list by user, status transitions.
-- **Migration verification** — integration tests implicitly verify migrations work. This catches migration bugs that unit tests never see (missing columns, wrong constraints, bad default values).
-- **Running in CI** — testcontainers needs Docker. Brief note on Earthly compatibility (Earthly runs inside Docker, testcontainers can use the host Docker socket). Earthfile `+test` targets may need `--allow-privileged` or a separate integration test target.
+- **Migration strategy** — catalog and auth use `golang-migrate` with embedded `migrations.FS` in production. The testcontainers helper should use the same `migrations.FS` to run real migrations, catching migration bugs that unit tests miss (missing columns, wrong constraints, bad default values). The reservation service's existing test uses `db.AutoMigrate()` instead of `migrations.FS` — refactor this to use the embedded migrations for consistency.
+- **Running in CI with Earthly** — testcontainers needs Docker. Since Earthly runs inside a container, integration tests require Earthly's `WITH DOCKER` command to enable Docker-in-Docker. The integration test target must use:
+  ```earthfile
+  integration-test:
+      FROM +src
+      WITH DOCKER
+          RUN go test -tags integration ./... -v -count=1
+      END
+  ```
+  This is fundamentally different from the regular `test` target which uses a plain `RUN`. The `WITH DOCKER` block starts a Docker daemon inside the Earthly container, allowing testcontainers to create Postgres/Kafka containers. In GitHub Actions, the Earthly step needs `--allow-privileged`.
+- **Earthfile test target scope** — the existing `test` targets in service Earthfiles scope to specific packages (e.g., `./internal/service/... ./internal/handler/...`), deliberately excluding `./internal/repository/...`. The new `integration-test` target runs `go test -tags integration ./...` to include all packages. Unit tests (without the build tag) continue to run via the existing `test` target unchanged.
 
 **New files per service:**
 - `internal/repository/testutil_test.go` (or helper in existing test file) — testcontainers setup.
@@ -120,15 +129,16 @@ Closes the gap between "call handler method as Go function" and "call through re
 Tests both producer and consumer sides against a real broker.
 
 **Content:**
-- **Producer testing (reservation service)** — spin up Kafka via testcontainers Kafka module. Create the real `kafka.Publisher`. Publish a reservation event. Read it back with a test consumer (`sarama.NewConsumer`). Verify:
+- **Producer testing (reservation service)** — spin up Kafka via testcontainers Kafka module. Create the real `kafka.Publisher`. Publish a reservation event. Read it back with a `sarama.NewConsumerGroup` test consumer. Verify:
   - Message on correct topic ("reservations").
   - Key is `book_id` (partition ordering).
   - JSON payload deserializes to correct `ReservationEvent` struct.
-  - OTel trace headers propagated in Kafka message headers.
-- **Consumer testing (catalog service)** — spin up Kafka + Postgres via testcontainers. Write a test message to "reservations" topic. Start the real consumer. Verify:
+  - OTel trace headers propagated in Kafka message headers (the reservation publisher injects these via `consumerHeaderCarrier`).
+- **Consumer testing (catalog service)** — spin up Kafka + Postgres via testcontainers. Write a test message to "reservations" topic. Start the real consumer in a goroutine with a cancellable context. Verify:
   - Consumer picks up the message.
-  - `UpdateAvailability` is called on the repository.
+  - The `AvailabilityUpdater` service processes the event.
   - Database state reflects the availability change (verified via real Postgres query).
+  - **Synchronization:** poll the database with a timeout (e.g., `require` the expected state within 5 seconds using a ticker loop). The consumer runs asynchronously, so the test must wait for the side effect rather than asserting immediately. Cancel the consumer context after verification.
 - **Consumer testing (search service)** — spin up Kafka via testcontainers. Write `book.created`, `book.updated`, `book.deleted` events to "books" topic. Verify the consumer calls the indexer interface correctly. Meilisearch dependency stays mocked (indexer interface) — the interesting part is Kafka consumption, not the Meilisearch API.
 - **Shared Kafka test helper** — starts Kafka container, creates topics, returns broker address. Reused across producer and consumer tests.
 - **Gotchas section:**
@@ -170,9 +180,10 @@ Capstone section. Combines testcontainers + bufconn to test full service flows.
   2. Register duplicate email → expect `AlreadyExists`.
   3. Login with wrong password → expect `Unauthenticated`.
 - **Test organization:**
-  - E2e tests in `internal/e2e/` package or `e2e_test.go` with `//go:build integration` tag.
-  - `go test ./...` skips them. Earthly `+integration-test` target runs them.
-  - Earthfile additions: new `integration-test` target per service with `--allow-privileged` for testcontainers.
+  - E2e tests in `internal/e2e/` package with `//go:build integration` tag.
+  - All new integration test files (repository, bufconn, Kafka, e2e) use `//go:build integration`. Existing repository test files (`book_test.go`, `user_test.go`, `repository_test.go`) are left as-is — they already guard with `t.Skip` and don't need the build tag since they're excluded from the Earthfile `test` target's package list.
+  - New integration tests go in separate `*_integration_test.go` files alongside existing tests, not in the existing test files.
+  - `go test ./...` skips them (no build tag). Earthly `+integration-test` target runs them with `-tags integration` via `WITH DOCKER`.
 - **What we're NOT testing** — multi-service flows (reservation → Kafka → catalog availability update), gateway HTTP e2e, UI testing. Brief pointers to contract testing (Pact), gateway e2e with `httptest`, and frontend testing (Playwright) as "beyond this chapter."
 
 **New files:**
@@ -207,8 +218,9 @@ Capstone section. Combines testcontainers + bufconn to test full service flows.
 - Existing unit tests refactored to table-driven where appropriate (section 10.2).
 
 ### Build (modified)
-- Service Earthfiles: add `integration-test` target with `--allow-privileged`.
+- Service Earthfiles: add `integration-test` target using `WITH DOCKER` for testcontainers support.
 - Root Earthfile: add `integration-test` orchestration target.
+- GitHub Actions workflows: add `--allow-privileged` flag to Earthly commands that run integration tests.
 
 ## Out of Scope
 
