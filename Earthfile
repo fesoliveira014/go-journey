@@ -64,6 +64,12 @@ test:
     BUILD ./services/reservation+test
     BUILD ./services/search+test
 
+integration-test:
+    BUILD ./services/auth+integration-test
+    BUILD ./services/catalog+integration-test
+    BUILD ./services/reservation+integration-test
+    BUILD ./services/search+integration-test
+
 docker:
     BUILD ./services/auth+docker
     BUILD ./services/catalog+docker

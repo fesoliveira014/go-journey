@@ -30,6 +30,12 @@ test:
     FROM +src
     RUN go test ./internal/service/... ./internal/handler/... ./internal/consumer/... ./internal/bootstrap/... -v -count=1
 
+integration-test:
+    FROM +src
+    WITH DOCKER
+        RUN go test -tags integration ./... -v -count=1
+    END
+
 build:
     FROM +src
     RUN CGO_ENABLED=0 go build -o /bin/search ./cmd/
