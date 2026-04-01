@@ -9,10 +9,17 @@ import (
 	"google.golang.org/grpc/status"
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
+	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/handler"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/model"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/service"
 )
+
+// adminContext returns a context with admin role set, as required by
+// CreateBook, UpdateBook, and DeleteBook handlers.
+func adminContext() context.Context {
+	return pkgauth.ContextWithUser(context.Background(), uuid.New(), "admin")
+}
 
 // inMemoryRepo is a minimal in-memory implementation of service.BookRepository
 // for handler tests. We test protobuf conversion and error mapping here —
@@ -80,7 +87,7 @@ func TestCatalogHandler_CreateBook_Success(t *testing.T) {
 	svc := service.NewCatalogService(newInMemoryRepo(), &noopPublisher{})
 	h := handler.NewCatalogHandler(svc)
 
-	resp, err := h.CreateBook(context.Background(), &catalogv1.CreateBookRequest{
+	resp, err := h.CreateBook(adminContext(), &catalogv1.CreateBookRequest{
 		Title:       "Test Book",
 		Author:      "Test Author",
 		TotalCopies: 3,
@@ -100,7 +107,7 @@ func TestCatalogHandler_CreateBook_MissingTitle(t *testing.T) {
 	svc := service.NewCatalogService(newInMemoryRepo(), &noopPublisher{})
 	h := handler.NewCatalogHandler(svc)
 
-	_, err := h.CreateBook(context.Background(), &catalogv1.CreateBookRequest{
+	_, err := h.CreateBook(adminContext(), &catalogv1.CreateBookRequest{
 		Author: "Author",
 	})
 	if err == nil {

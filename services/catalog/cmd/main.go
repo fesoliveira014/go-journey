@@ -39,7 +39,7 @@ func (n *noopPublisher) Publish(_ context.Context, _ service.BookEvent) error { 
 
 func main() {
 	otelCtx := context.Background()
-	shutdown, err := pkgotel.Init(otelCtx, "catalog", os.Getenv("OTEL_COLLECTOR_ENDPOINT"))
+	shutdown, err := pkgotel.Init(otelCtx, "catalog", "0.1.0", os.Getenv("OTEL_COLLECTOR_ENDPOINT"))
 	if err != nil {
 		slog.Error("failed to init otel", "error", err)
 	} else {

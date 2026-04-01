@@ -24,10 +24,11 @@ import (
 //
 // Returns a shutdown function that must be called (e.g. via defer) to flush and
 // close the exporters cleanly before the process exits.
-func Init(ctx context.Context, serviceName, collectorEndpoint string) (func(context.Context) error, error) {
+func Init(ctx context.Context, serviceName, serviceVersion, collectorEndpoint string) (func(context.Context) error, error) {
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(serviceName),
+			semconv.ServiceVersionKey.String(serviceVersion),
 		),
 	)
 	if err != nil {
@@ -66,13 +67,15 @@ func Init(ctx context.Context, serviceName, collectorEndpoint string) (func(cont
 	slog.SetDefault(slog.New(NewTraceLogHandler(os.Stdout)))
 
 	var once sync.Once
+	var shutdownErr error
 	shutdown := func(ctx context.Context) error {
 		once.Do(func() {
-			if err := errors.Join(tp.Shutdown(ctx), mp.Shutdown(ctx)); err != nil {
-				slog.Default().Error("otel shutdown error", "err", err)
+			shutdownErr = errors.Join(tp.Shutdown(ctx), mp.Shutdown(ctx))
+			if shutdownErr != nil {
+				slog.Default().Error("otel shutdown error", "err", shutdownErr)
 			}
 		})
-		return nil
+		return shutdownErr
 	}
 
 	return shutdown, nil

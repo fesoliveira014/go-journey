@@ -34,7 +34,7 @@ import (
 
 func main() {
 	otelCtx := context.Background()
-	shutdown, err := pkgotel.Init(otelCtx, "reservation", os.Getenv("OTEL_COLLECTOR_ENDPOINT"))
+	shutdown, err := pkgotel.Init(otelCtx, "reservation", "0.1.0", os.Getenv("OTEL_COLLECTOR_ENDPOINT"))
 	if err != nil {
 		slog.Error("failed to init otel", "error", err)
 	} else {

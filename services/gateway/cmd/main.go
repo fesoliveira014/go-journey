@@ -24,7 +24,7 @@ import (
 
 func main() {
 	ctx := context.Background()
-	shutdown, err := pkgotel.Init(ctx, "gateway", os.Getenv("OTEL_COLLECTOR_ENDPOINT"))
+	shutdown, err := pkgotel.Init(ctx, "gateway", "0.1.0", os.Getenv("OTEL_COLLECTOR_ENDPOINT"))
 	if err != nil {
 		slog.Error("failed to init otel", "error", err)
 	} else {

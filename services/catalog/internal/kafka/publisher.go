@@ -72,10 +72,10 @@ func (p *Publisher) Publish(ctx context.Context, event service.BookEvent) error 
 		Value: sarama.ByteEncoder(value),
 	}
 
-	otelgo.GetTextMapPropagator().Inject(ctx, &headerCarrier{msg: msg})
-
 	ctx, span := otelgo.Tracer("catalog").Start(ctx, "catalog.publish")
 	defer span.End()
+
+	otelgo.GetTextMapPropagator().Inject(ctx, &headerCarrier{msg: msg})
 
 	_, _, err = p.producer.SendMessage(msg)
 	if err != nil {

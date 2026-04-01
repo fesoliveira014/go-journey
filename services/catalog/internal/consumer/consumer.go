@@ -9,6 +9,7 @@ import (
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
 	otelgo "go.opentelemetry.io/otel"
+	otelcodes "go.opentelemetry.io/otel/codes"
 
 	"github.com/fesoliveira014/library-system/services/catalog/internal/model"
 )
@@ -85,6 +86,8 @@ func (h *consumerHandler) ConsumeClaim(session sarama.ConsumerGroupSession, clai
 		msgCtx := otelgo.GetTextMapPropagator().Extract(ctx, consumerHeaderCarrier(msg.Headers))
 		msgCtx, span := otelgo.Tracer("catalog").Start(msgCtx, "catalog.consume.reservation")
 		if err := handleEvent(msgCtx, h.svc, msg.Value); err != nil {
+			span.RecordError(err)
+			span.SetStatus(otelcodes.Error, err.Error())
 			slog.ErrorContext(msgCtx, "failed to handle event", "error", err)
 			span.End()
 			continue

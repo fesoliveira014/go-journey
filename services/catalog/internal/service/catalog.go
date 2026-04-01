@@ -13,8 +13,11 @@ import (
 	"github.com/fesoliveira014/library-system/services/catalog/internal/model"
 )
 
+// bookCounter tracks create/delete deltas. The OTel SDK returns a noop counter
+// on error (never nil), so discarding the error is safe here. Note: this counter
+// resets to zero on restart — it tracks deltas, not absolute count.
 var bookCounter, _ = otelgo.Meter("catalog").Int64UpDownCounter("catalog.books.total",
-	metric.WithDescription("Total number of books in the catalog"),
+	metric.WithDescription("Total number of books in the catalog (delta from process start)"),
 )
 
 // BookRepository defines the interface for book persistence.
