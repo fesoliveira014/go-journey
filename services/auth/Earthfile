@@ -1,0 +1,43 @@
+VERSION 0.8
+
+FROM golang:1.26-alpine
+
+WORKDIR /app
+
+deps:
+    COPY go.mod go.sum* ./
+    # Copy local module dependencies (replace directives)
+    COPY ../../gen/go.mod ../../gen/go.sum* ../gen/
+    COPY ../../pkg/auth/go.mod ../../pkg/auth/go.sum* ../pkg/auth/
+    ENV GOWORK=off
+    RUN go mod download
+    SAVE ARTIFACT go.mod AS LOCAL go.mod
+    SAVE ARTIFACT go.sum AS LOCAL go.sum
+
+src:
+    FROM +deps
+    COPY --dir cmd internal migrations ./
+    COPY ../../gen/ ../gen/
+    COPY ../../pkg/auth/ ../pkg/auth/
+
+lint:
+    FROM +src
+    COPY ../../.golangci.yml ./
+    RUN go install github.com/golangci/golangci-lint/cmd/golangci-lint@v1.57.2
+    RUN golangci-lint run ./...
+
+test:
+    FROM +src
+    RUN go test ./internal/service/... ./internal/handler/... -v -count=1
+
+build:
+    FROM +src
+    RUN CGO_ENABLED=0 go build -o /bin/auth ./cmd/
+    SAVE ARTIFACT /bin/auth
+
+docker:
+    FROM alpine:3.19
+    COPY +build/auth /usr/local/bin/auth
+    EXPOSE 50051
+    ENTRYPOINT ["/usr/local/bin/auth"]
+    SAVE IMAGE auth:latest
