@@ -1,0 +1,42 @@
+name: CI/CD
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Earthly
+        uses: earthly/actions-setup@v1
+        with:
+          version: v0.8.15
+      - name: Run CI
+        run: earthly +ci
+
+  build-and-push:
+    needs: ci
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        service: [auth, catalog, gateway, reservation, search]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: services/${{ matrix.service }}/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:sha-${{ github.sha }}
+            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
