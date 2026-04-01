@@ -14,7 +14,7 @@ By the end of this chapter, you will have:
 
 Before starting, install:
 
-- **Go 1.22+** — [go.dev/dl](https://go.dev/dl/)
+- **Go 1.26+** — [go.dev/dl](https://go.dev/dl/)
 - **Earthly** — [earthly.dev/get-earthly](https://earthly.dev/get-earthly)
 - **Git** — [git-scm.com](https://git-scm.com/)
 - A code editor (VS Code with the Go extension is recommended)
@@ -22,7 +22,7 @@ Before starting, install:
 Verify your installations:
 
 ```bash
-go version    # go1.22.x or later
+go version    # go1.26.x or later
 earthly --version
 git --version
 ```

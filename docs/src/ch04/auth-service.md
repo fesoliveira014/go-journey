@@ -180,7 +180,10 @@ The flow is straightforward: validate, hash, persist, issue token. New users alw
 func (s *AuthService) Login(ctx context.Context, email, password string) (string, *model.User, error) {
     user, err := s.repo.GetByEmail(ctx, email)
     if err != nil {
-        return "", nil, model.ErrInvalidCredentials // Don't leak whether email exists
+        if errors.Is(err, model.ErrUserNotFound) {
+            return "", nil, model.ErrInvalidCredentials // Don't leak whether email exists
+        }
+        return "", nil, err // Propagate unexpected errors (e.g. database failures)
     }
 
     if user.PasswordHash == nil {

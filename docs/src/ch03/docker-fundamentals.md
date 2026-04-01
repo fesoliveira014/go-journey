@@ -167,7 +167,7 @@ Go produces static binaries. You *could* just `scp` the binary to a server and r
 
 4. **Matching production locally.** In the next section, we will run PostgreSQL in a container alongside the Catalog service. You don't need to install PostgreSQL on your host machine, manage different versions for different projects, or worry about port conflicts with other databases.
 
-5. **Orchestration compatibility.** Kubernetes -- which we cover in Chapter 4 -- only speaks containers. Containerizing now means the transition to Kubernetes is about writing manifests, not rearchitecting your deployment.
+5. **Orchestration compatibility.** Kubernetes -- which we cover in a later chapter -- only speaks containers. Containerizing now means the transition to Kubernetes is about writing manifests, not rearchitecting your deployment.
 
 ---
 

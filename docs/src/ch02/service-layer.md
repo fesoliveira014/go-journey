@@ -57,6 +57,8 @@ func NewCatalogService(repo BookRepository) *CatalogService {
 }
 ```
 
+> **Note:** In later chapters, we will extend this constructor to accept an `EventPublisher` for Kafka integration. The pattern stays the same — add a new interface dependency, pass it through the constructor.
+
 This is manual dependency injection — no framework, just a constructor that takes what it needs. The service has no idea whether `repo` is backed by PostgreSQL, SQLite, or an in-memory map. That's the point.
 
 Most service methods are thin orchestrators. `GetBook` simply delegates:

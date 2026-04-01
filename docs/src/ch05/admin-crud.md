@@ -155,6 +155,10 @@ func (s *Server) handleGRPCError(w http.ResponseWriter, r *http.Request, err err
         http.Redirect(w, r, "/login", http.StatusSeeOther)
     case codes.PermissionDenied:
         s.renderError(w, r, http.StatusForbidden, "Access denied")
+    case codes.ResourceExhausted:
+        s.renderError(w, r, http.StatusTooManyRequests, "You have reached the maximum number of active reservations")
+    case codes.FailedPrecondition:
+        s.renderError(w, r, http.StatusPreconditionFailed, st.Message())
     default:
         s.renderError(w, r, http.StatusInternalServerError, fallbackMsg)
     }
@@ -170,9 +174,11 @@ The mapping follows standard conventions:
 | `AlreadyExists` | 409 | Error page with gRPC message |
 | `Unauthenticated` | 303 redirect | Redirect to login |
 | `PermissionDenied` | 403 | Error page |
+| `ResourceExhausted` | 429 | Reservation limit message |
+| `FailedPrecondition` | 412 | Error page with gRPC message |
 | Everything else | 500 | Error page with fallback message |
 
-Notice that `InvalidArgument` and `AlreadyExists` pass through the gRPC message (`st.Message()`) because it contains useful context (e.g., "ISBN already exists"). For `NotFound` and `PermissionDenied`, we use generic messages to avoid leaking internal details.
+Notice that `InvalidArgument`, `AlreadyExists`, and `FailedPrecondition` pass through the gRPC message (`st.Message()`) because it contains useful context (e.g., "ISBN already exists"). For `NotFound` and `PermissionDenied`, we use generic messages to avoid leaking internal details. `ResourceExhausted` uses a hardcoded user-friendly message for the reservation limit.
 
 ---
 
@@ -190,6 +196,7 @@ ENV GOWORK=off
 
 COPY gen/go.mod gen/go.sum* ./gen/
 COPY pkg/auth/go.mod pkg/auth/go.sum* ./pkg/auth/
+COPY pkg/otel/go.mod pkg/otel/go.sum* ./pkg/otel/
 COPY services/gateway/go.mod services/gateway/go.sum* ./services/gateway/
 WORKDIR /app/services/gateway
 RUN go mod download
@@ -197,6 +204,7 @@ RUN go mod download
 WORKDIR /app
 COPY gen/ ./gen/
 COPY pkg/auth/ ./pkg/auth/
+COPY pkg/otel/ ./pkg/otel/
 COPY services/gateway/ ./services/gateway/
 WORKDIR /app/services/gateway
 RUN CGO_ENABLED=0 go build -o /bin/gateway ./cmd/

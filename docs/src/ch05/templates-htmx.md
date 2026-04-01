@@ -193,13 +193,13 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
     }
     tmpl, ok := s.tmpl[name]
     if !ok {
-        log.Printf("template not found: %q", name)
+        slog.ErrorContext(r.Context(), "template not found", "name", name)
         http.Error(w, "internal server error", http.StatusInternalServerError)
         return
     }
     w.Header().Set("Content-Type", "text/html; charset=utf-8")
     if err := tmpl.ExecuteTemplate(w, "base.html", pd); err != nil {
-        log.Printf("template error: %v", err)
+        slog.ErrorContext(r.Context(), "template error", "err", err)
     }
 }
 ```
@@ -309,11 +309,11 @@ The `renderPartial` method executes a named template from the base set without t
 func (s *Server) renderPartial(w http.ResponseWriter, name string, data any) {
     w.Header().Set("Content-Type", "text/html; charset=utf-8")
     if s.baseTmpl == nil {
-        log.Printf("no templates loaded; cannot render partial %q", name)
+        slog.Error("no templates loaded; cannot render partial", "name", name)
         return
     }
     if err := s.baseTmpl.ExecuteTemplate(w, name, data); err != nil {
-        log.Printf("template error: %v", err)
+        slog.Error("template error", "err", err)
     }
 }
 ```

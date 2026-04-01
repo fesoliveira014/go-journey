@@ -213,13 +213,15 @@ func (r *BookRepository) Delete(ctx context.Context, id uuid.UUID) error {
 func (r *BookRepository) UpdateAvailability(ctx context.Context, id uuid.UUID, delta int) error {
     result := r.db.WithContext(ctx).
         Model(&model.Book{}).
-        Where("id = ?", id).
+        Where("id = ? AND available_copies + ? >= 0", id, delta).
         Update("available_copies", gorm.Expr("available_copies + ?", delta))
     // ...
 }
 ```
 
 This method is special. Rather than reading the current value into Go, incrementing it, and writing it back — which would introduce a race condition — it uses a SQL expression: `UPDATE books SET available_copies = available_copies + ? WHERE id = ?`. The increment happens atomically in the database. `gorm.Expr(...)` injects a raw SQL fragment into the query.
+
+The `WHERE` clause includes `available_copies + ? >= 0` as a guard to prevent negative availability — the database will reject an update that would underflow, and `RowsAffected == 0` signals the error to the caller.
 
 ---
 

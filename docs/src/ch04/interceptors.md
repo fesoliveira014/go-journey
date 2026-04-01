@@ -35,7 +35,7 @@ Our auth interceptor does all three: it rejects requests without valid tokens, e
 
 ## The `pkg/auth/` Shared Library
 
-The `pkg/auth` directory is a separate Go package (within the same module) that both the Auth and Catalog services import. It contains three files:
+The `pkg/auth` directory is a **separate Go module** (with its own `go.mod`) that services import via `replace` directives in the workspace. Both the Auth and Catalog services depend on it. It contains three files:
 
 | File | Purpose |
 |---|---|

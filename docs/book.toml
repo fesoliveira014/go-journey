@@ -11,3 +11,9 @@ build-dir = "../site"
 default-theme = "navy"
 preferred-dark-theme = "navy"
 git-repository-url = "https://github.com/fesoliveira014/library-system"
+additional-js = ["mermaid.min.js", "mermaid-init.js"]
+
+[preprocessor]
+
+[preprocessor.mermaid]
+command = "mdbook-mermaid"
