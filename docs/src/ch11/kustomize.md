@@ -33,26 +33,47 @@ deploy/k8s/
 ├── base/
 │   ├── kustomization.yaml
 │   ├── library/
-│   │   ├── gateway-deployment.yaml
-│   │   ├── gateway-service.yaml
+│   │   ├── namespace.yaml
+│   │   ├── secrets.yaml
+│   │   ├── auth-configmap.yaml
 │   │   ├── auth-deployment.yaml
 │   │   ├── auth-service.yaml
+│   │   ├── catalog-configmap.yaml
 │   │   ├── catalog-deployment.yaml
 │   │   ├── catalog-service.yaml
+│   │   ├── reservation-configmap.yaml
 │   │   ├── reservation-deployment.yaml
 │   │   ├── reservation-service.yaml
+│   │   ├── search-configmap.yaml
 │   │   ├── search-deployment.yaml
-│   │   └── search-service.yaml
+│   │   ├── search-service.yaml
+│   │   ├── gateway-configmap.yaml
+│   │   ├── gateway-deployment.yaml
+│   │   ├── gateway-service.yaml
+│   │   ├── ingress.yaml
+│   │   └── kustomization.yaml
 │   ├── data/
-│   │   ├── postgres-statefulset.yaml
-│   │   ├── postgres-service.yaml
-│   │   ├── meilisearch-deployment.yaml
-│   │   └── meilisearch-service.yaml
+│   │   ├── namespace.yaml
+│   │   ├── secrets.yaml
+│   │   ├── meilisearch-configmap.yaml
+│   │   ├── meilisearch-service.yaml
+│   │   ├── meilisearch-statefulset.yaml
+│   │   ├── postgres-auth-configmap.yaml
+│   │   ├── postgres-auth-service.yaml
+│   │   ├── postgres-auth-statefulset.yaml
+│   │   ├── postgres-catalog-configmap.yaml
+│   │   ├── postgres-catalog-service.yaml
+│   │   ├── postgres-catalog-statefulset.yaml
+│   │   ├── postgres-reservation-configmap.yaml
+│   │   ├── postgres-reservation-service.yaml
+│   │   ├── postgres-reservation-statefulset.yaml
+│   │   └── kustomization.yaml
 │   └── messaging/
-│       ├── zookeeper-statefulset.yaml
-│       ├── zookeeper-service.yaml
+│       ├── namespace.yaml
+│       ├── kafka-configmap.yaml
+│       ├── kafka-service.yaml
 │       ├── kafka-statefulset.yaml
-│       └── kafka-service.yaml
+│       └── kustomization.yaml
 └── overlays/
     ├── local/
     │   └── kustomization.yaml
@@ -74,27 +95,12 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - library/gateway-deployment.yaml
-  - library/gateway-service.yaml
-  - library/auth-deployment.yaml
-  - library/auth-service.yaml
-  - library/catalog-deployment.yaml
-  - library/catalog-service.yaml
-  - library/reservation-deployment.yaml
-  - library/reservation-service.yaml
-  - library/search-deployment.yaml
-  - library/search-service.yaml
-  - data/postgres-statefulset.yaml
-  - data/postgres-service.yaml
-  - data/meilisearch-deployment.yaml
-  - data/meilisearch-service.yaml
-  - messaging/zookeeper-statefulset.yaml
-  - messaging/zookeeper-service.yaml
-  - messaging/kafka-statefulset.yaml
-  - messaging/kafka-service.yaml
+  - data
+  - messaging
+  - library
 ```
 
-The `resources` list is just paths to YAML files (or other `kustomization.yaml`-bearing directories). The base itself is never applied directly; overlays reference it.
+Each entry is a directory that contains its own `kustomization.yaml`. Kustomize recurses into each subdirectory and assembles all resources declared there. The base itself is never applied directly; overlays reference it.
 
 ---
 
@@ -110,23 +116,49 @@ kind: Kustomization
 resources:
   - ../../base
 
+# Generate secrets with actual values for local development.
+# Secrets referenced by library-namespace Deployments must exist in the library
+# namespace; secrets referenced by data-namespace StatefulSets must exist in the
+# data namespace. Some secret names appear twice (one per namespace).
 secretGenerator:
+  # library namespace secrets (used by Deployments)
   - name: jwt-secret
     namespace: library
     literals:
-      - JWT_SECRET=local-dev-jwt-secret-do-not-use-in-production
-
-  - name: postgres-credentials
+      - JWT_SECRET=dev-secret-change-in-production
+  - name: postgres-catalog-secret
+    namespace: library
+    literals:
+      - POSTGRES_PASSWORD=postgres
+  - name: postgres-auth-secret
+    namespace: library
+    literals:
+      - POSTGRES_PASSWORD=postgres
+  - name: postgres-reservation-secret
+    namespace: library
+    literals:
+      - POSTGRES_PASSWORD=postgres
+  - name: meilisearch-secret
+    namespace: library
+    literals:
+      - MEILI_MASTER_KEY=dev-master-key-change-in-production
+  # data namespace secrets (used by StatefulSets)
+  - name: postgres-catalog-secret
     namespace: data
     literals:
-      - POSTGRES_USER=library
-      - POSTGRES_PASSWORD=library
-      - POSTGRES_DB=library
-
-  - name: meilisearch-credentials
+      - POSTGRES_PASSWORD=postgres
+  - name: postgres-auth-secret
     namespace: data
     literals:
-      - MEILI_MASTER_KEY=local-dev-meilisearch-key
+      - POSTGRES_PASSWORD=postgres
+  - name: postgres-reservation-secret
+    namespace: data
+    literals:
+      - POSTGRES_PASSWORD=postgres
+  - name: meilisearch-secret
+    namespace: data
+    literals:
+      - MEILI_MASTER_KEY=dev-master-key-change-in-production
 
 generatorOptions:
   disableNameSuffixHash: true
@@ -136,16 +168,23 @@ generatorOptions:
 
 `secretGenerator` instructs Kustomize to create Secret objects from the provided literals. Each entry in `literals` becomes a key-value pair in the Secret's `data` field. The values are base64-encoded by Kustomize automatically — you write the plaintext, the rendered YAML contains the encoded form.
 
-By default, Kustomize appends a content hash to each generated Secret's name — `postgres-credentials-8m6fk2t` instead of `postgres-credentials`. This is intentional and useful: when the secret content changes, the hash changes, and any Deployment that references the secret by name (which now includes the new hash) triggers an automatic pod rollout. Without the hash, updating a Secret's value does not restart pods, so running pods continue using the old value until they are manually restarted.
+The key names — `JWT_SECRET`, `POSTGRES_PASSWORD`, `MEILI_MASTER_KEY` — must match exactly what the Deployment manifests reference in their `secretKeyRef.key` fields.
+
+Several secrets appear twice in the generator: once for the `library` namespace and once for the `data` namespace. This is required because Kubernetes Secrets are namespace-scoped — a Secret in `data` is invisible to a Pod in `library` and vice versa. The application service Deployments (in `library`) read passwords at runtime via `secretKeyRef`, while the PostgreSQL StatefulSets (in `data`) need the same values to initialize the database. Both copies must exist.
+
+By default, Kustomize appends a content hash to each generated Secret's name — `postgres-catalog-secret-8m6fk2t` instead of `postgres-catalog-secret`. This is intentional and useful: when the secret content changes, the hash changes, and any Deployment that references the secret by name (which now includes the new hash) triggers an automatic pod rollout. Without the hash, updating a Secret's value does not restart pods, so running pods continue using the old value until they are manually restarted.
 
 ### `disableNameSuffixHash: true`
 
-For local development, the hash suffix is more annoying than useful. Deployments reference secrets by name in `envFrom` or `env` blocks:
+For local development, the hash suffix is more annoying than useful. Deployments reference secrets by name in `env` blocks:
 
 ```yaml
-envFrom:
-  - secretRef:
-      name: postgres-credentials
+env:
+  - name: POSTGRES_PASSWORD
+    valueFrom:
+      secretKeyRef:
+        name: postgres-catalog-secret
+        key: POSTGRES_PASSWORD
 ```
 
 If the name changes every time the secret content changes, you would have to update every Deployment that references it. During active development — where you change a secret value frequently — this friction is counterproductive.
@@ -226,8 +265,8 @@ resources:
 
 # Images from ECR with explicit tags:
 # images:
-#   - name: library/catalog
-#     newName: 123456789.dkr.ecr.eu-west-1.amazonaws.com/library/catalog
+#   - name: library-system/catalog
+#     newName: 123456789.dkr.ecr.eu-west-1.amazonaws.com/library-system/catalog
 #     newTag: v1.2.0
 ```
 
@@ -238,7 +277,7 @@ Each commented section maps to a concrete problem:
 - **Replica patches** — a JSON patch on `spec.replicas` sets each service's replica count independently.
 - **imagePullPolicy** — `IfNotPresent` is correct for kind (which loads images locally); `Always` is correct for ECR (which holds canonical tagged releases).
 - **RDS endpoint** — managed PostgreSQL replaces the in-cluster StatefulSet in production. A patch replaces the Service with an ExternalName Service pointing to the RDS endpoint.
-- **Image references** — the `images` block rewrites image names and tags without touching the base manifests. All Deployments referencing `library/catalog` will use the ECR URI and the release tag.
+- **Image references** — the `images` block rewrites image names and tags without touching the base manifests. All Deployments referencing `library-system/catalog` will use the ECR URI and the release tag.
 
 ---
 

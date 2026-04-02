@@ -4,12 +4,33 @@ kind: Kustomization
 resources:
   - ../../base
 
-# Generate secrets with actual values for local development
+# Generate secrets with actual values for local development.
+# Secrets referenced by library-namespace Deployments must exist in the library
+# namespace; secrets referenced by data-namespace StatefulSets must exist in the
+# data namespace. Some secret names appear twice (one per namespace).
 secretGenerator:
+  # library namespace secrets (used by Deployments)
   - name: jwt-secret
     namespace: library
     literals:
       - JWT_SECRET=dev-secret-change-in-production
+  - name: postgres-catalog-secret
+    namespace: library
+    literals:
+      - POSTGRES_PASSWORD=postgres
+  - name: postgres-auth-secret
+    namespace: library
+    literals:
+      - POSTGRES_PASSWORD=postgres
+  - name: postgres-reservation-secret
+    namespace: library
+    literals:
+      - POSTGRES_PASSWORD=postgres
+  - name: meilisearch-secret
+    namespace: library
+    literals:
+      - MEILI_MASTER_KEY=dev-master-key-change-in-production
+  # data namespace secrets (used by StatefulSets)
   - name: postgres-catalog-secret
     namespace: data
     literals:

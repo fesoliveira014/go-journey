@@ -56,7 +56,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: catalog
-          image: library/catalog:latest
+          image: library-system/catalog:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
@@ -70,7 +70,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: postgres-catalog-secret
-                  key: password
+                  key: POSTGRES_PASSWORD
             - name: DATABASE_URL
               value: >-
                 host=postgres-catalog-0.postgres-catalog.data.svc.cluster.local
@@ -83,7 +83,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: jwt-secret
-                  key: secret
+                  key: JWT_SECRET
           resources:
             requests:
               cpu: "50m"
@@ -131,9 +131,9 @@ Everything under `spec.template` describes the Pod that the Deployment creates. 
 
 #### `image` and `imagePullPolicy`
 
-`image: library/catalog:latest` references the image we built and loaded into kind in section 11.2. The `latest` tag is normally discouraged in production because it makes rollbacks ambiguous, but it is fine for a local development cluster where we control exactly what is in the cache.
+`image: library-system/catalog:latest` references the image we built and loaded into kind in section 11.2. The `latest` tag is normally discouraged in production because it makes rollbacks ambiguous, but it is fine for a local development cluster where we control exactly what is in the cache.
 
-`imagePullPolicy: IfNotPresent` is critical for kind. By default, Kubernetes tries to pull images from a registry. kind loads images directly into its internal containerd cache via `kind load docker-image`. If the pull policy is `Always`, the kubelet will still attempt a registry pull, which fails because `library/catalog:latest` does not exist in any public registry. `IfNotPresent` tells the kubelet: if the image is already present in the local cache, use it. This is the correct policy for locally built images in a kind cluster.
+`imagePullPolicy: IfNotPresent` is critical for kind. By default, Kubernetes tries to pull images from a registry. kind loads images directly into its internal containerd cache via `kind load docker-image`. If the pull policy is `Always`, the kubelet will still attempt a registry pull, which fails because `library-system/catalog:latest` does not exist in any public registry. `IfNotPresent` tells the kubelet: if the image is already present in the local cache, use it. This is the correct policy for locally built images in a kind cluster.
 
 #### `ports`
 
@@ -157,7 +157,7 @@ env:
     valueFrom:
       secretKeyRef:
         name: postgres-catalog-secret
-        key: password
+        key: POSTGRES_PASSWORD
   - name: DATABASE_URL
     value: >-
       host=postgres-catalog-0.postgres-catalog.data.svc.cluster.local
@@ -304,7 +304,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: auth
-          image: library/auth:latest
+          image: library-system/auth:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
@@ -318,7 +318,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: postgres-auth-secret
-                  key: password
+                  key: POSTGRES_PASSWORD
             - name: DATABASE_URL
               value: >-
                 host=postgres-auth-0.postgres-auth.data.svc.cluster.local
@@ -331,12 +331,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: jwt-secret
-                  key: secret
-            - name: GOOGLE_CLIENT_SECRET
-              valueFrom:
-                secretKeyRef:
-                  name: google-oauth-secret
-                  key: client_secret
+                  key: JWT_SECRET
           resources:
             requests:
               cpu: "50m"
@@ -388,10 +383,11 @@ data:
   GRPC_PORT: "50051"
   JWT_EXPIRY: "24h"
   GOOGLE_CLIENT_ID: ""
-  GOOGLE_REDIRECT_URL: "http://library.local/oauth2/callback"
+  GOOGLE_CLIENT_SECRET: ""
+  GOOGLE_REDIRECT_URL: ""
 ```
 
-`GOOGLE_CLIENT_ID` is not sensitive — it is the public identifier of your OAuth2 application. Only `GOOGLE_CLIENT_SECRET` is secret and is fetched from a Secret object. `GOOGLE_REDIRECT_URL` points to `library.local`, the hostname we expose via Ingress (declared later in this section).
+OAuth2 credentials are left empty in the base ConfigMap. For local development, Google OAuth2 is simply not configured — the auth service detects empty values and disables the OAuth2 flow, leaving email/password login functional. For production, these values would be injected by an overlay or an external secrets operator. Keeping them as empty strings in the ConfigMap avoids the need for a separate Secret object for OAuth2 credentials in the local environment.
 
 ### Reservation service
 
@@ -419,7 +415,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: reservation
-          image: library/reservation:latest
+          image: library-system/reservation:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
@@ -433,7 +429,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: postgres-reservation-secret
-                  key: password
+                  key: POSTGRES_PASSWORD
             - name: DATABASE_URL
               value: >-
                 host=postgres-reservation-0.postgres-reservation.data.svc.cluster.local
@@ -446,7 +442,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: jwt-secret
-                  key: secret
+                  key: JWT_SECRET
           resources:
             requests:
               cpu: "50m"
@@ -530,7 +526,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: search
-          image: library/search:latest
+          image: library-system/search:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
@@ -544,7 +540,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: meilisearch-secret
-                  key: master_key
+                  key: MEILI_MASTER_KEY
           resources:
             requests:
               cpu: "50m"
@@ -626,7 +622,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: gateway
-          image: library/gateway:latest
+          image: library-system/gateway:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -640,7 +636,7 @@ spec:
               valueFrom:
                 secretKeyRef:
                   name: jwt-secret
-                  key: secret
+                  key: JWT_SECRET
           resources:
             requests:
               cpu: "50m"
@@ -703,7 +699,9 @@ data:
 
 ## Secrets
 
-Each Secret below is a placeholder. The `data` field contains base64-encoded values. The examples here encode the string `placeholder` — they will not work at runtime. The local overlay in section 11.6 uses Kustomize's `secretGenerator` to substitute real values without committing them to the repository.
+Each Secret below is a placeholder with an empty `data: {}` field. These objects exist so that `kubectl apply -k` on the base alone does not fail when Deployments reference secrets that have no overlay applied — they define the expected names without committing any values to the repository. The local overlay in section 11.6 uses Kustomize's `secretGenerator` to create fully populated Secrets with real values, overriding these placeholders.
+
+The key names populated by the overlay (`JWT_SECRET`, `POSTGRES_PASSWORD`, `MEILI_MASTER_KEY`) match the `secretKeyRef.key` values in the Deployment manifests exactly. OAuth2 credentials (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) are not stored as Secrets — they are left as empty strings in the auth ConfigMap for local development, where the OAuth2 flow is not used.
 
 ```yaml
 # deploy/k8s/base/library/secrets.yaml
@@ -713,9 +711,7 @@ metadata:
   name: jwt-secret
   namespace: library
 type: Opaque
-data:
-  # echo -n 'placeholder' | base64
-  secret: cGxhY2Vob2xkZXI=
+data: {}
 ---
 apiVersion: v1
 kind: Secret
@@ -723,8 +719,7 @@ metadata:
   name: postgres-catalog-secret
   namespace: library
 type: Opaque
-data:
-  password: cGxhY2Vob2xkZXI=
+data: {}
 ---
 apiVersion: v1
 kind: Secret
@@ -732,8 +727,7 @@ metadata:
   name: postgres-auth-secret
   namespace: library
 type: Opaque
-data:
-  password: cGxhY2Vob2xkZXI=
+data: {}
 ---
 apiVersion: v1
 kind: Secret
@@ -741,8 +735,7 @@ metadata:
   name: postgres-reservation-secret
   namespace: library
 type: Opaque
-data:
-  password: cGxhY2Vob2xkZXI=
+data: {}
 ---
 apiVersion: v1
 kind: Secret
@@ -750,17 +743,7 @@ metadata:
   name: meilisearch-secret
   namespace: library
 type: Opaque
-data:
-  master_key: cGxhY2Vob2xkZXI=
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: google-oauth-secret
-  namespace: library
-type: Opaque
-data:
-  client_secret: cGxhY2Vob2xkZXI=
+data: {}
 ```
 
 **Base64 is not encryption.** Anyone with read access to a Secret object — via `kubectl get secret jwt-secret -o yaml` — can decode the value with `base64 -d`. Secrets are only marginally better than ConfigMaps at rest (in etcd) unless you enable etcd encryption, and they are only as secure as your RBAC policy. The canonical solution for production is an external secret store (HashiCorp Vault, AWS Secrets Manager, GCP Secret Manager) synced to Kubernetes Secrets by an operator. We cover this in Chapter 12. For the local cluster, the local overlay's `secretGenerator` provides concrete values without putting them in version control.
