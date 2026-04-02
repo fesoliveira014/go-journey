@@ -1,0 +1,146 @@
+[
+  {
+    "title": "The Go Programming Language",
+    "author": "Alan Donovan & Brian Kernighan",
+    "isbn": "9780134190440",
+    "genre": "Technology",
+    "description": "The authoritative resource for learning Go.",
+    "published_year": 2015,
+    "total_copies": 3
+  },
+  {
+    "title": "Designing Data-Intensive Applications",
+    "author": "Martin Kleppmann",
+    "isbn": "9781449373320",
+    "genre": "Technology",
+    "description": "Principles and practicalities of data systems.",
+    "published_year": 2017,
+    "total_copies": 2
+  },
+  {
+    "title": "Clean Code",
+    "author": "Robert C. Martin",
+    "isbn": "9780132350884",
+    "genre": "Technology",
+    "description": "A handbook of agile software craftsmanship.",
+    "published_year": 2008,
+    "total_copies": 4
+  },
+  {
+    "title": "To Kill a Mockingbird",
+    "author": "Harper Lee",
+    "isbn": "9780061120084",
+    "genre": "Fiction",
+    "description": "A classic novel of racial injustice and childhood innocence.",
+    "published_year": 1960,
+    "total_copies": 5
+  },
+  {
+    "title": "1984",
+    "author": "George Orwell",
+    "isbn": "9780451524935",
+    "genre": "Fiction",
+    "description": "A dystopian novel exploring totalitarianism and surveillance.",
+    "published_year": 1949,
+    "total_copies": 4
+  },
+  {
+    "title": "Dune",
+    "author": "Frank Herbert",
+    "isbn": "9780441013593",
+    "genre": "Science Fiction",
+    "description": "An epic tale of politics and ecology on the desert planet Arrakis.",
+    "published_year": 1965,
+    "total_copies": 3
+  },
+  {
+    "title": "A Brief History of Time",
+    "author": "Stephen Hawking",
+    "isbn": "9780553380163",
+    "genre": "Science",
+    "description": "An accessible exploration of cosmology and black holes.",
+    "published_year": 1988,
+    "total_copies": 2
+  },
+  {
+    "title": "Sapiens: A Brief History of Humankind",
+    "author": "Yuval Noah Harari",
+    "isbn": "9780062316110",
+    "genre": "History",
+    "description": "A sweeping narrative of human history.",
+    "published_year": 2011,
+    "total_copies": 3
+  },
+  {
+    "title": "The Pragmatic Programmer",
+    "author": "David Thomas & Andrew Hunt",
+    "isbn": "9780135957059",
+    "genre": "Technology",
+    "description": "Timeless advice for software developers.",
+    "published_year": 2019,
+    "total_copies": 3
+  },
+  {
+    "title": "The Great Gatsby",
+    "author": "F. Scott Fitzgerald",
+    "isbn": "9780743273565",
+    "genre": "Fiction",
+    "description": "A portrait of the Jazz Age and the American Dream.",
+    "published_year": 1925,
+    "total_copies": 4
+  },
+  {
+    "title": "Cosmos",
+    "author": "Carl Sagan",
+    "isbn": "9780345539434",
+    "genre": "Science",
+    "description": "A journey through the universe.",
+    "published_year": 1980,
+    "total_copies": 2
+  },
+  {
+    "title": "The Art of War",
+    "author": "Sun Tzu",
+    "isbn": "9781590302255",
+    "genre": "History",
+    "description": "An ancient treatise on strategy and conflict.",
+    "published_year": -500,
+    "total_copies": 3
+  },
+  {
+    "title": "Neuromancer",
+    "author": "William Gibson",
+    "isbn": "9780441569595",
+    "genre": "Science Fiction",
+    "description": "The pioneering cyberpunk novel.",
+    "published_year": 1984,
+    "total_copies": 2
+  },
+  {
+    "title": "Site Reliability Engineering",
+    "author": "Betsy Beyer et al.",
+    "isbn": "9781491929124",
+    "genre": "Technology",
+    "description": "How Google runs production systems.",
+    "published_year": 2016,
+    "total_copies": 2
+  },
+  {
+    "title": "Pride and Prejudice",
+    "author": "Jane Austen",
+    "isbn": "9780141439518",
+    "genre": "Fiction",
+    "description": "A witty exploration of manners and marriage.",
+    "published_year": 1813,
+    "total_copies": 3
+  },
+  {
+    "title": "The Selfish Gene",
+    "author": "Richard Dawkins",
+    "isbn": "9780198788607",
+    "genre": "Science",
+    "description": "Evolution from the gene's perspective.",
+    "published_year": 1976,
+    "total_copies": 2
+  }
+]
