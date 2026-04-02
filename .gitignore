@@ -5,6 +5,9 @@
 *.so
 *.dylib
 /bin/
+/cmd
+services/auth/admin
+services/catalog/seed
 
 # Test
 *.test
@@ -31,6 +34,8 @@ Thumbs.db
 .env
 .env.local
 
-# mdBook output
+# mdBook output and generated assets
 /site/
+docs/mermaid-init.js
+docs/mermaid.min.js
 .worktrees/
