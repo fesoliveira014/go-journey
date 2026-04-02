@@ -35,7 +35,7 @@ Take the reader from Docker Compose (Chapter 3) to a fully operational Kubernete
 | Ingress controller | NGINX Ingress Controller | Most common, well-documented for kind, maps to ALB in Chapter 12 |
 | Infrastructure in K8s | Full StatefulSets with PVCs | Teaches core K8s concepts (StatefulSets, PVCs, headless Services) |
 | Namespace layout | 3 namespaces: library, data, messaging | Matches arch spec, teaches namespace isolation |
-| Kafka mode | KRaft (no Zookeeper) | Matches arch spec, modern approach, simpler than Compose's Zookeeper setup |
+| Kafka mode | KRaft (no Zookeeper) | Matches arch spec and Docker Compose setup, modern approach |
 | Manifest walkthrough style | One service in full detail, rest concise | Avoids repetition, reader applies pattern |
 
 ## Chapter Structure
@@ -116,10 +116,11 @@ Core manifest-writing section. All resources in the `library` namespace.
 - Cross-namespace DNS names for infrastructure services.
 
 **Secrets:**
-- Shared `jwt-secret` for `JWT_SECRET` (used by auth, catalog, reservation, gateway).
+- Shared `jwt-secret` for `JWT_SECRET` (used by auth, catalog, reservation, gateway — all use `pkgauth.UnaryAuthInterceptor`).
 - Per-service database Secrets (`POSTGRES_USER`, `POSTGRES_PASSWORD`).
 - `meilisearch-secret` for `MEILI_MASTER_KEY`.
 - Teaching point: K8s Secrets are base64-encoded, not encrypted. Real encryption requires encryption-at-rest or external secret managers (deferred to Chapter 12).
+- Note: base manifests define Secret resources as placeholders. The local overlay uses `secretGenerator` with literal values to replace them, which is the Kustomize-idiomatic approach. The base `secrets.yaml` exists so the Deployments can reference Secret names consistently.
 
 **Ingress:**
 - NGINX Ingress resource routing `library.local` → gateway Service on port 8080.
@@ -170,7 +171,7 @@ The `data` and `messaging` namespaces. Teaches StatefulSets.
 
 **Kafka (single-node KRaft in `messaging` namespace):**
 - StatefulSet with PVC for log segments.
-- KRaft mode — no Zookeeper. Explain the difference from Docker Compose's setup (Chapter 6 used Zookeeper).
+- KRaft mode — no Zookeeper, same as Docker Compose. Note that both environments use KRaft; the key difference is the networking and advertised listener configuration.
 - ConfigMap for broker configuration: `KAFKA_NODE_ID`, `KAFKA_PROCESS_ROLES`, `KAFKA_CONTROLLER_QUORUM_VOTERS`, `KAFKA_LISTENERS`, `KAFKA_ADVERTISED_LISTENERS`.
 - Headless Service.
 - `KAFKA_ADVERTISED_LISTENERS` must use the in-cluster DNS name (`kafka-0.kafka.messaging.svc.cluster.local:9092`), not `kafka:9092` from Docker Compose.
@@ -280,8 +281,7 @@ End-to-end walkthrough. The payoff.
 
 **Verification checklist:**
 - `kubectl get pods -A` — all pods Running/Ready.
-- `kubectl logs -n library deployment/catalog` — clean startup, migrations ran.
-- `kubectl logs -n library deployment/catalog -c catalog | grep "kafka"` — Kafka consumer joined group.
+- `kubectl logs -n library deployment/catalog` — clean startup, migrations ran, Kafka consumer joined group.
 - `curl http://library.local` through Ingress — gateway responds.
 - `kubectl port-forward -n library svc/catalog 50052:50052` + `grpcurl -plaintext localhost:50052 grpc.health.v1.Health/Check` — responds SERVING.
 - Create a book via the UI at `http://library.local`, verify it appears in search (proves full event flow: gateway → catalog → Kafka → search → Meilisearch).
@@ -301,7 +301,7 @@ End-to-end walkthrough. The payoff.
 - **Multi-replica application services** — single replica in local, scaling discussed conceptually but not deployed.
 - **TLS/cert-manager** — deferred to Chapter 12 with real DNS.
 - **Horizontal Pod Autoscaling** — mentioned as a future topic, not implemented.
-- **Observability stack in K8s** — the Grafana stack (Tempo, Prometheus, Loki, Grafana) from Chapter 8 stays in Docker Compose for now. Moving it to K8s is a significant effort and not the focus. The OTel Collector could be deployed as a DaemonSet but this is deferred.
+- **Observability stack in K8s** — the Grafana stack (Tempo, Prometheus, Loki, Grafana) from Chapter 8 stays in Docker Compose for now. Moving it to K8s is a significant effort and not the focus. The OTel Collector could be deployed as a DaemonSet but this is deferred. For the kind deployment, `OTEL_COLLECTOR_ENDPOINT` in ConfigMaps should be left empty or set to a no-op value — services already handle missing collector endpoints gracefully (Chapter 8). The verification section should note that telemetry is not collected in the kind cluster.
 - **Network policies** — mentioned conceptually (namespace isolation) but not implemented.
 
 ## Dependencies
