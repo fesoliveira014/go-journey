@@ -1567,7 +1567,7 @@ git mv deploy/k8s/base/data/secrets.yaml deploy/k8s/base/local-infra/data/secret
 
 Then update `deploy/k8s/base/local-infra/data/kustomization.yaml` to include it (add `- secrets.yaml` to the resources list).
 
-- [ ] **Step 9: Update `deploy/k8s/base/data/kustomization.yaml`**
+- [ ] **Step 8: Update `deploy/k8s/base/data/kustomization.yaml`**
 
 Remove all postgres entries and secrets, keeping only Meilisearch and the namespace:
 
@@ -1582,7 +1582,7 @@ resources:
   - meilisearch-service.yaml
 ```
 
-- [ ] **Step 8: Update `deploy/k8s/base/messaging/kustomization.yaml`**
+- [ ] **Step 9: Update `deploy/k8s/base/messaging/kustomization.yaml`**
 
 Remove all kafka entries, keeping only the namespace:
 
