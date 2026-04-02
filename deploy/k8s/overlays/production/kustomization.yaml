@@ -175,7 +175,9 @@ patches:
         annotations:
           alb.ingress.kubernetes.io/scheme: internet-facing
           alb.ingress.kubernetes.io/target-type: ip
-          alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+          alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}, {"HTTPS": 443}]'
+          alb.ingress.kubernetes.io/ssl-redirect: "443"
+          alb.ingress.kubernetes.io/certificate-arn: ACM_CERTIFICATE_ARN
       spec:
         ingressClassName: alb
         rules:
@@ -189,7 +191,7 @@ patches:
                       port:
                         number: 8080
 
-  # --- ConfigMap patches (Kafka brokers → MSK) ---
+  # --- ConfigMap patches (Kafka brokers → MSK TLS on port 9094) ---
   - target:
       kind: ConfigMap
       name: catalog-config
@@ -202,7 +204,7 @@ patches:
         namespace: library
       data:
         GRPC_PORT: "50052"
-        KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS"
+        KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS_TLS"
         OTEL_COLLECTOR_ENDPOINT: ""
 
   - target:
@@ -217,7 +219,7 @@ patches:
         namespace: library
       data:
         GRPC_PORT: "50053"
-        KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS"
+        KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS_TLS"
         CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
         MAX_ACTIVE_RESERVATIONS: "5"
         OTEL_COLLECTOR_ENDPOINT: ""
@@ -234,7 +236,7 @@ patches:
         namespace: library
       data:
         GRPC_PORT: "50054"
-        KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS"
+        KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS_TLS"
         MEILI_URL: "http://meilisearch.data.svc.cluster.local:7700"
         CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
 
