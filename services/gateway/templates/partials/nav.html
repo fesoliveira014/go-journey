@@ -18,7 +18,7 @@
     {{if .User}}
         <a href="/reservations">My Reservations</a>
         {{if eq .User.Role "admin"}}
-            <a href="/admin/books/new">Add Book</a>
+            <a href="/admin">Admin</a>
         {{end}}
         <form method="POST" action="/logout" style="display:inline">
             <button type="submit">Logout</button>

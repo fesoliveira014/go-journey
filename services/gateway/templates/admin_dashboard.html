@@ -1,0 +1,21 @@
+{{define "title"}}Admin Dashboard{{end}}
+{{define "content"}}
+<h1>Admin Dashboard</h1>
+<div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-top: 1rem;">
+  <div style="border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; flex: 1; min-width: 200px;">
+    <h3>Users</h3>
+    <p>View all registered users and their roles.</p>
+    <a href="/admin/users">View Users &rarr;</a>
+  </div>
+  <div style="border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; flex: 1; min-width: 200px;">
+    <h3>Reservations</h3>
+    <p>View all book reservations across all users.</p>
+    <a href="/admin/reservations">View Reservations &rarr;</a>
+  </div>
+  <div style="border: 1px solid #ddd; border-radius: 8px; padding: 1.5rem; flex: 1; min-width: 200px;">
+    <h3>Books</h3>
+    <p>Add, edit, or remove books from the catalog.</p>
+    <a href="/admin/books/new">Add Book &rarr;</a>
+  </div>
+</div>
+{{end}}

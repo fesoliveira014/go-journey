@@ -1,0 +1,29 @@
+{{define "title"}}Manage Reservations{{end}}
+{{define "content"}}
+<h1>All Reservations</h1>
+<p><a href="/admin">&larr; Admin Dashboard</a></p>
+<table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+  <thead>
+    <tr style="border-bottom: 2px solid #ddd; text-align: left;">
+      <th style="padding: 0.5rem;">User</th>
+      <th style="padding: 0.5rem;">Book</th>
+      <th style="padding: 0.5rem;">Status</th>
+      <th style="padding: 0.5rem;">Reserved</th>
+      <th style="padding: 0.5rem;">Returned</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Data.Reservations}}
+    <tr style="border-bottom: 1px solid #eee;">
+      <td style="padding: 0.5rem;">{{.UserEmail}}</td>
+      <td style="padding: 0.5rem;">{{.BookTitle}}</td>
+      <td style="padding: 0.5rem;">{{.Status}}</td>
+      <td style="padding: 0.5rem;">{{.CreatedAt.AsTime.Format "2006-01-02"}}</td>
+      <td style="padding: 0.5rem;">{{if .ReturnedAt}}{{.ReturnedAt.AsTime.Format "2006-01-02"}}{{else}}—{{end}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="5" style="padding: 0.5rem;">No reservations found.</td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

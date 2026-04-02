@@ -1,0 +1,27 @@
+{{define "title"}}Manage Users{{end}}
+{{define "content"}}
+<h1>Users</h1>
+<p><a href="/admin">&larr; Admin Dashboard</a></p>
+<table style="width: 100%; border-collapse: collapse; margin-top: 1rem;">
+  <thead>
+    <tr style="border-bottom: 2px solid #ddd; text-align: left;">
+      <th style="padding: 0.5rem;">Email</th>
+      <th style="padding: 0.5rem;">Name</th>
+      <th style="padding: 0.5rem;">Role</th>
+      <th style="padding: 0.5rem;">Joined</th>
+    </tr>
+  </thead>
+  <tbody>
+    {{range .Data.Users}}
+    <tr style="border-bottom: 1px solid #eee;">
+      <td style="padding: 0.5rem;">{{.Email}}</td>
+      <td style="padding: 0.5rem;">{{.Name}}</td>
+      <td style="padding: 0.5rem;">{{.Role}}</td>
+      <td style="padding: 0.5rem;">{{.CreatedAt.AsTime.Format "2006-01-02"}}</td>
+    </tr>
+    {{else}}
+    <tr><td colspan="4" style="padding: 0.5rem;">No users found.</td></tr>
+    {{end}}
+  </tbody>
+</table>
+{{end}}

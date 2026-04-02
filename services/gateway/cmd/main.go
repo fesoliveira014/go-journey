@@ -141,6 +141,10 @@ func main() {
 	mux.HandleFunc("GET /search", srv.SearchPage)
 	mux.HandleFunc("GET /search/suggest", srv.SearchSuggest)
 
+	mux.HandleFunc("GET /admin", srv.AdminDashboard)
+	mux.HandleFunc("GET /admin/users", srv.AdminUserList)
+	mux.HandleFunc("GET /admin/reservations", srv.AdminReservationList)
+
 	mux.HandleFunc("GET /admin/books/new", srv.AdminBookNew)
 	mux.HandleFunc("POST /admin/books", srv.AdminBookCreate)
 	mux.HandleFunc("GET /admin/books/{id}/edit", srv.AdminBookEdit)
