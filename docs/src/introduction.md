@@ -28,7 +28,7 @@ The system is decomposed into 5 microservices: Gateway, Auth, Catalog, Reservati
 
 ## How to Use This Guide
 
-Each chapter builds on the previous one. Follow them in order. **The code snippets in each chapter show the codebase as it exists at that point in the journey.** Later chapters modify and extend these files -- so if you compare a snippet from Chapter 2 to the final repository, you will see additions from Chapters 3-8 (Kafka integration, OpenTelemetry, structured logging, etc.). This is intentional: each chapter teaches one layer at a time.
+Each chapter builds on the previous one. Follow them in order. **The code snippets in each chapter show the codebase as it exists at that point in the journey.** Later chapters modify and extend these files -- so if you compare a snippet from Chapter 2 to the final repository, you will see additions from Chapters 3-9 (Kafka integration, OpenTelemetry, structured logging, etc.). This is intentional: each chapter teaches one layer at a time.
 
 Every chapter includes:
 

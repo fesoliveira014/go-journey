@@ -66,7 +66,7 @@ A microservices-based library management system built in Go. This project is a h
 │   ├── grafana/           #   dashboards and datasource config
 │   └── *.yaml             #   Prometheus, Tempo, Loki, OTel configs
 ├── terraform/             # AWS infrastructure (VPC, EKS, RDS, MSK, ECR)
-├── docs/                  # Tutorial content (mdBook, 13 chapters)
+├── docs/                  # Tutorial content (mdBook, 14 chapters)
 ├── Earthfile              # Build system (lint, test, integration-test, docker)
 ├── .github/workflows/     # CI/CD (pr.yml, main.yml)
 └── go.work                # Go workspace (8 modules)

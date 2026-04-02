@@ -424,7 +424,7 @@ If you are following along without running the infrastructure, here is a summary
 
 ## What's Next
 
-The library system is running on AWS with managed database, message broker, and load balancer infrastructure. Chapter 14 adds the observability layer: deploying an OpenTelemetry Collector to the cluster, configuring the services to export traces and metrics, and visualizing the results in Grafana. The deployment workflow stays identical — a new Kustomize overlay and a Terraform module for the monitoring stack.
+The library system is running on AWS with managed database, message broker, and load balancer infrastructure. Chapter 14 hardens the deployment for production: configuring DNS with Route 53 and TLS with ACM, managing secrets with External Secrets Operator, and encrypting Kafka traffic. None of these changes touch application code — everything lives in Terraform and the production Kustomize overlay.
 
 ---
 
