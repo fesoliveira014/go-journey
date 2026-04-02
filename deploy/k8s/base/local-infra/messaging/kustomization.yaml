@@ -3,4 +3,6 @@ kind: Kustomization
 namespace: messaging
 
 resources:
-  - namespace.yaml
+  - kafka-statefulset.yaml
+  - kafka-service.yaml
+  - kafka-configmap.yaml

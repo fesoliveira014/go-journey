@@ -3,6 +3,7 @@ kind: Kustomization
 
 resources:
   - ../../base
+  - ../../base/local-infra
 
 # Generate secrets with actual values for local development.
 # Secrets referenced by library-namespace Deployments must exist in the library

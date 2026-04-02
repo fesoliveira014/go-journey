@@ -3,7 +3,6 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
-  - secrets.yaml
   - catalog-configmap.yaml
   - catalog-deployment.yaml
   - catalog-service.yaml
