@@ -16,6 +16,8 @@ import (
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -127,6 +129,16 @@ func main() {
 	)
 	catalogv1.RegisterCatalogServiceServer(grpcServer, catalogHandler)
 	reflection.Register(grpcServer)
+	healthServer := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, healthServer)
+	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+
+	go func() {
+		<-ctx.Done()
+		slog.Info("shutting down catalog service")
+		healthServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
+		grpcServer.GracefulStop()
+	}()
 
 	slog.Info("catalog service listening", "port", grpcPort)
 	if err := grpcServer.Serve(lis); err != nil {
