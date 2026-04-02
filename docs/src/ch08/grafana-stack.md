@@ -334,7 +334,7 @@ The observability services in `deploy/docker-compose.yml`:
 
 ```yaml
 otel-collector:
-  image: otel/opentelemetry-collector-contrib:0.115.0
+  image: otel/opentelemetry-collector-contrib:0.149.0
   volumes:
     - ./otel-collector-config.yaml:/etc/otelcol-contrib/config.yaml
   ports:

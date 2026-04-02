@@ -70,7 +70,7 @@ catalog:
     OTEL_COLLECTOR_ENDPOINT: otel-collector-catalog:4317
 
 otel-collector-catalog:
-  image: otel/opentelemetry-collector-contrib:0.115.0
+  image: otel/opentelemetry-collector-contrib:0.149.0
   volumes:
     - ./otel-collector-catalog-config.yaml:/etc/otelcol-contrib/config.yaml
 ```
@@ -96,7 +96,7 @@ spec:
             - name: OTEL_COLLECTOR_ENDPOINT
               value: "localhost:4317"
         - name: otel-collector
-          image: otel/opentelemetry-collector-contrib:0.115.0
+          image: otel/opentelemetry-collector-contrib:0.149.0
           volumeMounts:
             - name: config
               mountPath: /etc/otelcol-contrib/config.yaml
@@ -139,7 +139,7 @@ spec:
     spec:
       containers:
         - name: otel-collector
-          image: otel/opentelemetry-collector-contrib:0.115.0
+          image: otel/opentelemetry-collector-contrib:0.149.0
           ports:
             - containerPort: 4317
               hostPort: 4317
