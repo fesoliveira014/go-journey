@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: gateway-config
+  namespace: library
+data:
+  PORT: "8080"
+  AUTH_GRPC_ADDR: "auth.library.svc.cluster.local:50051"
+  CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
+  RESERVATION_GRPC_ADDR: "reservation.library.svc.cluster.local:50053"
+  SEARCH_GRPC_ADDR: "search.library.svc.cluster.local:50054"
+  OTEL_COLLECTOR_ENDPOINT: ""

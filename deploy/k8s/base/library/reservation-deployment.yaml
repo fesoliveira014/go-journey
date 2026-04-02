@@ -1,0 +1,51 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: reservation
+  namespace: library
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: reservation
+  template:
+    metadata:
+      labels:
+        app: reservation
+    spec:
+      terminationGracePeriodSeconds: 30
+      containers:
+        - name: reservation
+          image: library-system/reservation:latest
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 50053
+              name: grpc
+          env:
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: postgres-reservation-secret
+                  key: POSTGRES_PASSWORD
+            - name: DATABASE_URL
+              value: "host=postgres-reservation-0.postgres-reservation.data.svc.cluster.local port=5432 user=postgres password=$(POSTGRES_PASSWORD) dbname=reservation sslmode=disable"
+          envFrom:
+            - configMapRef:
+                name: reservation-config
+          livenessProbe:
+            grpc:
+              port: 50053
+            initialDelaySeconds: 10
+            periodSeconds: 15
+          readinessProbe:
+            grpc:
+              port: 50053
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          resources:
+            requests:
+              cpu: "100m"
+              memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
