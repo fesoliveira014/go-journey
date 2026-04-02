@@ -164,7 +164,7 @@ The library system will be deployed across three namespaces, each grouping logic
 
 - **library** — the five application services: gateway, auth, catalog, reservation, search
 - **data** — the data stores: PostgreSQL and Meilisearch
-- **messaging** — the message broker: Kafka (and its dependency, ZooKeeper)
+- **messaging** — the message broker: Kafka (running in KRaft mode, no ZooKeeper needed)
 
 This separation is not just organizational. Namespaces give you a unit of isolation for network policies, resource quotas, and RBAC (role-based access control). In a real multi-team environment, you might give different teams ownership over different namespaces. Here, the separation keeps infrastructure concerns out of the application namespace and makes it easy to reason about what belongs where.
 
@@ -185,7 +185,6 @@ graph TD
 
     subgraph messaging [Namespace: messaging]
         KFK[Kafka]
-        ZK[ZooKeeper]
     end
 
     GW --> AUTH
@@ -199,7 +198,6 @@ graph TD
     CAT --> KFK
     RES --> KFK
     SRC --> KFK
-    KFK --> ZK
 ```
 
 Traffic enters the cluster through an Ingress controller that routes to the gateway. The gateway calls the other application services over gRPC. The application services reach their data stores and Kafka across namespace boundaries — Kubernetes DNS makes this straightforward, as a service in `data` is reachable at `postgres.data.svc.cluster.local` from any namespace.
@@ -210,17 +208,17 @@ Traffic enters the cluster through an Ingress controller that routes to the gate
 
 The remaining sections build the Kubernetes deployment of the library system step by step:
 
-**11.1 — Local Cluster with kind** sets up a local Kubernetes cluster using kind (Kubernetes in Docker). You will install kind and kubectl, create a cluster, load locally-built images, and verify that the cluster is healthy. kind runs a full Kubernetes control plane inside Docker containers on your laptop, making it the fastest path to a real cluster without a cloud account.
+**12.1 — Local Cluster with kind** sets up a local Kubernetes cluster using kind (Kubernetes in Docker). You will install kind and kubectl, create a cluster, load locally-built images, and verify that the cluster is healthy. kind runs a full Kubernetes control plane inside Docker containers on your laptop, making it the fastest path to a real cluster without a cloud account.
 
-**11.2 — Preparing Services for Kubernetes** revisits the five application services and makes them Kubernetes-ready: health check endpoints (for liveness and readiness probes), graceful shutdown handling, and configuration via environment variables rather than hardcoded values.
+**12.2 — Preparing Services for Kubernetes** revisits the five application services and makes them Kubernetes-ready: health check endpoints (for liveness and readiness probes), graceful shutdown handling, and configuration via environment variables rather than hardcoded values.
 
-**11.3 — Application Manifests** writes the Deployment, Service, ConfigMap, and Secret manifests for the five application services. You will apply them to the cluster and verify each service starts correctly.
+**12.3 — Application Manifests** writes the Deployment, Service, ConfigMap, and Secret manifests for the five application services. You will apply them to the cluster and verify each service starts correctly.
 
-**11.4 — Infrastructure Manifests** writes StatefulSet and PersistentVolumeClaim manifests for PostgreSQL, Kafka, ZooKeeper, and Meilisearch — the workloads that require stable storage and identity.
+**12.4 — Infrastructure Manifests** writes StatefulSet and PersistentVolumeClaim manifests for PostgreSQL, Kafka, and Meilisearch — the workloads that require stable storage and identity.
 
-**11.5 — Kustomize Environments** introduces Kustomize, Kubernetes' built-in configuration management tool. You will create a base configuration and two overlays — development and production — so that the same manifests can be applied with environment-specific adjustments without duplication.
+**12.5 — Kustomize Environments** introduces Kustomize, Kubernetes' built-in configuration management tool. You will create a base configuration and two overlays — development and production — so that the same manifests can be applied with environment-specific adjustments without duplication.
 
-**11.6 — Deploying and Verifying** ties everything together: applying all manifests in the correct order, verifying health, exercising the system through the Ingress, and walking through the debugging workflow when something goes wrong.
+**12.6 — Deploying and Verifying** ties everything together: applying all manifests in the correct order, verifying health, exercising the system through the Ingress, and walking through the debugging workflow when something goes wrong.
 
 ---
 

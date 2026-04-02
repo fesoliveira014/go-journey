@@ -14,8 +14,17 @@ spec:
         app: reservation
     spec:
       terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: reservation
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           image: library-system/reservation:latest
           imagePullPolicy: IfNotPresent
           ports:

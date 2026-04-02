@@ -14,8 +14,17 @@ spec:
         app: auth
     spec:
       terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: auth
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           image: library-system/auth:latest
           imagePullPolicy: IfNotPresent
           ports:
@@ -34,6 +43,12 @@ spec:
                 secretKeyRef:
                   name: jwt-secret
                   key: JWT_SECRET
+            - name: GOOGLE_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: oauth-secret
+                  key: GOOGLE_CLIENT_SECRET
+                  optional: true
           envFrom:
             - configMapRef:
                 name: auth-config

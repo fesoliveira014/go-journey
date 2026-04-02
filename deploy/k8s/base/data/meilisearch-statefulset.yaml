@@ -28,6 +28,13 @@ spec:
                 secretKeyRef:
                   name: meilisearch-secret
                   key: MEILI_MASTER_KEY
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 7700
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
           readinessProbe:
             httpGet:
               path: /health

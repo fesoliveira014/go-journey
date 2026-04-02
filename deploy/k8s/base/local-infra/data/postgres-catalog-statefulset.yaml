@@ -28,6 +28,12 @@ spec:
                 secretKeyRef:
                   name: postgres-catalog-secret
                   key: POSTGRES_PASSWORD
+          livenessProbe:
+            exec:
+              command: ["pg_isready", "-U", "postgres"]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            failureThreshold: 5
           readinessProbe:
             exec:
               command: ["pg_isready", "-U", "postgres"]

@@ -188,7 +188,7 @@ earthly +docker
 kind load docker-image library-system/auth:latest      --name library
 kind load docker-image library-system/catalog:latest   --name library
 kind load docker-image library-system/reservation:latest --name library
-kind load docker-image library-system/user:latest      --name library
+kind load docker-image library-system/search:latest     --name library
 kind load docker-image library-system/gateway:latest   --name library
 
 # 3. Apply manifests (covered in upcoming sections)

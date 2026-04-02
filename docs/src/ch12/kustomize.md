@@ -34,7 +34,6 @@ deploy/k8s/
 │   ├── kustomization.yaml
 │   ├── library/
 │   │   ├── namespace.yaml
-│   │   ├── secrets.yaml
 │   │   ├── auth-configmap.yaml
 │   │   ├── auth-deployment.yaml
 │   │   ├── auth-service.yaml
@@ -54,7 +53,6 @@ deploy/k8s/
 │   │   └── kustomization.yaml
 │   ├── data/
 │   │   ├── namespace.yaml
-│   │   ├── secrets.yaml
 │   │   ├── meilisearch-configmap.yaml
 │   │   ├── meilisearch-service.yaml
 │   │   ├── meilisearch-statefulset.yaml

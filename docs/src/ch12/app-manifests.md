@@ -41,8 +41,6 @@ kind: Deployment
 metadata:
   name: catalog
   namespace: library
-  labels:
-    app: catalog
 spec:
   replicas: 1
   selector:
@@ -54,14 +52,22 @@ spec:
         app: catalog
     spec:
       terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: catalog
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           image: library-system/catalog:latest
           imagePullPolicy: IfNotPresent
           ports:
-            - name: grpc
-              containerPort: 50052
-              protocol: TCP
+            - containerPort: 50052
+              name: grpc
           envFrom:
             - configMapRef:
                 name: catalog-config
@@ -72,13 +78,7 @@ spec:
                   name: postgres-catalog-secret
                   key: POSTGRES_PASSWORD
             - name: DATABASE_URL
-              value: >-
-                host=postgres-catalog-0.postgres-catalog.data.svc.cluster.local
-                port=5432
-                user=postgres
-                password=$(POSTGRES_PASSWORD)
-                dbname=catalog
-                sslmode=disable
+              value: "host=postgres-catalog-0.postgres-catalog.data.svc.cluster.local port=5432 user=postgres password=$(POSTGRES_PASSWORD) dbname=catalog sslmode=disable"
             - name: JWT_SECRET
               valueFrom:
                 secretKeyRef:
@@ -86,23 +86,21 @@ spec:
                   key: JWT_SECRET
           resources:
             requests:
-              cpu: "50m"
-              memory: "64Mi"
-            limits:
-              cpu: "200m"
+              cpu: "100m"
               memory: "128Mi"
+            limits:
+              cpu: "250m"
+              memory: "256Mi"
           livenessProbe:
             grpc:
               port: 50052
             initialDelaySeconds: 10
             periodSeconds: 15
-            failureThreshold: 3
           readinessProbe:
             grpc:
               port: 50052
             initialDelaySeconds: 5
             periodSeconds: 10
-            failureThreshold: 3
 ```
 
 ### `apiVersion` and `kind`
@@ -172,19 +170,41 @@ There is an important ordering rule here. Kubernetes resolves `$(VAR_NAME)` refe
 
 `secretKeyRef` fetches a single key from a Secret object. The value is decoded from base64 and injected as a plain string — the container sees it as a normal environment variable. We declare the Secret placeholders at the end of this section.
 
+#### Security context
+
+```yaml
+securityContext:                      # pod-level
+  runAsNonRoot: true
+  runAsUser: 65534
+  fsGroup: 65534
+containers:
+  - name: catalog
+    securityContext:                   # container-level
+      allowPrivilegeEscalation: false
+      readOnlyRootFilesystem: true
+      capabilities:
+        drop: ["ALL"]
+```
+
+The pod-level `securityContext` sets defaults for all containers in the pod. `runAsNonRoot: true` prevents the container from running as UID 0. `runAsUser: 65534` runs as the `nobody` user — our Go binaries are statically linked and need no special user.
+
+The container-level `securityContext` tightens permissions further. `allowPrivilegeEscalation: false` prevents a process from gaining more privileges than its parent (blocks `setuid` binaries and `ptrace` exploits). `readOnlyRootFilesystem: true` makes the container's root filesystem immutable — any attempt to write to disk fails. This eliminates an entire class of attacks where a compromised process writes a malicious binary and executes it. Our Go services write nothing to disk; all state goes to PostgreSQL. `capabilities: drop: ["ALL"]` removes all Linux capabilities (the fine-grained root powers like `NET_RAW`, `SYS_ADMIN`, etc.). A Go gRPC server needs none of them.
+
+These settings implement the principle of least privilege at the container level. In a production cluster, a Pod Security Admission controller can enforce these as a baseline — but setting them explicitly in each manifest ensures compliance regardless of cluster policy.
+
 #### Resource requests and limits
 
 ```yaml
 resources:
   requests:
-    cpu: "50m"
-    memory: "64Mi"
-  limits:
-    cpu: "200m"
+    cpu: "100m"
     memory: "128Mi"
+  limits:
+    cpu: "250m"
+    memory: "256Mi"
 ```
 
-`requests` are what the scheduler uses to decide which node can host the Pod. A node with 200m of unallocated CPU can host a Pod requesting 50m. `limits` are enforced at runtime by the Linux kernel's cgroup subsystem: if the container exceeds its memory limit, the kernel OOM-kills it; if it exceeds its CPU limit, it is throttled. Always set both — a Pod without requests cannot be scheduled intelligently, and a Pod without limits can starve its neighbors.
+`requests` are what the scheduler uses to decide which node can host the Pod. A node with 200m of unallocated CPU can host a Pod requesting 100m. `limits` are enforced at runtime by the Linux kernel's cgroup subsystem: if the container exceeds its memory limit, the kernel OOM-kills it; if it exceeds its CPU limit, it is throttled. Always set both — a Pod without requests cannot be scheduled intelligently, and a Pod without limits can starve its neighbors.
 
 The values here are intentionally small. The catalog service at rest uses almost no CPU and well under 50 MiB of RAM. Give your local cluster room to run all five services simultaneously.
 
@@ -383,11 +403,10 @@ data:
   GRPC_PORT: "50051"
   JWT_EXPIRY: "24h"
   GOOGLE_CLIENT_ID: ""
-  GOOGLE_CLIENT_SECRET: ""
   GOOGLE_REDIRECT_URL: ""
 ```
 
-OAuth2 credentials are left empty in the base ConfigMap. For local development, Google OAuth2 is simply not configured — the auth service detects empty values and disables the OAuth2 flow, leaving email/password login functional. For production, these values would be injected by an overlay or an external secrets operator. Keeping them as empty strings in the ConfigMap avoids the need for a separate Secret object for OAuth2 credentials in the local environment.
+`GOOGLE_CLIENT_ID` and `GOOGLE_REDIRECT_URL` are non-sensitive configuration — the client ID is public, and the redirect URL is a route, not a credential. Both are left empty in the base ConfigMap. `GOOGLE_CLIENT_SECRET`, on the other hand, is a credential and belongs in a Secret object. The auth Deployment references it via `secretKeyRef` with `optional: true`, so the pod starts normally when the Secret does not exist (as in the local overlay where OAuth2 is not used). For production, the External Secrets Operator injects the real value from AWS Secrets Manager.
 
 ### Reservation service
 
@@ -699,52 +718,11 @@ data:
 
 ## Secrets
 
-Each Secret below is a placeholder with an empty `data: {}` field. These objects exist so that `kubectl apply -k` on the base alone does not fail when Deployments reference secrets that have no overlay applied — they define the expected names without committing any values to the repository. The local overlay in section 12.5 uses Kustomize's `secretGenerator` to create fully populated Secrets with real values, overriding these placeholders.
+The Deployment manifests reference several Secrets by name (`jwt-secret`, `postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `meilisearch-secret`). Notice that the base directory does **not** include a `secrets.yaml` file. This is intentional — secret values should never exist in the base, even as empty placeholders. Instead, each overlay is responsible for creating the Secrets that its environment needs.
 
-The key names populated by the overlay (`JWT_SECRET`, `POSTGRES_PASSWORD`, `MEILI_MASTER_KEY`) match the `secretKeyRef.key` values in the Deployment manifests exactly. OAuth2 credentials (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) are not stored as Secrets — they are left as empty strings in the auth ConfigMap for local development, where the OAuth2 flow is not used.
+The local overlay (section 12.5) uses Kustomize's `secretGenerator` to create all required Secrets with development values. The production overlay uses the External Secrets Operator to sync values from AWS Secrets Manager (Chapter 14). This pattern keeps credentials out of version control entirely.
 
-```yaml
-# deploy/k8s/base/library/secrets.yaml
-apiVersion: v1
-kind: Secret
-metadata:
-  name: jwt-secret
-  namespace: library
-type: Opaque
-data: {}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-catalog-secret
-  namespace: library
-type: Opaque
-data: {}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-auth-secret
-  namespace: library
-type: Opaque
-data: {}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: postgres-reservation-secret
-  namespace: library
-type: Opaque
-data: {}
----
-apiVersion: v1
-kind: Secret
-metadata:
-  name: meilisearch-secret
-  namespace: library
-type: Opaque
-data: {}
-```
+The key names populated by the overlay (`JWT_SECRET`, `POSTGRES_PASSWORD`, `MEILI_MASTER_KEY`) match the `secretKeyRef.key` values in the Deployment manifests exactly. The OAuth2 client secret (`GOOGLE_CLIENT_SECRET`) is referenced by the auth Deployment with `optional: true`, so it only needs to be provided in environments where Google OAuth2 is configured.
 
 **Base64 is not encryption.** Anyone with read access to a Secret object — via `kubectl get secret jwt-secret -o yaml` — can decode the value with `base64 -d`. Secrets are only marginally better than ConfigMaps at rest (in etcd) unless you enable etcd encryption, and they are only as secure as your RBAC policy. The canonical solution for production is an external secret store (HashiCorp Vault, AWS Secrets Manager, GCP Secret Manager) synced to Kubernetes Secrets by an operator. We cover this in Chapter 14. For the local cluster, the local overlay's `secretGenerator` provides concrete values without putting them in version control.
 
@@ -761,9 +739,6 @@ kind: Ingress
 metadata:
   name: library-ingress
   namespace: library
-  annotations:
-    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
-    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
 spec:
   ingressClassName: nginx
   rules:
@@ -791,7 +766,7 @@ To reach `library.local` from your development machine, add the following line t
 
 The kind cluster exposes port 80 on `localhost` via the `extraPortMappings` configured in section 12.1. With the hosts entry in place, `http://library.local` resolves to `127.0.0.1:80`, which kind forwards to the NGINX controller, which routes to the gateway Pod.
 
-The two timeout annotations extend NGINX's default 60-second proxy timeouts. Without them, long-running streaming responses or slow gRPC calls will be terminated by the proxy before they complete.
+If you later find that NGINX terminates long-running requests prematurely, you can add timeout annotations like `nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"`. For our use case — short HTTP requests proxied to gRPC backends — the defaults are sufficient.
 
 ---
 
@@ -806,7 +781,6 @@ kind: Kustomization
 
 resources:
   - namespace.yaml
-  - secrets.yaml
   - auth-configmap.yaml
   - auth-deployment.yaml
   - auth-service.yaml

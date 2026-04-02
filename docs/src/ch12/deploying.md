@@ -56,15 +56,29 @@ The `-k` flag tells `kubectl` to run Kustomize against that directory before app
 
 ```
 namespace/library created
-namespace/infra created
-configmap/library-config created
-secret/library-secrets created
-persistentvolumeclaim/postgres-pvc created
-persistentvolumeclaim/kafka-pvc created
-deployment.apps/postgres created
-service/postgres created
-deployment.apps/kafka created
+namespace/data created
+namespace/messaging created
+configmap/auth-config created
+configmap/catalog-config created
+configmap/gateway-config created
+configmap/reservation-config created
+configmap/search-config created
+secret/jwt-secret created
+secret/postgres-auth-secret created
+secret/postgres-catalog-secret created
+secret/postgres-reservation-secret created
+secret/meilisearch-secret created
+secret/oauth-secret created
+statefulset.apps/postgres-auth created
+statefulset.apps/postgres-catalog created
+statefulset.apps/postgres-reservation created
+service/postgres-auth created
+service/postgres-catalog created
+service/postgres-reservation created
+statefulset.apps/kafka created
 service/kafka created
+statefulset.apps/meilisearch created
+service/meilisearch created
 deployment.apps/auth created
 service/auth created
 deployment.apps/catalog created
@@ -83,12 +97,12 @@ Kubernetes creates the namespaces first (ordering matters — resources that ref
 **Wait for infrastructure pods first:**
 
 ```bash
-kubectl wait --namespace infra \
+kubectl wait --namespace data \
   --for=condition=ready pod \
-  --selector=app=postgres \
+  --selector=app=postgres-catalog \
   --timeout=120s
 
-kubectl wait --namespace infra \
+kubectl wait --namespace messaging \
   --for=condition=ready pod \
   --selector=app=kafka \
   --timeout=120s
@@ -133,9 +147,9 @@ You should see the service log its startup message and indicate that it has conn
 The services expose a gRPC health check endpoint. Test catalog directly, bypassing the Ingress:
 
 ```bash
-kubectl port-forward -n library svc/catalog 50051:50051 &
+kubectl port-forward -n library svc/catalog 50052:50052 &
 
-grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
+grpcurl -plaintext localhost:50052 grpc.health.v1.Health/Check
 ```
 
 Expected response:
@@ -165,7 +179,7 @@ The Ingress routes `http://library.local` to the Gateway service. For this to wo
 Then test the HTTP API:
 
 ```bash
-curl http://library.local/health
+curl http://library.local/healthz
 ```
 
 A 200 response confirms the full path: DNS resolution, NGINX Ingress, Gateway Service, Gateway pod. If you get a 404 or connection refused, check the troubleshooting table.
@@ -231,7 +245,7 @@ This removes the Docker container, all pods, all persistent data, and the kubeco
 If you only want to reset the application state without tearing down the cluster, you can delete the namespaces:
 
 ```bash
-kubectl delete namespace library infra
+kubectl delete namespace library data messaging
 kubectl apply -k deploy/k8s/overlays/local
 ```
 

@@ -31,6 +31,10 @@ secretGenerator:
     namespace: library
     literals:
       - MEILI_MASTER_KEY=dev-master-key-change-in-production
+  - name: oauth-secret
+    namespace: library
+    literals:
+      - GOOGLE_CLIENT_SECRET=""
   # data namespace secrets (used by StatefulSets)
   - name: postgres-catalog-secret
     namespace: data
