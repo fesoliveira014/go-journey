@@ -3,11 +3,264 @@ kind: Kustomization
 
 resources:
   - ../../base
+  # NOTE: ../../base/local-infra is intentionally NOT included.
+  # Production uses RDS for PostgreSQL and MSK for Kafka instead of
+  # in-cluster StatefulSets. Meilisearch stays in the base (no managed
+  # AWS equivalent).
 
-# Chapter 12 fills this in with:
-# - Larger resource limits
-# - imagePullPolicy: Always with tagged images from ECR
-# - Multiple replicas for application Deployments
-# - Real Secrets via external-secrets operator
-# - RDS endpoints replacing Postgres StatefulSets (remove from resources, patch ConfigMaps)
-# - ALB Ingress Controller annotations
+# Image references — CI updates tags via `kustomize edit set image`
+images:
+  - name: library-system/auth
+    newName: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/library-system/auth
+    newTag: latest
+  - name: library-system/catalog
+    newName: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/library-system/catalog
+    newTag: latest
+  - name: library-system/gateway
+    newName: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/library-system/gateway
+    newTag: latest
+  - name: library-system/reservation
+    newName: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/library-system/reservation
+    newTag: latest
+  - name: library-system/search
+    newName: ACCOUNT_ID.dkr.ecr.REGION.amazonaws.com/library-system/search
+    newTag: latest
+
+patches:
+  # --- Replica patches ---
+  - target:
+      kind: Deployment
+      namespace: library
+    patch: |
+      - op: replace
+        path: /spec/replicas
+        value: 2
+
+  # --- imagePullPolicy patches ---
+  - target:
+      kind: Deployment
+      namespace: library
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/imagePullPolicy
+        value: Always
+
+  # --- Resource limit patches ---
+  - target:
+      kind: Deployment
+      namespace: library
+    patch: |
+      - op: replace
+        path: /spec/template/spec/containers/0/resources
+        value:
+          requests:
+            cpu: "250m"
+            memory: "256Mi"
+          limits:
+            cpu: "500m"
+            memory: "512Mi"
+
+  # --- DATABASE_URL patches (RDS endpoints) ---
+  # Replace StatefulSet DNS names with RDS endpoints.
+  # Substitute ACCOUNT_ID, REGION, and RDS endpoints from `terraform output`.
+  - target:
+      kind: Deployment
+      name: catalog
+      namespace: library
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: catalog
+        namespace: library
+      spec:
+        template:
+          spec:
+            containers:
+              - name: catalog
+                envFrom:
+                  - configMapRef:
+                      name: catalog-config
+                env:
+                  - name: POSTGRES_PASSWORD
+                    valueFrom:
+                      secretKeyRef:
+                        name: postgres-catalog-secret
+                        key: POSTGRES_PASSWORD
+                  - name: DATABASE_URL
+                    value: "host=RDS_CATALOG_ENDPOINT port=5432 user=postgres password=$(POSTGRES_PASSWORD) dbname=catalog sslmode=require"
+                  - name: JWT_SECRET
+                    valueFrom:
+                      secretKeyRef:
+                        name: jwt-secret
+                        key: JWT_SECRET
+
+  - target:
+      kind: Deployment
+      name: auth
+      namespace: library
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: auth
+        namespace: library
+      spec:
+        template:
+          spec:
+            containers:
+              - name: auth
+                envFrom:
+                  - configMapRef:
+                      name: auth-config
+                env:
+                  - name: POSTGRES_PASSWORD
+                    valueFrom:
+                      secretKeyRef:
+                        name: postgres-auth-secret
+                        key: POSTGRES_PASSWORD
+                  - name: DATABASE_URL
+                    value: "host=RDS_AUTH_ENDPOINT port=5432 user=postgres password=$(POSTGRES_PASSWORD) dbname=auth sslmode=require"
+                  - name: JWT_SECRET
+                    valueFrom:
+                      secretKeyRef:
+                        name: jwt-secret
+                        key: JWT_SECRET
+
+  - target:
+      kind: Deployment
+      name: reservation
+      namespace: library
+    patch: |
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: reservation
+        namespace: library
+      spec:
+        template:
+          spec:
+            containers:
+              - name: reservation
+                envFrom:
+                  - configMapRef:
+                      name: reservation-config
+                env:
+                  - name: POSTGRES_PASSWORD
+                    valueFrom:
+                      secretKeyRef:
+                        name: postgres-reservation-secret
+                        key: POSTGRES_PASSWORD
+                  - name: DATABASE_URL
+                    value: "host=RDS_RESERVATION_ENDPOINT port=5432 user=postgres password=$(POSTGRES_PASSWORD) dbname=reservation sslmode=require"
+                  - name: JWT_SECRET
+                    valueFrom:
+                      secretKeyRef:
+                        name: jwt-secret
+                        key: JWT_SECRET
+
+  # --- Ingress patch (NGINX → ALB) ---
+  - target:
+      kind: Ingress
+      name: library-ingress
+      namespace: library
+    patch: |
+      apiVersion: networking.k8s.io/v1
+      kind: Ingress
+      metadata:
+        name: library-ingress
+        namespace: library
+        annotations:
+          alb.ingress.kubernetes.io/scheme: internet-facing
+          alb.ingress.kubernetes.io/target-type: ip
+          alb.ingress.kubernetes.io/listen-ports: '[{"HTTP": 80}]'
+      spec:
+        ingressClassName: alb
+        rules:
+          - http:
+              paths:
+                - path: /
+                  pathType: Prefix
+                  backend:
+                    service:
+                      name: gateway
+                      port:
+                        number: 8080
+
+  # --- ConfigMap patches (Kafka brokers → MSK) ---
+  - target:
+      kind: ConfigMap
+      name: catalog-config
+      namespace: library
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: catalog-config
+        namespace: library
+      data:
+        GRPC_PORT: "50052"
+        KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS"
+        OTEL_COLLECTOR_ENDPOINT: ""
+
+  - target:
+      kind: ConfigMap
+      name: reservation-config
+      namespace: library
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: reservation-config
+        namespace: library
+      data:
+        GRPC_PORT: "50053"
+        KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS"
+        CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
+        MAX_ACTIVE_RESERVATIONS: "5"
+        OTEL_COLLECTOR_ENDPOINT: ""
+
+  - target:
+      kind: ConfigMap
+      name: search-config
+      namespace: library
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: search-config
+        namespace: library
+      data:
+        GRPC_PORT: "50054"
+        KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS"
+        MEILI_URL: "http://meilisearch.data.svc.cluster.local:7700"
+        CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
+
+# Secrets — placeholder values. Chapter 13 replaces these with
+# external-secrets operator syncing from AWS Secrets Manager.
+# Substitute real values from `terraform output` and
+# `aws secretsmanager get-secret-value` before deploying.
+secretGenerator:
+  - name: jwt-secret
+    namespace: library
+    literals:
+      - JWT_SECRET=REPLACE_WITH_PRODUCTION_SECRET
+  - name: postgres-catalog-secret
+    namespace: library
+    literals:
+      - POSTGRES_PASSWORD=REPLACE_WITH_RDS_PASSWORD
+  - name: postgres-auth-secret
+    namespace: library
+    literals:
+      - POSTGRES_PASSWORD=REPLACE_WITH_RDS_PASSWORD
+  - name: postgres-reservation-secret
+    namespace: library
+    literals:
+      - POSTGRES_PASSWORD=REPLACE_WITH_RDS_PASSWORD
+  - name: meilisearch-secret
+    namespace: library
+    literals:
+      - MEILI_MASTER_KEY=REPLACE_WITH_PRODUCTION_KEY
+
+generatorOptions:
+  disableNameSuffixHash: true
