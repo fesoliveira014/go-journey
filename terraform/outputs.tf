@@ -15,3 +15,8 @@ output "rds_master_password_secret_arns" {
   description = "Secrets Manager ARNs for RDS master passwords"
   value       = { for k, v in aws_db_instance.databases : k => v.master_user_secret[0].secret_arn }
 }
+
+output "msk_bootstrap_brokers" {
+  description = "MSK bootstrap broker string (plaintext)"
+  value       = aws_msk_cluster.main.bootstrap_brokers
+}
