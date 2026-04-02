@@ -13,8 +13,8 @@ type User struct {
 	PasswordHash  *string   `gorm:"type:varchar(255)"`
 	Name          string    `gorm:"type:varchar(255);not null"`
 	Role          string    `gorm:"type:varchar(20);not null;default:'user'"`
-	OAuthProvider *string   `gorm:"type:varchar(50)"`
-	OAuthID       *string   `gorm:"type:varchar(255)"`
+	OAuthProvider *string   `gorm:"column:oauth_provider;type:varchar(50)"`
+	OAuthID       *string   `gorm:"column:oauth_id;type:varchar(255)"`
 	CreatedAt     time.Time
 	UpdatedAt     time.Time
 }
