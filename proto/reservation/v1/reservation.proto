@@ -10,6 +10,7 @@ service ReservationService {
   rpc ReturnBook(ReturnBookRequest) returns (ReturnBookResponse);
   rpc GetReservation(GetReservationRequest) returns (Reservation);
   rpc ListUserReservations(ListUserReservationsRequest) returns (ListUserReservationsResponse);
+  rpc ListAllReservations(ListAllReservationsRequest) returns (ListAllReservationsResponse);
 }
 
 message CreateReservationRequest {
@@ -46,4 +47,21 @@ message Reservation {
   google.protobuf.Timestamp reserved_at = 5;
   google.protobuf.Timestamp due_at = 6;
   google.protobuf.Timestamp returned_at = 7;
+}
+
+message ListAllReservationsRequest {}
+
+message ListAllReservationsResponse {
+  repeated ReservationDetail reservations = 1;
+}
+
+message ReservationDetail {
+  string id = 1;
+  string book_id = 2;
+  string user_id = 3;
+  string status = 4;
+  string book_title = 5;
+  string user_email = 6;
+  google.protobuf.Timestamp created_at = 7;
+  google.protobuf.Timestamp returned_at = 8;
 }

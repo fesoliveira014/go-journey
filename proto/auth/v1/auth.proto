@@ -13,6 +13,7 @@ service AuthService {
   rpc GetUser(GetUserRequest) returns (User);
   rpc InitOAuth2(InitOAuth2Request) returns (InitOAuth2Response);
   rpc CompleteOAuth2(CompleteOAuth2Request) returns (AuthResponse);
+  rpc ListUsers(ListUsersRequest) returns (ListUsersResponse);
 }
 
 message User {
@@ -62,4 +63,10 @@ message InitOAuth2Response {
 message CompleteOAuth2Request {
   string code = 1;
   string state = 2;
+}
+
+message ListUsersRequest {}
+
+message ListUsersResponse {
+  repeated User users = 1;
 }
