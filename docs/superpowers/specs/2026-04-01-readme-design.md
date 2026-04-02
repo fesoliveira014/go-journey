@@ -77,7 +77,7 @@ Annotated directory tree of top-level layout:
 ├── terraform/         # AWS infrastructure (EKS, RDS, MSK, ECR)
 ├── docs/              # Tutorial content (mdBook)
 ├── Earthfile          # Build system (lint, test, docker)
-└── go.work            # Go workspace (7 modules)
+└── go.work            # Go workspace (8 modules)
 ```
 
 ### 4. Prerequisites
@@ -102,7 +102,7 @@ Steps:
 1. Clone the repo
 2. `cd deploy && docker compose up --build`
 3. Verify gateway: `curl http://localhost:8080/healthz`
-4. Verify gRPC: `grpcurl -plaintext localhost:50052 catalog.v1.CatalogService/ListBooks`
+4. (Optional, requires grpcurl) Verify gRPC: `grpcurl -plaintext localhost:50052 catalog.v1.CatalogService/ListBooks`
 5. Brief note about hot reload with `docker-compose.dev.yml`
 
 ### 6. Build & Test
