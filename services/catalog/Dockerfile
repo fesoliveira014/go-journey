@@ -29,6 +29,8 @@ RUN CGO_ENABLED=0 go build -o /bin/catalog ./cmd/
 
 # Stage 2: Runtime
 FROM alpine:3.19
+RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder /bin/catalog /usr/local/bin/catalog
+USER app
 EXPOSE 50052
 ENTRYPOINT ["/usr/local/bin/catalog"]

@@ -19,6 +19,8 @@ ENV GOWORK=off
 
 # 1. Copy only go.mod/go.sum for dependency caching
 COPY gen/go.mod gen/go.sum* ./gen/
+COPY pkg/auth/go.mod pkg/auth/go.sum* ./pkg/auth/
+COPY pkg/otel/go.mod pkg/otel/go.sum* ./pkg/otel/
 COPY services/catalog/go.mod services/catalog/go.sum* ./services/catalog/
 
 # 2. Download dependencies (cached unless go.mod changes)
@@ -28,6 +30,8 @@ RUN go mod download
 # 3. Copy source code (invalidates cache only when source changes)
 WORKDIR /app
 COPY gen/ ./gen/
+COPY pkg/auth/ ./pkg/auth/
+COPY pkg/otel/ ./pkg/otel/
 COPY services/catalog/ ./services/catalog/
 
 # 4. Build static binary
@@ -36,7 +40,9 @@ RUN CGO_ENABLED=0 go build -o /bin/catalog ./cmd/
 
 # Stage 2: Runtime
 FROM alpine:3.19
+RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder /bin/catalog /usr/local/bin/catalog
+USER app
 EXPOSE 50052
 ENTRYPOINT ["/usr/local/bin/catalog"]
 ```
@@ -100,12 +106,16 @@ Now we copy the full source. Note that `gen/` contains the protobuf-generated Go
 
 ```dockerfile
 FROM alpine:3.19
+RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder /bin/catalog /usr/local/bin/catalog
+USER app
 EXPOSE 50052
 ENTRYPOINT ["/usr/local/bin/catalog"]
 ```
 
-The runtime stage starts fresh from `alpine:3.19`. Only the compiled binary is copied in. `EXPOSE 50052` documents the gRPC port (it does not publish the port -- that's done at runtime with `-p` or in Compose). `ENTRYPOINT` sets the default command.
+The runtime stage starts fresh from `alpine:3.19`. `addgroup` and `adduser` create a non-root user (`-S` creates a system user with no password and no home directory). `USER app` switches all subsequent commands and the container's runtime process to this user. Only the compiled binary is copied in. `EXPOSE 50052` documents the gRPC port (it does not publish the port -- that's done at runtime with `-p` or in Compose). `ENTRYPOINT` sets the default command.
+
+Running as non-root is a fundamental container security practice. If the process is compromised, the attacker is confined to an unprivileged user instead of having root access inside the container.
 
 ---
 
@@ -176,15 +186,22 @@ Here is `services/gateway/Dockerfile`:
 FROM golang:1.26-alpine AS builder
 WORKDIR /app
 
-# Copy only go.mod first for dependency caching
+ENV GOWORK=off
+
+# Copy go.mod files first for dependency caching
+COPY gen/go.mod gen/go.sum* ./gen/
+COPY pkg/auth/go.mod pkg/auth/go.sum* ./pkg/auth/
+COPY pkg/otel/go.mod pkg/otel/go.sum* ./pkg/otel/
 COPY services/gateway/go.mod services/gateway/go.sum* ./services/gateway/
 
-# Download dependencies (currently none, but pattern is correct for future)
 WORKDIR /app/services/gateway
 RUN go mod download
 
-# Copy source code
+# Copy full source
 WORKDIR /app
+COPY gen/ ./gen/
+COPY pkg/auth/ ./pkg/auth/
+COPY pkg/otel/ ./pkg/otel/
 COPY services/gateway/ ./services/gateway/
 
 # Build static binary
@@ -193,18 +210,21 @@ RUN CGO_ENABLED=0 go build -o /bin/gateway ./cmd/
 
 # Stage 2: Runtime
 FROM alpine:3.19
+RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder /bin/gateway /usr/local/bin/gateway
+COPY --from=builder /app/services/gateway/templates/ /app/templates/
+COPY --from=builder /app/services/gateway/static/ /app/static/
+WORKDIR /app
+USER app
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/gateway"]
 ```
 
-The structure is identical to the Catalog Dockerfile, but simpler:
+The structure mirrors the Catalog Dockerfile. A few differences:
 
-- **No `GOWORK=off`**: The Gateway has no cross-module dependencies (it doesn't import `gen/`), so workspace mode is irrelevant.
-- **No `gen/` copy**: The Gateway is self-contained -- it serves HTTP and will eventually proxy to backend services, but currently has no protobuf dependency.
+- **Templates and static files**: The Gateway serves HTML via Go templates and static assets (CSS, JS). These are copied into `/app/` in the runtime stage, and the `WORKDIR` is set so relative paths resolve correctly.
 - **Port 8080**: The Gateway is an HTTP service, not gRPC.
-
-As the Gateway evolves to call backend services via gRPC, it will need to import `gen/` and the Dockerfile will need the same `GOWORK=off` and `gen/` copy treatment as the Catalog Dockerfile.
+- **Same `GOWORK=off` and dependency pattern**: The Gateway imports `gen/`, `pkg/auth/`, and `pkg/otel/` for gRPC client stubs, JWT validation, and OpenTelemetry instrumentation.
 
 ---
 

@@ -29,6 +29,8 @@ RUN CGO_ENABLED=0 go build -o /bin/reservation ./cmd/
 
 # Stage 2: Runtime
 FROM alpine:3.19
+RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder /bin/reservation /usr/local/bin/reservation
+USER app
 EXPOSE 50053
 ENTRYPOINT ["/usr/local/bin/reservation"]

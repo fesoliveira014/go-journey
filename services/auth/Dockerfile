@@ -26,6 +26,8 @@ RUN CGO_ENABLED=0 go build -o /bin/auth ./cmd/
 
 # Stage 2: Runtime
 FROM alpine:3.19
+RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder /bin/auth /usr/local/bin/auth
+USER app
 EXPOSE 50051
 ENTRYPOINT ["/usr/local/bin/auth"]

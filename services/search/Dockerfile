@@ -27,6 +27,8 @@ RUN CGO_ENABLED=0 go build -o /bin/search ./cmd/
 
 # Stage 2: Runtime
 FROM alpine:3.19
+RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder /bin/search /usr/local/bin/search
+USER app
 EXPOSE 50054
 ENTRYPOINT ["/usr/local/bin/search"]

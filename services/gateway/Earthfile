@@ -41,10 +41,12 @@ build:
 
 docker:
     FROM alpine:3.19
+    RUN addgroup -S app && adduser -S app -G app
     WORKDIR /app
     COPY +build/gateway /usr/local/bin/gateway
     COPY +src/templates /app/templates
     COPY +src/static /app/static
+    USER app
     EXPOSE 8080
     ENTRYPOINT ["/usr/local/bin/gateway"]
     SAVE IMAGE gateway:latest

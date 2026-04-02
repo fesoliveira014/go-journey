@@ -134,11 +134,15 @@ RUN CGO_ENABLED=0 go build -o /bin/server ./cmd/
 
 # Stage 2: Runtime
 FROM alpine:3.19
+RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder /bin/server /usr/local/bin/server
+USER app
 ENTRYPOINT ["/usr/local/bin/server"]
 ```
 
 The `COPY --from=builder` instruction reaches into the builder stage and extracts only the compiled binary. The final image is based on `alpine:3.19` (~5MB), not `golang:1.26-alpine` (~300MB). The total image size ends up around 15-20MB instead of 300+MB.
+
+The `USER app` instruction switches to a non-root user. Running containers as root is a security risk: if the process is compromised, the attacker has root inside the container. Our Go binary is statically linked and needs no elevated privileges, so there is no reason to run as root.
 
 `CGO_ENABLED=0` deserves explanation. Go can link against C libraries via cgo. Setting `CGO_ENABLED=0` disables this and produces a fully static binary with no runtime dependencies on libc. This is what lets us run the binary on a minimal Alpine image (or even `scratch` -- an empty image). Since we are not using any C libraries (GORM's PostgreSQL driver uses pure Go), there is no downside.
 

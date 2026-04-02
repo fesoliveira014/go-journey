@@ -92,6 +92,7 @@ services:
     depends_on:
       postgres-auth:
         condition: service_healthy
+    restart: unless-stopped
     networks:
       - library-net
 
@@ -112,6 +113,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+    restart: unless-stopped
     networks:
       - library-net
 
@@ -135,6 +137,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+    restart: unless-stopped
     networks:
       - library-net
 
@@ -173,6 +176,7 @@ services:
         condition: service_healthy
       kafka:
         condition: service_healthy
+    restart: unless-stopped
     networks:
       - library-net
 
@@ -195,6 +199,13 @@ services:
       - catalog
       - reservation
       - search
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--spider", "http://127.0.0.1:8080/healthz"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
     networks:
       - library-net
 

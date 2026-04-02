@@ -26,9 +26,11 @@ RUN CGO_ENABLED=0 go build -o /bin/gateway ./cmd/
 
 # Stage 2: Runtime
 FROM alpine:3.19
+RUN addgroup -S app && adduser -S app -G app
 COPY --from=builder /bin/gateway /usr/local/bin/gateway
 COPY --from=builder /app/services/gateway/templates/ /app/templates/
 COPY --from=builder /app/services/gateway/static/ /app/static/
 WORKDIR /app
+USER app
 EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/gateway"]
