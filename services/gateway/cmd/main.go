@@ -6,6 +6,9 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"os/signal"
+	"syscall"
+	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -145,9 +148,29 @@ func main() {
 	h = middleware.Logging(h)
 	h = otelhttp.NewHandler(h, "gateway")
 
+	var cancel context.CancelFunc
+	ctx, cancel = signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	addr := fmt.Sprintf(":%s", port)
+
+	server := &http.Server{
+		Addr:    addr,
+		Handler: h,
+	}
+
+	go func() {
+		<-ctx.Done()
+		slog.Info("shutting down gateway")
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer shutdownCancel()
+		if err := server.Shutdown(shutdownCtx); err != nil {
+			slog.Error("gateway shutdown error", "error", err)
+		}
+	}()
+
 	slog.Info("gateway listening", "addr", addr)
-	if err := http.ListenAndServe(addr, h); err != nil {
+	if err := server.ListenAndServe(); err != nil && err != http.ErrServerClosed {
 		slog.Error("server failed", "error", err)
 		os.Exit(1)
 	}
