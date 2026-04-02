@@ -111,6 +111,7 @@ services/<name>/
 | [kubectl](https://kubernetes.io/docs/tasks/tools/) | 12 | Kubernetes CLI |
 | [kind](https://kind.sigs.k8s.io/docs/user/quick-start/#installation) | 12 | Local Kubernetes cluster |
 | [Terraform](https://developer.hashicorp.com/terraform/install) | 13 | AWS infrastructure provisioning |
+| [mdbook](https://rust-lang.github.io/mdBook/) | — | Build and serve the tutorial book |
 
 ## Quick Start
 
@@ -280,3 +281,25 @@ This project is accompanied by a 14-chapter tutorial. Each chapter builds on the
 | 14 | [Production Hardening](docs/src/ch14/index.md) | DNS, TLS, secrets management, Kafka encryption |
 
 Full table of contents: [docs/src/SUMMARY.md](docs/src/SUMMARY.md)
+
+### Building the Book
+
+The tutorial is written as an [mdBook](https://rust-lang.github.io/mdBook/). To build and serve it locally:
+
+```bash
+# Install mdbook and the mermaid preprocessor (requires Rust/Cargo)
+cargo install mdbook mdbook-mermaid
+
+# Build the book (output goes to site/)
+cd docs
+mdbook build
+
+# Or serve with live reload at http://localhost:3001
+mdbook serve --open
+```
+
+The book uses [Mermaid](https://mermaid.js.org/) for architecture diagrams. The `mdbook-mermaid` preprocessor renders them automatically during build.
+
+## Security
+
+All Docker containers run as a non-root user (`app`). Kubernetes manifests include pod and container security contexts (`runAsNonRoot`, `readOnlyRootFilesystem`, `drop: ["ALL"]` capabilities). Secrets are managed via Kustomize `secretGenerator` (local) and External Secrets Operator with AWS Secrets Manager (production). See [Chapter 14](docs/src/ch14/index.md) for the full production hardening walkthrough.
