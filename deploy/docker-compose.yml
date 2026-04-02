@@ -125,6 +125,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
       CATALOG_GRPC_ADDR: ${CATALOG_GRPC_ADDR:-catalog:50052}
+      AUTH_GRPC_ADDR: ${AUTH_GRPC_ADDR:-auth:50051}
       MAX_ACTIVE_RESERVATIONS: ${MAX_ACTIVE_RESERVATIONS:-5}
       OTEL_COLLECTOR_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT:-otel-collector:4317}
     ports:

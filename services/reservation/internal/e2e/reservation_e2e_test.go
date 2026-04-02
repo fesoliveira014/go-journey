@@ -24,6 +24,7 @@ import (
 	gormpostgres "gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
+	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
@@ -43,6 +44,19 @@ func (m *mockCatalogClient) GetBook(ctx context.Context, req *catalogv1.GetBookR
 	return &catalogv1.Book{
 		Id:              req.GetId(),
 		AvailableCopies: 10,
+	}, nil
+}
+
+// mockAuthClient satisfies authv1.AuthServiceClient, always returning
+// a user with a test email.
+type mockAuthClient struct {
+	authv1.AuthServiceClient
+}
+
+func (m *mockAuthClient) GetUser(_ context.Context, req *authv1.GetUserRequest, _ ...grpc.CallOption) (*authv1.User, error) {
+	return &authv1.User{
+		Id:    req.GetId(),
+		Email: "test@example.com",
 	}, nil
 }
 
@@ -201,7 +215,8 @@ func TestReservation_E2E(t *testing.T) {
 	repo := repository.NewReservationRepository(db)
 	catalogClient := &mockCatalogClient{}
 	publisher := &noopPublisher{}
-	svc := rsvc.NewReservationService(repo, catalogClient, publisher, maxActive)
+	authClient := &mockAuthClient{}
+	svc := rsvc.NewReservationService(repo, catalogClient, authClient, publisher, maxActive)
 
 	client := startReservationServer(t, svc, jwtSecret)
 

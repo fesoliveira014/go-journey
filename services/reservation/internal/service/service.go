@@ -8,6 +8,7 @@ import (
 
 	"github.com/google/uuid"
 
+	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/model"
@@ -20,6 +21,7 @@ type ReservationRepository interface {
 	GetByID(ctx context.Context, id uuid.UUID) (*model.Reservation, error)
 	CountActive(ctx context.Context, userID uuid.UUID) (int64, error)
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]*model.Reservation, error)
+	ListAll(ctx context.Context) ([]*model.Reservation, error)
 	Update(ctx context.Context, r *model.Reservation) (*model.Reservation, error)
 }
 
@@ -38,6 +40,7 @@ type EventPublisher interface {
 type ReservationService struct {
 	repo      ReservationRepository
 	catalog   catalogv1.CatalogServiceClient
+	auth      authv1.AuthServiceClient
 	publisher EventPublisher
 	maxActive int
 }
@@ -45,15 +48,49 @@ type ReservationService struct {
 func NewReservationService(
 	repo ReservationRepository,
 	catalog catalogv1.CatalogServiceClient,
+	auth authv1.AuthServiceClient,
 	publisher EventPublisher,
 	maxActive int,
 ) *ReservationService {
 	return &ReservationService{
 		repo:      repo,
 		catalog:   catalog,
+		auth:      auth,
 		publisher: publisher,
 		maxActive: maxActive,
 	}
+}
+
+type ReservationDetail struct {
+	model.Reservation
+	BookTitle string
+	UserEmail string
+}
+
+func (s *ReservationService) ListAllReservations(ctx context.Context) ([]ReservationDetail, error) {
+	reservations, err := s.repo.ListAll(ctx)
+	if err != nil {
+		return nil, err
+	}
+	details := make([]ReservationDetail, len(reservations))
+	for i, r := range reservations {
+		details[i] = ReservationDetail{Reservation: *r}
+		book, err := s.catalog.GetBook(ctx, &catalogv1.GetBookRequest{Id: r.BookID.String()})
+		if err != nil {
+			slog.WarnContext(ctx, "failed to resolve book title", "book_id", r.BookID, "error", err)
+			details[i].BookTitle = r.BookID.String()
+		} else {
+			details[i].BookTitle = book.Title
+		}
+		user, err := s.auth.GetUser(ctx, &authv1.GetUserRequest{Id: r.UserID.String()})
+		if err != nil {
+			slog.WarnContext(ctx, "failed to resolve user email", "user_id", r.UserID, "error", err)
+			details[i].UserEmail = r.UserID.String()
+		} else {
+			details[i].UserEmail = user.Email
+		}
+	}
+	return details, nil
 }
 
 func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.UUID) (*model.Reservation, error) {

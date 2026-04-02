@@ -10,7 +10,9 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
+	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/model"
+	"github.com/fesoliveira014/library-system/services/reservation/internal/service"
 )
 
 type Service interface {
@@ -18,6 +20,7 @@ type Service interface {
 	ReturnBook(ctx context.Context, reservationID uuid.UUID) (*model.Reservation, error)
 	GetReservation(ctx context.Context, reservationID uuid.UUID) (*model.Reservation, error)
 	ListUserReservations(ctx context.Context) ([]*model.Reservation, error)
+	ListAllReservations(ctx context.Context) ([]service.ReservationDetail, error)
 }
 
 type ReservationHandler struct {
@@ -83,6 +86,34 @@ func (h *ReservationHandler) ListUserReservations(ctx context.Context, _ *reserv
 		protos[i] = reservationToProto(r)
 	}
 	return &reservationv1.ListUserReservationsResponse{Reservations: protos}, nil
+}
+
+func (h *ReservationHandler) ListAllReservations(ctx context.Context, _ *reservationv1.ListAllReservationsRequest) (*reservationv1.ListAllReservationsResponse, error) {
+	if err := pkgauth.RequireRole(ctx, "admin"); err != nil {
+		return nil, err
+	}
+
+	details, err := h.svc.ListAllReservations(ctx)
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+
+	protos := make([]*reservationv1.ReservationDetail, len(details))
+	for i, d := range details {
+		protos[i] = &reservationv1.ReservationDetail{
+			Id:        d.ID.String(),
+			BookId:    d.BookID.String(),
+			UserId:    d.UserID.String(),
+			Status:    d.Status,
+			BookTitle: d.BookTitle,
+			UserEmail: d.UserEmail,
+			CreatedAt: timestamppb.New(d.ReservedAt),
+		}
+		if d.ReturnedAt != nil {
+			protos[i].ReturnedAt = timestamppb.New(*d.ReturnedAt)
+		}
+	}
+	return &reservationv1.ListAllReservationsResponse{Reservations: protos}, nil
 }
 
 func reservationToProto(r *model.Reservation) *reservationv1.Reservation {

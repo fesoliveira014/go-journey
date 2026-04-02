@@ -25,6 +25,7 @@ import (
 	"gorm.io/gorm"
 	"gorm.io/plugin/opentelemetry/tracing"
 
+	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
@@ -65,6 +66,10 @@ func main() {
 	if catalogAddr == "" {
 		catalogAddr = "localhost:50052"
 	}
+	authAddr := os.Getenv("AUTH_GRPC_ADDR")
+	if authAddr == "" {
+		authAddr = "localhost:50051"
+	}
 	maxActiveStr := os.Getenv("MAX_ACTIVE_RESERVATIONS")
 	maxActive := 5
 	if maxActiveStr != "" {
@@ -101,6 +106,17 @@ func main() {
 	defer catalogConn.Close()
 	catalogClient := catalogv1.NewCatalogServiceClient(catalogConn)
 
+	authConn, err := grpc.NewClient(authAddr,
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+	)
+	if err != nil {
+		slog.Error("connect to auth service", "error", err)
+		os.Exit(1)
+	}
+	defer authConn.Close()
+	authClient := authv1.NewAuthServiceClient(authConn)
+
 	brokers := strings.Split(kafkaBrokers, ",")
 	publisher, err := kafka.NewPublisher(brokers, "reservations")
 	if err != nil {
@@ -110,7 +126,7 @@ func main() {
 	defer publisher.Close()
 
 	repo := repository.NewReservationRepository(db)
-	reservationSvc := service.NewReservationService(repo, catalogClient, publisher, maxActive)
+	reservationSvc := service.NewReservationService(repo, catalogClient, authClient, publisher, maxActive)
 	reservationHandler := handler.NewReservationHandler(reservationSvc)
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)

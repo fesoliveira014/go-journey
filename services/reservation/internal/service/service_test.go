@@ -10,6 +10,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/model"
@@ -23,6 +24,7 @@ type mockRepo struct {
 	getByIDFn     func(ctx context.Context, id uuid.UUID) (*model.Reservation, error)
 	countActiveFn func(ctx context.Context, userID uuid.UUID) (int64, error)
 	listByUserFn  func(ctx context.Context, userID uuid.UUID) ([]*model.Reservation, error)
+	listAllFn     func(ctx context.Context) ([]*model.Reservation, error)
 	updateFn      func(ctx context.Context, r *model.Reservation) (*model.Reservation, error)
 }
 
@@ -37,6 +39,9 @@ func (m *mockRepo) CountActive(ctx context.Context, userID uuid.UUID) (int64, er
 }
 func (m *mockRepo) ListByUser(ctx context.Context, userID uuid.UUID) ([]*model.Reservation, error) {
 	return m.listByUserFn(ctx, userID)
+}
+func (m *mockRepo) ListAll(ctx context.Context) ([]*model.Reservation, error) {
+	return m.listAllFn(ctx)
 }
 func (m *mockRepo) Update(ctx context.Context, r *model.Reservation) (*model.Reservation, error) {
 	return m.updateFn(ctx, r)
@@ -74,6 +79,32 @@ func (m *mockPublisher) Publish(_ context.Context, event service.ReservationEven
 	return nil
 }
 
+type mockAuthClient struct {
+	getUserFn func(ctx context.Context, in *authv1.GetUserRequest, opts ...grpc.CallOption) (*authv1.User, error)
+}
+
+func (m *mockAuthClient) Register(context.Context, *authv1.RegisterRequest, ...grpc.CallOption) (*authv1.AuthResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+func (m *mockAuthClient) Login(context.Context, *authv1.LoginRequest, ...grpc.CallOption) (*authv1.AuthResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+func (m *mockAuthClient) ValidateToken(context.Context, *authv1.ValidateTokenRequest, ...grpc.CallOption) (*authv1.ValidateTokenResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+func (m *mockAuthClient) GetUser(ctx context.Context, in *authv1.GetUserRequest, opts ...grpc.CallOption) (*authv1.User, error) {
+	return m.getUserFn(ctx, in, opts...)
+}
+func (m *mockAuthClient) InitOAuth2(context.Context, *authv1.InitOAuth2Request, ...grpc.CallOption) (*authv1.InitOAuth2Response, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+func (m *mockAuthClient) CompleteOAuth2(context.Context, *authv1.CompleteOAuth2Request, ...grpc.CallOption) (*authv1.AuthResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+func (m *mockAuthClient) ListUsers(context.Context, *authv1.ListUsersRequest, ...grpc.CallOption) (*authv1.ListUsersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+
 // --- Tests ---
 
 func userCtx(userID uuid.UUID) context.Context {
@@ -98,7 +129,7 @@ func TestCreateReservation_Success(t *testing.T) {
 		},
 	}
 
-	svc := service.NewReservationService(repo, catalog, pub, 5)
+	svc := service.NewReservationService(repo, catalog, nil, pub, 5)
 	res, err := svc.CreateReservation(userCtx(userID), bookID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -126,7 +157,7 @@ func TestCreateReservation_MaxReservations(t *testing.T) {
 	}
 	catalog := &mockCatalog{}
 
-	svc := service.NewReservationService(repo, catalog, pub, 5)
+	svc := service.NewReservationService(repo, catalog, nil, pub, 5)
 	_, err := svc.CreateReservation(userCtx(userID), uuid.New())
 	if err == nil {
 		t.Fatal("expected error for max reservations")
@@ -149,7 +180,7 @@ func TestCreateReservation_NoAvailableCopies(t *testing.T) {
 		},
 	}
 
-	svc := service.NewReservationService(repo, catalog, pub, 5)
+	svc := service.NewReservationService(repo, catalog, nil, pub, 5)
 	_, err := svc.CreateReservation(userCtx(userID), uuid.New())
 	if err != model.ErrNoAvailableCopies {
 		t.Errorf("expected ErrNoAvailableCopies, got %v", err)
@@ -178,7 +209,7 @@ func TestReturnBook_Success(t *testing.T) {
 		},
 	}
 
-	svc := service.NewReservationService(repo, nil, pub, 5)
+	svc := service.NewReservationService(repo, nil, nil, pub, 5)
 	res, err := svc.ReturnBook(userCtx(userID), resID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -207,7 +238,7 @@ func TestReturnBook_WrongUser(t *testing.T) {
 		},
 	}
 
-	svc := service.NewReservationService(repo, nil, &mockPublisher{}, 5)
+	svc := service.NewReservationService(repo, nil, nil, &mockPublisher{}, 5)
 	_, err := svc.ReturnBook(userCtx(otherID), resID)
 	if err == nil {
 		t.Fatal("expected permission denied error")
@@ -226,7 +257,7 @@ func TestReturnBook_AlreadyReturned(t *testing.T) {
 		},
 	}
 
-	svc := service.NewReservationService(repo, nil, &mockPublisher{}, 5)
+	svc := service.NewReservationService(repo, nil, nil, &mockPublisher{}, 5)
 	_, err := svc.ReturnBook(userCtx(userID), resID)
 	if err != model.ErrAlreadyReturned {
 		t.Errorf("expected ErrAlreadyReturned, got %v", err)
@@ -257,7 +288,7 @@ func TestListUserReservations_ExpiresOnRead(t *testing.T) {
 		},
 	}
 
-	svc := service.NewReservationService(repo, nil, pub, 5)
+	svc := service.NewReservationService(repo, nil, nil, pub, 5)
 	list, err := svc.ListUserReservations(userCtx(userID))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -273,5 +304,48 @@ func TestListUserReservations_ExpiresOnRead(t *testing.T) {
 	}
 	if len(pub.events) != 1 || pub.events[0].Type != "reservation.expired" {
 		t.Errorf("expected one reservation.expired event, got %v", pub.events)
+	}
+}
+
+func TestReservationService_ListAllReservations(t *testing.T) {
+	userID := uuid.New()
+	bookID := uuid.New()
+	now := time.Now()
+
+	repo := &mockRepo{
+		listAllFn: func(_ context.Context) ([]*model.Reservation, error) {
+			return []*model.Reservation{
+				{
+					ID: uuid.New(), UserID: userID, BookID: bookID,
+					Status: model.StatusActive, ReservedAt: now,
+					DueAt: now.Add(14 * 24 * time.Hour),
+				},
+			}, nil
+		},
+	}
+	catalog := &mockCatalog{
+		getBookFn: func(_ context.Context, in *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
+			return &catalogv1.Book{Id: in.Id, Title: "Test Book"}, nil
+		},
+	}
+	auth := &mockAuthClient{
+		getUserFn: func(_ context.Context, in *authv1.GetUserRequest, _ ...grpc.CallOption) (*authv1.User, error) {
+			return &authv1.User{Id: in.Id, Email: "user@example.com"}, nil
+		},
+	}
+
+	svc := service.NewReservationService(repo, catalog, auth, &mockPublisher{}, 5)
+	details, err := svc.ListAllReservations(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if len(details) != 1 {
+		t.Fatalf("expected 1 detail, got %d", len(details))
+	}
+	if details[0].BookTitle != "Test Book" {
+		t.Errorf("expected book title %q, got %q", "Test Book", details[0].BookTitle)
+	}
+	if details[0].UserEmail != "user@example.com" {
+		t.Errorf("expected user email %q, got %q", "user@example.com", details[0].UserEmail)
 	}
 }

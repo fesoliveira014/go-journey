@@ -53,6 +53,14 @@ func (r *ReservationRepository) ListByUser(ctx context.Context, userID uuid.UUID
 	return reservations, err
 }
 
+func (r *ReservationRepository) ListAll(ctx context.Context) ([]*model.Reservation, error) {
+	var reservations []*model.Reservation
+	if err := r.db.WithContext(ctx).Order("reserved_at DESC").Find(&reservations).Error; err != nil {
+		return nil, err
+	}
+	return reservations, nil
+}
+
 func (r *ReservationRepository) Update(ctx context.Context, res *model.Reservation) (*model.Reservation, error) {
 	if err := r.db.WithContext(ctx).Save(res).Error; err != nil {
 		return nil, err
