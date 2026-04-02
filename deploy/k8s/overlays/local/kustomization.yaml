@@ -1,0 +1,31 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Generate secrets with actual values for local development
+secretGenerator:
+  - name: jwt-secret
+    namespace: library
+    literals:
+      - JWT_SECRET=dev-secret-change-in-production
+  - name: postgres-catalog-secret
+    namespace: data
+    literals:
+      - POSTGRES_PASSWORD=postgres
+  - name: postgres-auth-secret
+    namespace: data
+    literals:
+      - POSTGRES_PASSWORD=postgres
+  - name: postgres-reservation-secret
+    namespace: data
+    literals:
+      - POSTGRES_PASSWORD=postgres
+  - name: meilisearch-secret
+    namespace: data
+    literals:
+      - MEILI_MASTER_KEY=dev-master-key-change-in-production
+
+generatorOptions:
+  disableNameSuffixHash: true

@@ -1,0 +1,13 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - ../../base
+
+# Chapter 12 fills this in with:
+# - Larger resource limits
+# - imagePullPolicy: Always with tagged images from ECR
+# - Multiple replicas for application Deployments
+# - Real Secrets via external-secrets operator
+# - RDS endpoints replacing Postgres StatefulSets (remove from resources, patch ConfigMaps)
+# - ALB Ingress Controller annotations
