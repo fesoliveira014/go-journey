@@ -3,6 +3,11 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+  id-token: write  # Required for Terraform plan with OIDC
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -14,3 +19,20 @@ jobs:
           version: v0.8.15
       - name: Run CI
         run: earthly +ci
+
+  # Optional: uncomment to run terraform plan on PRs that modify infrastructure
+  # terraform-plan:
+  #   runs-on: ubuntu-latest
+  #   if: contains(github.event.pull_request.changed_files, 'terraform/')
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #     - uses: aws-actions/configure-aws-credentials@v4
+  #       with:
+  #         role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}
+  #         aws-region: ${{ vars.AWS_REGION }}
+  #     - uses: hashicorp/setup-terraform@v3
+  #     - name: Terraform Plan
+  #       run: |
+  #         cd terraform
+  #         terraform init
+  #         terraform plan -no-color
