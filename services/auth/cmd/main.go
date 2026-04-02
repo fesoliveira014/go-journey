@@ -1,16 +1,21 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"log"
 	"net"
 	"os"
+	"os/signal"
+	"syscall"
 
 	"github.com/golang-migrate/migrate/v4"
 	pgmigrate "github.com/golang-migrate/migrate/v4/database/postgres"
 	_ "github.com/golang-migrate/migrate/v4/source/file"
 	"github.com/golang-migrate/migrate/v4/source/iofs"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -63,6 +68,9 @@ func main() {
 	authSvc := service.NewAuthService(userRepo, jwtSecret, jwtExpiry)
 	authHandler := handler.NewAuthHandlerWithOAuth(authSvc, googleClientID, googleClientSecret, googleRedirectURL)
 
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	// Start gRPC server with auth interceptor
 	skipMethods := []string{
 		"/auth.v1.AuthService/Register",
@@ -81,6 +89,17 @@ func main() {
 	grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 	authv1.RegisterAuthServiceServer(grpcServer, authHandler)
 	reflection.Register(grpcServer)
+
+	healthServer := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, healthServer)
+	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+
+	go func() {
+		<-ctx.Done()
+		log.Println("shutting down auth service")
+		healthServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
+		grpcServer.GracefulStop()
+	}()
 
 	log.Printf("auth service listening on :%s", grpcPort)
 	if err := grpcServer.Serve(lis); err != nil {
