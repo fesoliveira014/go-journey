@@ -290,6 +290,9 @@ grpcurl -plaintext \
 ```
 
 **Promote the user to admin via SQL:**
+
+> We'll build a proper CLI for this in Chapter 6. For now, you can promote manually:
+
 ```bash
 docker exec -it postgres-auth psql -U postgres -d auth -c \
   "UPDATE users SET role = 'admin' WHERE email = 'alice@example.com';"

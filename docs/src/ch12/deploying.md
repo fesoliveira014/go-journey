@@ -1,214 +1,70 @@
-# 12.9 Deploying and Verifying
+# 12.7 Deploying and Verifying
 
-This section is the payoff for everything in Chapter 12. The Terraform modules are written, the production Kustomize overlay is configured, and the ECR repositories, RDS cluster, and MSK broker are defined in code. Now you actually run it.
+Everything is in place. The code changes that make services cluster-aware are committed. The Kubernetes manifests — Deployments, Services, ConfigMaps, PersistentVolumeClaims — are written. Kustomize knows about the `local` overlay. The kind cluster is running with NGINX installed.
 
-**This costs real money.** The infrastructure spun up here — an EKS cluster with managed node groups, a Multi-AZ RDS Aurora cluster, an MSK broker, a NAT Gateway, and an Application Load Balancer — runs roughly $8–15 per day. Tear everything down with `terraform destroy` when you are finished. The teardown section at the end of this chapter shows the exact steps.
-
-If you prefer not to deploy, the verification and troubleshooting sections describe the expected outputs at each step so you can follow along without incurring costs.
+This section walks through the final steps: building images, loading them into the cluster, applying the manifests, and confirming that the system actually works.
 
 ---
 
-## Provision Infrastructure with Terraform
+## Build and Load Images
 
-Start in the `terraform/` directory.
+The first step is getting fresh images into the kind node. As covered in Section 12.2, kind nodes run their own `containerd` daemon and cannot see images in the host Docker daemon. You must build and then explicitly load.
 
-**Initialize the working directory:**
-
-```bash
-terraform init
-```
-
-This downloads the AWS, Kubernetes, and Helm providers defined in `versions.tf`, initializes the S3 backend for remote state, and sets up the module cache. Expected output ends with:
-
-```
-Terraform has been successfully initialized!
-```
-
-**Preview the plan:**
-
-```bash
-terraform plan -out=tfplan
-```
-
-Terraform will print a summary of every resource it intends to create. On first apply this is a long list — VPC, subnets, security groups, IAM roles, EKS cluster, node group, RDS cluster, MSK cluster, ECR repositories, and the ALB controller Helm release. Review the summary. If anything looks unexpected, stop here.
-
-**Apply:**
-
-```bash
-terraform apply tfplan
-```
-
-This takes approximately 15–20 minutes. The EKS control plane alone takes 10–12 minutes; RDS and MSK initialization add several more. The terminal will stream resource creation events as they complete. Expected final output:
-
-```
-Apply complete! Resources: 47 added, 0 changed, 0 destroyed.
-
-Outputs:
-
-ecr_repository_urls = {
-  "auth"        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/auth"
-  "catalog"     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/catalog"
-  ...
-}
-cluster_name             = "library-system"
-msk_bootstrap_brokers_tls = "b-1.xxxxx.kafka.us-east-1.amazonaws.com:9094,..."
-rds_endpoints            = {
-  "auth"        = "library-system-auth.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
-  "catalog"     = "library-system-catalog.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
-  "reservation" = "library-system-reservation.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
-}
-```
-
-Save these output values — you will need them in the next steps. You can always retrieve them later with `terraform output`.
-
----
-
-## Configure kubectl
-
-Connect your local `kubectl` to the new EKS cluster:
-
-```bash
-aws eks update-kubeconfig \
-  --region us-east-1 \
-  --name library-production
-```
-
-This writes a new context to `~/.kube/config` and sets it as the active context. Verify the connection:
-
-```bash
-kubectl cluster-info
-```
-
-Expected output:
-
-```
-Kubernetes control plane is running at https://XXXXXXXXXXXX.gr7.us-east-1.eks.amazonaws.com
-CoreDNS is running at https://XXXXXXXXXXXX.gr7.us-east-1.eks.amazonaws.com/api/v1/namespaces/kube-system/services/kube-dns:dns/proxy
-```
-
----
-
-## Verify AWS Resources
-
-Before deploying the application, confirm the three managed services came up correctly.
-
-**ECR repositories:**
-
-```bash
-aws ecr describe-repositories \
-  --query 'repositories[*].repositoryName' \
-  --output table
-```
-
-You should see entries for `library/gateway`, `library/auth`, `library/catalog`, `library/reservation`, and `library/search`.
-
-**RDS instances:**
-
-```bash
-aws rds describe-db-instances \
-  --query 'DBInstances[?starts_with(DBInstanceIdentifier,`library-system`)].{Identifier:DBInstanceIdentifier,Status:DBInstanceStatus,Endpoint:Endpoint.Address}' \
-  --output table
-```
-
-You should see three rows — one per service database — with `Status` reading `available`.
-
-**MSK cluster:**
-
-```bash
-aws kafka list-clusters \
-  --query 'ClusterInfoList[*].{Name:ClusterName,State:State}' \
-  --output table
-```
-
-The `State` column should read `ACTIVE`.
-
----
-
-## Retrieve RDS Credentials
-
-Terraform stored the RDS master password in AWS Secrets Manager. Retrieve it now — you will need it to create the per-service database users and to populate the Kubernetes secrets in the production overlay.
-
-```bash
-aws secretsmanager get-secret-value \
-  --secret-id library/rds/master \
-  --query SecretString \
-  --output text | jq .
-```
-
-Expected output:
-
-```json
-{
-  "username": "library_master",
-  "password": "GENERATED_PASSWORD",
-  "engine": "postgres",
-  "host": "library-cluster.cluster-xxxxxxxxxxxx.us-east-1.rds.amazonaws.com",
-  "port": 5432,
-  "dbname": "library"
-}
-```
-
-Use these values to update `deploy/k8s/overlays/production/secrets.env` before pushing to ECR and deploying. Do not commit the password to git — the overlay reads it from a local file that is listed in `.gitignore`.
-
----
-
-## Push Images to ECR
-
-Authenticate Docker to ECR, then build and push each service image.
-
-**Authenticate:**
-
-```bash
-ECR_REGISTRY=$(terraform output -raw ecr_registry)
-
-aws ecr get-login-password --region us-east-1 \
-  | docker login --username AWS --password-stdin "$ECR_REGISTRY"
-```
-
-Expected output: `Login Succeeded`
-
-**Build images with Earthly:**
+**Build all service images with Earthly:**
 
 ```bash
 earthly +docker
 ```
 
-**Tag and push each image:**
+This runs the `+docker` target defined in the root `Earthfile`, which builds each service image and tags them under `library-system/`. After it completes, verify they exist locally:
 
 ```bash
-SERVICES=(gateway auth catalog reservation search)
-
-for svc in "${SERVICES[@]}"; do
-  docker tag "library-system/${svc}:latest" "${ECR_REGISTRY}/library/${svc}:latest"
-  docker push "${ECR_REGISTRY}/library/${svc}:latest"
-  echo "Pushed ${svc}"
-done
+docker images | grep library-system
 ```
 
-Each push uploads the image layers to the corresponding ECR repository. Layers are deduplicated across pushes — common base layers (the distroless runtime, the Go standard library) are only uploaded once. On a fast connection this completes in under two minutes.
+**Load each image into the kind node:**
+
+```bash
+kind load docker-image library-system/gateway:latest     --name library
+kind load docker-image library-system/auth:latest        --name library
+kind load docker-image library-system/catalog:latest     --name library
+kind load docker-image library-system/reservation:latest --name library
+kind load docker-image library-system/search:latest      --name library
+```
+
+Each `kind load` command copies the image tarball from the host Docker daemon into the `containerd` image store inside the `library-control-plane` container. This is a local copy operation — no registry push, no internet access required.
+
+**Confirm the images are visible inside the node:**
+
+```bash
+docker exec library-control-plane crictl images | grep library-system
+```
+
+`crictl` is the `containerd` CLI bundled inside kind nodes. You should see all five images listed. If one is missing, re-run the corresponding `kind load` command before proceeding. Attempting to deploy with a missing image results in `ImagePullBackOff`, because Kubernetes will attempt a registry pull that will fail.
 
 ---
 
-## Deploy to EKS
+## Deploy
 
-Apply the production Kustomize overlay:
+With the images in place, apply the Kustomize overlay:
 
 ```bash
-kubectl apply -k deploy/k8s/overlays/production
+kubectl apply -k deploy/k8s/overlays/local
 ```
 
-The production overlay references the ECR image URIs rather than local names, and uses `StorageClass: gp3` (backed by EBS) for persistent volumes. Expected output:
+The `-k` flag tells `kubectl` to run Kustomize against that directory before applying. Kustomize expands the overlay — merging the base resources with the local patches and the namespace declarations — and streams the result to the Kubernetes API server. You will see output like:
 
 ```
 namespace/library created
 namespace/infra created
-serviceaccount/catalog created
-serviceaccount/reservation created
-serviceaccount/auth created
-serviceaccount/search created
-serviceaccount/gateway created
 configmap/library-config created
 secret/library-secrets created
+persistentvolumeclaim/postgres-pvc created
+persistentvolumeclaim/kafka-pvc created
+deployment.apps/postgres created
+service/postgres created
+deployment.apps/kafka created
+service/kafka created
 deployment.apps/auth created
 service/auth created
 deployment.apps/catalog created
@@ -222,21 +78,37 @@ service/gateway created
 ingress.networking.k8s.io/gateway created
 ```
 
-Note that the production overlay does not deploy Kafka or PostgreSQL as in-cluster workloads — those are replaced by MSK and RDS. The `infra` namespace is created for consistency but remains empty in production.
+Kubernetes creates the namespaces first (ordering matters — resources that reference a namespace will fail if it does not exist yet), then the infrastructure workloads, then the application services. The apply is declarative: running the same command again is safe and idempotent.
 
-**Watch the pods come up:**
+**Wait for infrastructure pods first:**
+
+```bash
+kubectl wait --namespace infra \
+  --for=condition=ready pod \
+  --selector=app=postgres \
+  --timeout=120s
+
+kubectl wait --namespace infra \
+  --for=condition=ready pod \
+  --selector=app=kafka \
+  --timeout=120s
+```
+
+The application services have startup probes and will restart if the database or broker is not yet accepting connections. Waiting explicitly here avoids a wave of early `CrashLoopBackOff` restarts that can obscure real errors.
+
+**Watch the application pods come up:**
 
 ```bash
 kubectl get pods -n library --watch
 ```
 
-The ALB controller provisions the load balancer asynchronously after the Ingress resource is created — this can take 2–3 minutes. The pods themselves should reach `Running` within 60 seconds.
+Within 30–60 seconds all pods should transition from `ContainerCreating` to `Running`. Press `Ctrl+C` once they stabilize.
 
 ---
 
 ## Verification Checklist
 
-Work through these steps in order.
+Work through these steps in order. Each one builds on the previous.
 
 ### 1. All pods running
 
@@ -244,70 +116,80 @@ Work through these steps in order.
 kubectl get pods -A
 ```
 
-Expected state: every pod in the `library` namespace shows `Running` and `1/1` or `2/2` READY. The `kube-system` namespace should show CoreDNS, the AWS node daemon, and the ALB controller all running.
+Expected state: every pod shows `Running` with restarts at 0 or 1 (one early restart for services that briefly beat the DB readiness probe is acceptable). Pods stuck in `Pending`, `CrashLoopBackOff`, or `ImagePullBackOff` need attention — see the troubleshooting table below.
 
-### 2. Ingress has an ADDRESS
+### 2. Catalog logs clean
 
-```bash
-kubectl get ingress -n library
-```
-
-Expected output:
-
-```
-NAME      CLASS   HOSTS   ADDRESS                                                        PORTS   AGE
-gateway   alb     *       k8s-library-gateway-xxxxxxxxxxxx.us-east-1.elb.amazonaws.com   80      4m
-```
-
-The ADDRESS column contains the ALB DNS name. If it is empty after five minutes, check the troubleshooting table below.
-
-### 3. Gateway health check
-
-```bash
-ALB=$(kubectl get ingress -n library gateway \
-  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
-
-curl -s "http://${ALB}/healthz"
-```
-
-Expected response:
-
-```json
-{"status":"ok"}
-```
-
-This confirms: ALB routing, target group registration, and the Gateway pod responding to HTTP.
-
-### 4. Catalog logs clean
+Pick one service and confirm it started without errors:
 
 ```bash
 kubectl logs -n library deployment/catalog
 ```
 
-Look for the startup sequence: database connection established, Kafka producer initialized, gRPC server listening. No `ERROR` lines, no connection refused, no repeated retry loops.
+You should see the service log its startup message and indicate that it has connected to PostgreSQL and registered with Kafka. No `ERROR` lines, no stack traces, no repeated connection failures.
+
+### 3. Health check via port-forward and grpcurl
+
+The services expose a gRPC health check endpoint. Test catalog directly, bypassing the Ingress:
+
+```bash
+kubectl port-forward -n library svc/catalog 50051:50051 &
+
+grpcurl -plaintext localhost:50051 grpc.health.v1.Health/Check
+```
+
+Expected response:
+
+```json
+{
+  "status": "SERVING"
+}
+```
+
+Kill the port-forward when done:
+
+```bash
+kill %1
+```
+
+This verifies that the pod is alive and the gRPC server is responding before you involve the Gateway or Ingress.
+
+### 4. Gateway via Ingress
+
+The Ingress routes `http://library.local` to the Gateway service. For this to work, `library.local` must resolve to `127.0.0.1` — add it to `/etc/hosts` if you have not already:
+
+```
+127.0.0.1 library.local
+```
+
+Then test the HTTP API:
+
+```bash
+curl http://library.local/health
+```
+
+A 200 response confirms the full path: DNS resolution, NGINX Ingress, Gateway Service, Gateway pod. If you get a 404 or connection refused, check the troubleshooting table.
 
 ### 5. End-to-end flow: create a book, verify in search
 
-```bash
-ALB=$(kubectl get ingress -n library gateway \
-  -o jsonpath='{.status.loadBalancer.ingress[0].hostname}')
+Create a book through the catalog API:
 
-# Create a book
-curl -s -X POST "http://${ALB}/api/catalog/books" \
+```bash
+curl -s -X POST http://library.local/api/catalog/books \
   -H "Content-Type: application/json" \
   -d '{"title":"The Go Programming Language","author":"Donovan & Kernighan","isbn":"978-0134190440"}' \
   | jq .
 ```
 
-The response includes the assigned `id`. Then verify it is indexed in search — this exercises the full MSK event path:
+The response should include the assigned `id`. Then verify it appears in search:
 
 ```bash
-sleep 3  # allow the Kafka consumer to process the event
-
-curl -s "http://${ALB}/api/search?q=Go+Programming" | jq .
+curl -s "http://library.local/api/search?q=Go+Programming" | jq .
 ```
 
-The result should contain the book you just created. If the catalog write succeeds but search returns empty, check the MSK bootstrap string in the application ConfigMap against `terraform output msk_bootstrap`.
+The search result should include the book you just created. This exercises: Gateway routing, Catalog service, PostgreSQL persistence, and the Search service (which is populated via a Kafka event emitted when the book was created).
+
+**Note on telemetry:** `OTEL_COLLECTOR_ENDPOINT` is intentionally empty in the `local` overlay — the kind cluster does not run an OpenTelemetry Collector. Traces and metrics are not collected in this environment. The services log a warning at startup but continue normally. Full observability will be configured in Chapter 14 when the stack is deployed to EKS.
 
 ---
 
@@ -315,118 +197,51 @@ The result should contain the book you just created. If the catalog write succee
 
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
-| `ImagePullBackOff` | ECR permissions or wrong image URI | Verify the node IAM role has `AmazonEC2ContainerRegistryReadOnly`. Check `kubectl describe pod <pod>` for the exact URI Kubernetes tried to pull. Compare with `aws ecr describe-repositories`. |
-| `CrashLoopBackOff` | RDS or MSK unreachable at startup | Check security group rules: the EKS node security group must be allowed inbound on port 5432 (RDS) and 9094 (MSK TLS). Run `kubectl logs <pod> -n library --previous` for the actual error. |
-| Ingress no ADDRESS | ALB controller not running or subnet tags missing | Check `kubectl get pods -n kube-system | grep aws-load-balancer`. Public subnets need `kubernetes.io/role/elb: 1` tag; private subnets need `kubernetes.io/role/internal-elb: 1`. |
-| Pods `Pending` | Node capacity exhausted | Check `kubectl describe pod <pod>` for `Insufficient cpu` or `Insufficient memory`. Review the node group scaling limits in `terraform/eks.tf` and increase `max_size`. |
-| RDS connection refused | RDS security group misconfigured | Verify the RDS security group has an inbound rule allowing the EKS node security group on port 5432. Check with `aws ec2 describe-security-groups --group-ids <rds-sg-id>`. |
-| MSK timeout on startup | Wrong bootstrap string in ConfigMap | Run `terraform output msk_bootstrap_brokers_tls` and compare with the value in `kubectl get configmap library-config -n library -o yaml`. Update and re-apply if they differ. |
+| `ImagePullBackOff` | Image not loaded into kind | Re-run `kind load docker-image <image> --name library`. Confirm with `docker exec library-control-plane crictl images`. |
+| `CrashLoopBackOff` | Bad env var, missing secret, or DB not ready | `kubectl logs <pod> -n library`. Check previous run with `kubectl logs <pod> -n library --previous`. |
+| Pod stuck in `Pending` | PVC cannot bind — no matching StorageClass | kind ships with a `standard` StorageClass backed by `rancher.io/local-path`. Run `kubectl get sc` and verify your PVC requests `standard`. |
+| DNS resolution failure inside a pod | Service FQDN truncated or wrong namespace | Use the full FQDN: `<service>.<namespace>.svc.cluster.local`. Run `kubectl exec -it <pod> -- nslookup <service>.<namespace>` to test. |
+| Ingress returns 404 | NGINX controller not ready, or wrong `ingressClassName` | Check `kubectl get pods -n ingress-nginx`. Confirm the Ingress resource has `ingressClassName: nginx`. Verify the `Host` header in your request matches the Ingress `host` rule. |
+| gRPC health check times out | Port-forward not established, or wrong port | Confirm the pod is `Running` first. Check the Service's `targetPort` matches the port the container is actually listening on. |
 
-For deeper inspection use the standard describe commands:
+For deeper investigation, Kubernetes provides two indispensable debugging commands[^1]:
 
 ```bash
-# Full pod event history and resource state
+# Pod-level events and status
 kubectl describe pod <pod-name> -n library
 
-# Service endpoint registration
+# Service routing and endpoint registration
 kubectl describe svc <service-name> -n library
 ```
 
-If a Service shows no `Endpoints` in `kubectl describe svc`, no pod is matching its label selector — a common source of 502 errors from the ALB[^1].
+If a Service has no `Endpoints` listed in `kubectl describe svc`, no pod matched the label selector — this is one of the most common sources of 503 errors through an Ingress[^2].
 
 ---
 
-## Teardown
+## Cleanup
 
-When you are done, clean up in reverse order to avoid dependency conflicts.
-
-**Delete the Kubernetes application resources:**
+When you are finished experimenting, delete the cluster entirely:
 
 ```bash
-kubectl delete -k deploy/k8s/overlays/production
+kind delete cluster --name library
 ```
 
-Wait for the Ingress deletion to complete before running `terraform destroy`. The ALB controller deprovisions the load balancer when the Ingress resource is deleted. If Terraform runs first, it may fail trying to delete the VPC while the ALB still holds an ENI in one of its subnets.
+This removes the Docker container, all pods, all persistent data, and the kubeconfig context. Nothing persists. Re-creating the cluster from scratch with `kind create cluster --config kind-config.yaml --name library` takes the same 30 seconds as the first time (images are cached locally).
+
+If you only want to reset the application state without tearing down the cluster, you can delete the namespaces:
 
 ```bash
-kubectl get ingress -n library --watch
+kubectl delete namespace library infra
+kubectl apply -k deploy/k8s/overlays/local
 ```
-
-Wait until the Ingress disappears from the output (Ctrl+C when gone).
-
-**Destroy all Terraform-managed infrastructure:**
-
-```bash
-terraform destroy
-```
-
-Type `yes` at the prompt. This takes 15–20 minutes. Expected final line:
-
-```
-Destroy complete! Resources: 47 destroyed.
-```
-
-**Verify cleanup:**
-
-```bash
-# Confirm no EKS clusters remain
-aws eks list-clusters
-
-# Confirm no RDS clusters remain
-aws rds describe-db-clusters \
-  --query 'DBClusters[*].DBClusterIdentifier'
-
-# Confirm no MSK clusters remain
-aws kafka list-clusters \
-  --query 'ClusterInfoList[*].ClusterName'
-```
-
-All three should return empty lists.
-
-**Check for orphaned EBS volumes:**
-
-EBS volumes provisioned by the EKS storage driver (for PersistentVolumeClaims) are sometimes not deleted automatically when the cluster is torn down. Check for leftover volumes:
-
-```bash
-aws ec2 describe-volumes \
-  --filters "Name=status,Values=available" \
-            "Name=tag-key,Values=kubernetes.io/cluster/library-production" \
-  --query 'Volumes[*].{ID:VolumeId,Size:Size,AZ:AvailabilityZone}' \
-  --output table
-```
-
-Delete any listed volumes manually:
-
-```bash
-aws ec2 delete-volume --volume-id <volume-id>
-```
-
-An orphaned volume costs roughly $0.08 per GB per month[^2]. It is small but it accumulates silently — always check.
-
----
-
-## Expected Outputs for Non-Deployers
-
-If you are following along without running the infrastructure, here is a summary of what a successful deployment looks like at each milestone:
-
-| Step | Expected terminal output |
-|------|--------------------------|
-| `terraform apply` complete | `Apply complete! Resources: 47 added, 0 changed, 0 destroyed.` |
-| `aws eks update-kubeconfig` | `Updated context arn:aws:eks:us-east-1:...:cluster/library-production in ~/.kube/config` |
-| `kubectl get pods -A` | All `library` pods `Running 1/1`, restarts 0 |
-| `kubectl get ingress -n library` | ADDRESS column populated with an ELB hostname |
-| `curl .../healthz` | `{"status":"ok"}` with HTTP 200 |
-| `curl .../api/catalog/books` (POST) | JSON body with `"id"` field |
-| `curl .../api/search?q=...` | JSON array containing the created book |
-| `terraform destroy` complete | `Destroy complete! Resources: 47 destroyed.` |
 
 ---
 
 ## What's Next
 
-The library system is running on AWS with managed database, message broker, and load balancer infrastructure. Chapter 13 adds the observability layer: deploying an OpenTelemetry Collector to the cluster, configuring the services to export traces and metrics, and visualizing the results in Grafana. The deployment workflow stays identical — a new Kustomize overlay and a Terraform module for the monitoring stack.
+The library system is now running locally on Kubernetes. The same manifests — with a different Kustomize overlay — will be deployed to AWS EKS in Chapter 13. EKS introduces real load balancers, persistent volume classes backed by EBS, IAM-based secrets management, and a Route 53 DNS name instead of `/etc/hosts`. The workflow stays the same; the infrastructure layer underneath changes.
 
 ---
 
-[^1]: Debugging Kubernetes Services: https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/
-[^2]: AWS EBS Pricing: https://aws.amazon.com/ebs/pricing/
+[^1]: Debugging Pods: https://kubernetes.io/docs/tasks/debug/debug-application/debug-pods/
+[^2]: Debugging Services: https://kubernetes.io/docs/tasks/debug/debug-application/debug-service/

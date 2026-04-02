@@ -1,233 +1,154 @@
-# Chapter 11: Kubernetes
+# Chapter 11: Testing Strategies
 
-Chapter 3 got all five services running locally with Docker Compose: a single `docker compose up` starts PostgreSQL, Kafka, Meilisearch, and every application container. For development and demonstration that is exactly right. But Docker Compose is a single-machine orchestrator. If the machine running it goes down, every service goes with it. If the catalog service crashes, nothing restarts it. If traffic doubles overnight, there is no mechanism to add replicas. Deploying a new image means a gap in service while the old container stops and the new one starts.
+Chapters 1 through 9 built a working five-service system: catalog, auth, reservation, search, and a gateway front-end. Along the way you wrote unit tests for nearly every package — service-layer logic, handler routing, token validation, event publishing. Those tests run in milliseconds, require no external process, and catch a wide class of bugs.
 
-Kubernetes is the production-grade answer to all of those problems. It is a platform for running containerized workloads across a cluster of machines, with built-in self-healing, rolling updates, service discovery, autoscaling, and declarative configuration management. The same mental model you developed in Chapter 3 carries forward — containers, images, environment variables, volume mounts — but Kubernetes layers a control plane on top that continuously reconciles what is running against what you declared you want.
+They do not catch everything.
 
-This chapter introduces that control plane, maps the Docker Compose concepts you already know to their Kubernetes equivalents, and lays the groundwork for the sections that follow, where you will write real manifests and deploy the library system to a local cluster.
-
----
-
-## From Compose to Kubernetes
-
-The most practical entry point into Kubernetes is a direct comparison with what you already know. Every Docker Compose concept has a Kubernetes counterpart. The semantics differ in important ways, but the mapping makes the unfamiliar familiar.
-
-| Docker Compose | Kubernetes | Purpose |
-|----------------|------------|---------|
-| `container` | Pod | Smallest deployable unit |
-| `services:` block | Deployment | Manages replica sets and rolling updates |
-| `ports:` | Service (ClusterIP/NodePort) | Internal service discovery and load balancing |
-| `depends_on` | Readiness probes | Health-based dependency management |
-| `volumes:` | PersistentVolumeClaim | Persistent storage |
-| `docker-compose.yml` | Manifests (YAML) | Declarative desired state |
-| Port mapping to host | Ingress | External traffic routing |
-
-A few nuances are worth calling out.
-
-`depends_on` in Compose controls startup order — service B won't start until service A's container exists. Kubernetes does not have startup ordering. Instead, it has **readiness probes**: a container signals that it is ready to receive traffic by passing a health check (an HTTP endpoint, a TCP connection, or an exec command). Kubernetes only routes traffic to a pod once its readiness probe passes. The implication is that your services must tolerate dependencies being temporarily unavailable and retry — a property called **graceful degradation** that is good practice in any distributed system.
-
-`ports:` in Compose binds a container port to a host port, making the service reachable at `localhost:8080`. Kubernetes decouples this into two steps: a **Service** object provides stable DNS and load balancing inside the cluster (no host port needed), and an **Ingress** object handles traffic arriving from outside the cluster.
-
-PersistentVolumeClaims are notably heavier than Compose volumes. A Compose volume is just a directory on the Docker host. A PVC is a request for storage from the cluster's storage subsystem — it can be fulfilled by a local disk, an NFS share, a cloud block device, or any storage provider that implements the Container Storage Interface (CSI). The application does not know or care which; it sees a mounted filesystem either way.
+This chapter is about the failures that unit tests miss, why they miss them, and what you need to do instead. By the end you will have a layered test suite that covers the system at three distinct levels of fidelity, with each layer doing exactly the job the one below it cannot.
 
 ---
 
-## The control plane
+## What unit tests cannot see
 
-A Kubernetes cluster has two kinds of machines: **control plane nodes** that manage the cluster, and **worker nodes** that run your workloads. In a production cluster there are typically three control plane nodes for high availability. In a local development cluster (which you will set up in section 11.1), a single node plays both roles.
+Consider the catalog service's `BookRepository`. In chapter 2 you defined an interface:
 
-The control plane runs four core components:
-
-**API Server** is the front door to the cluster. Every interaction — from `kubectl` on your laptop to a controller inside the cluster — goes through the API server. It validates requests, persists state to etcd, and notifies components that care about changes. It exposes a RESTful HTTP API; `kubectl` is just a command-line client for that API.
-
-**etcd** is a distributed key-value store that holds all cluster state: every resource you have created, every status the system has observed, every configuration change. It is the single source of truth. If etcd is lost without a backup, the cluster's desired state is gone.
-
-**Scheduler** watches for pods that have been created but not yet assigned to a node. It evaluates each unscheduled pod against the available nodes — considering resource requests, node selectors, affinity rules, taints and tolerations — and writes a node assignment back to the API server. It does not start pods; it just decides where they go.
-
-**Controller Manager** runs a collection of control loops, each watching a specific resource type and reconciling the cluster's actual state toward the desired state. The Deployment controller, for example, watches Deployment objects and ensures the correct number of pod replicas are running at all times. When a pod crashes, the controller notices the discrepancy and creates a replacement.
-
-```mermaid
-graph TD
-    kubectl([kubectl / API clients]) --> API[API Server]
-    API --> etcd[(etcd)]
-    API --> Scheduler[Scheduler]
-    API --> CM[Controller Manager]
-    CM -->|watches & reconciles| API
-    Scheduler -->|assigns pods| API
+```go
+type BookRepository interface {
+    Create(ctx context.Context, book *domain.Book) error
+    FindByID(ctx context.Context, id uuid.UUID) (*domain.Book, error)
+    // ...
+}
 ```
 
-The diagram shows that everything flows through the API server. No component talks directly to another — they all read and write through the central API. This design makes the system auditable, extensible, and resilient to component restarts.
+Your unit tests inject a hand-written mock that satisfies the interface. The service logic is thoroughly exercised. But the mock has no SQL behind it. If the real GORM implementation contains a typo — say, `published_at` in the struct tag but `publish_date` in the migration — the mock will never surface that. Only a test that actually connects to a PostgreSQL instance and runs the query will catch it.
+
+Now consider the gRPC layer. The `CatalogServer` is tested by calling its methods as plain Go functions. That is fast and convenient. But it means no gRPC frame ever travels over the wire, no interceptor chain runs, and no metadata is parsed. If the auth interceptor from chapter 4 is accidentally omitted from the server's option list, every unit test still passes. A test that dials a real (in-process) gRPC listener will fail immediately when it receives `codes.Unauthenticated`.
+
+Finally, consider the Kafka consumer in the reservation service. You mocked `sarama.ConsumerGroup` and drove the `ConsumeClaim` loop directly. The message bytes were whatever your test constructed. If the catalog service's producer serializes events as Protobuf but the consumer's `Unmarshal` call expects JSON, the mismatch is invisible to both sides in isolation. Only a test that publishes a real message to a real Kafka broker — with the same serialization path the production code uses — can detect it.
+
+These are not hypothetical edge cases. They are the three most common categories of integration failure in a Go microservices system:
+
+1. **SQL/ORM mismatches** — wrong column names, missing migrations, incorrect transaction boundaries.
+2. **gRPC wiring failures** — missing interceptors, wrong server options, incorrect service registration.
+3. **Serialization mismatches** — producer and consumer using incompatible formats or schema versions.
 
 ---
 
-## Node components
+## The testing pyramid
 
-On every worker node, two components handle the actual work of running containers.
+The testing pyramid[^1] is a model that describes the recommended distribution of tests across three levels. The shape reflects two properties that are in tension: **confidence** and **cost**.
 
-**kubelet** is an agent that runs on each node. It watches the API server for pods assigned to its node, instructs the container runtime (typically containerd) to pull images and start containers, monitors their health, and reports status back to the API server. If a container's liveness probe fails, the kubelet restarts it. The kubelet is how the control plane's intent reaches the physical machine.
+```
+        /\
+       /  \
+      / E2E\        fewest, slowest, highest confidence
+     /------\
+    /        \
+   / Integr.  \     moderate count, moderate speed
+  /------------\
+ /              \
+/   Unit Tests   \  most numerous, fastest, cheapest
+------------------
+```
 
-**kube-proxy** manages the network rules that implement Kubernetes Services. When you create a Service pointing to three catalog pods, kube-proxy ensures that traffic arriving at the Service's virtual IP is load-balanced across those three pods. On Linux it does this using iptables or IPVS rules. It is transparent to your application — your code connects to the Service name, and the network layer handles the rest.
+**Unit tests** sit at the base. They are the most numerous because they are cheapest to write and run in milliseconds. Each test is narrow: one function, one method, one decision branch. They are the right tool for business logic — fee calculation, validation rules, state machine transitions.
+
+**Integration tests** occupy the middle. They are slower because they require real infrastructure: a PostgreSQL container, a Kafka broker, a running gRPC server. You write fewer of them, and you focus them on the seams between your code and external systems. They answer the question "does this SQL actually work?" and "does this consumer actually parse what the producer sends?".
+
+**End-to-end tests** sit at the top. In a microservices system, a full end-to-end test might start all five services and exercise a user-facing scenario through the gateway's HTTP API. They give the highest confidence but cost the most: tens of seconds to start containers, complex setup and teardown, and fragile dependencies on network timing. You keep them few and focused on critical user paths.
+
+If you are coming from a Java/Spring background, think of unit tests as JUnit tests with Mockito, integration tests as `@SpringBootTest` with an in-memory or Testcontainers-backed datasource, and e2e tests as RestAssured or Playwright suites that drive a fully-deployed application. The taxonomy is identical; Go's tooling just looks different.
 
 ---
 
-## The declarative model
+## The cost model
 
-The most important conceptual shift from Compose to Kubernetes is the move from **imperative** to **declarative** operations.
+One practical way to think about the pyramid is in terms of wall-clock time per test run:
 
-Docker Compose is imperative: you run `docker compose up` and Compose starts the containers you described. If a container crashes later, nothing brings it back unless you run the command again. If you want three copies of catalog, you decide when to start the second and third.
+| Layer       | Typical duration      | Infrastructure needed         |
+|-------------|-----------------------|-------------------------------|
+| Unit        | 1–50 ms per test      | None                          |
+| Integration | 5–30 s per suite      | Docker containers (per suite) |
+| E2E         | 30–120 s per scenario | Multiple running services     |
 
-Kubernetes is declarative: you write a manifest that says "I want three replicas of the catalog service running, using image `library/catalog:v1.2.0`, with 256 MB of memory and 100m of CPU." You apply that manifest once. Kubernetes stores it as the desired state and then continuously reconciles. If a pod crashes, the controller creates a replacement — not because you asked it to, but because the actual state (two running replicas) diverged from the desired state (three). If a node goes down, the pods on it are rescheduled to healthy nodes automatically.
+Container startup is the dominant cost for integration tests. Testcontainers-go manages this well: it starts a container once per test suite (using `TestMain`), runs all tests in that suite against the same instance, then tears it down. A full integration suite for one service — covering every repository method against a real PostgreSQL instance — typically takes 10–20 seconds, most of which is the 5–8 seconds for the container to accept connections.
 
-This reconciliation loop runs forever. It is not a one-time action but an ongoing process. The practical consequence is that Kubernetes manifests are **idempotent**: applying the same manifest twice has the same effect as applying it once. If nothing has changed, nothing happens. If the image tag changed, Kubernetes performs a rolling update.
-
-For a system built to run continuously and recover from failure, this model is fundamentally more reliable than issuing imperative commands. You describe the outcome; Kubernetes figures out how to achieve and maintain it.
-
----
-
-## Key resource types
-
-Kubernetes organizes everything around **resources** — typed objects stored in etcd and managed by controllers. The following are the resource types you will use in this chapter.
-
-**Pod** is the smallest deployable unit in Kubernetes. A pod contains one or more containers that share a network namespace and can share volumes. All containers in a pod are scheduled on the same node and started together. In practice, most pods contain a single application container; the multi-container pattern (called a sidecar) is used for cross-cutting concerns like log collection or service mesh proxies. You will rarely create pods directly — you use Deployments or StatefulSets, which manage pods on your behalf.
-
-**Deployment** is the standard way to run stateless application services. It manages a ReplicaSet (a group of identical pods) and handles rolling updates: when you change the image tag, it starts new pods with the new image before terminating old ones, ensuring continuous availability. It also handles rollback: if the new version fails its health checks, you can revert to the previous version with a single command. Every stateless service in the library system — gateway, auth, catalog, reservation, search — will run as a Deployment.
-
-**Service** gives a stable network identity to a dynamic set of pods. Pods are ephemeral: they are created and destroyed as replicas scale up and down, and each gets a new IP address when it starts. A Service selects pods using label selectors and provides a stable virtual IP and DNS name that other services can use regardless of which pods are currently running. The default type, ClusterIP, is only reachable inside the cluster. NodePort exposes the service on a port on each node. LoadBalancer provisions an external load balancer in cloud environments.
-
-**StatefulSet** is like a Deployment but designed for stateful workloads — databases, message brokers, anything that needs stable network identities, ordered startup and shutdown, and persistent storage. Each pod in a StatefulSet gets a predictable name (postgres-0, postgres-1) and its own PersistentVolumeClaim. Kafka and PostgreSQL will run as StatefulSets.
-
-**ConfigMap** holds non-sensitive configuration data as key-value pairs or entire files. You mount ConfigMaps into pods as environment variables or as files in the filesystem. They decouple configuration from the container image, allowing the same image to run in development, staging, and production with different settings.
-
-**Secret** is structurally identical to a ConfigMap but intended for sensitive data: passwords, API keys, TLS certificates, OAuth credentials. Secrets are base64-encoded (not encrypted by default at rest, though encryption can be enabled) and treated with additional care by the API server — they are not included in API responses unless explicitly requested.
-
-**Ingress** manages external HTTP and HTTPS traffic into the cluster. An Ingress resource defines routing rules: requests to `library.example.com/api` go to the gateway service; requests to `library.example.com/auth` go to the auth service. An Ingress Controller (a reverse proxy like nginx or Traefik that runs inside the cluster) reads these rules and configures itself accordingly. Ingress is what replaces the `ports:` host binding from Docker Compose for production deployments.
-
-**PersistentVolumeClaim** is a request for storage. A PVC specifies the size, access mode (ReadWriteOnce for a single writer, ReadWriteMany for shared access), and optionally a StorageClass. The cluster satisfies the PVC by binding it to a PersistentVolume — the actual storage backend. Applications mount the PVC as a directory; they do not know whether the storage is a local disk, an NFS share, or a cloud volume.
+This cost model drives the build separation strategy. Unit tests run on every commit push, typically inside the CI build container itself (no Docker-in-Docker required). Integration and e2e tests run on pull requests or nightly, where the CI environment can provision containers. You enforce this separation in Go using build tags.
 
 ---
 
-## kubectl basics
+## Build tags for test separation
 
-`kubectl` is the command-line client for the Kubernetes API. Every operation you perform on a cluster goes through it. The commands you will use most often are:
+Go's build tag system lets you annotate a file so it is only compiled when a specific tag is provided. The convention for this project is:
 
-**Apply** submits a manifest to the API server. Kubernetes creates the resource if it does not exist, or updates it if it does. This is the primary way to deploy changes.
-
-```
-kubectl apply -f catalog-deployment.yaml
-kubectl apply -f k8s/
+```go
+//go:build integration
 ```
 
-**Get** lists resources. The output shows name, status, age, and a few key fields depending on the resource type.
+A file with this tag at the top is excluded from `go test ./...`. To include it, you pass the tag explicitly:
 
-```
-kubectl get pods
-kubectl get pods -n library
-kubectl get deployments,services -n library
-```
+```bash
+# Unit tests only (default, fast)
+go test ./...
 
-**Describe** shows detailed information about a resource, including its events — the most useful first stop when debugging why a pod won't start.
-
-```
-kubectl describe pod catalog-7d9f4b-xvz2k -n library
-kubectl describe deployment catalog -n library
+# Integration tests included
+go test -tags integration ./...
 ```
 
-**Logs** streams or prints container logs. For a pod with multiple containers, use `-c` to specify which container.
+This is the Go equivalent of Gradle's `sourceSets` or Maven's `failsafe` plugin separating unit and integration test lifecycles. The tag is a compiler directive, not a runtime flag — files without the tag are never compiled into the test binary at all.
 
-```
-kubectl logs catalog-7d9f4b-xvz2k -n library
-kubectl logs -f catalog-7d9f4b-xvz2k -n library
-kubectl logs deployment/catalog -n library
-```
-
-**Port-forward** creates a tunnel from a local port to a port on a pod or service. Useful for accessing services without an Ingress during development.
-
-```
-kubectl port-forward svc/catalog 50051:50051 -n library
-kubectl port-forward pod/postgres-0 5432:5432 -n data
-```
-
-**Delete** removes a resource. For Deployments, this also removes the pods it manages.
-
-```
-kubectl delete -f catalog-deployment.yaml
-kubectl delete pod catalog-7d9f4b-xvz2k -n library
-```
-
-One concept that runs through all of these commands: **namespaces**. Namespaces partition a cluster's resources into isolated groups. The `-n` flag specifies which namespace to operate in. Without it, `kubectl` defaults to the `default` namespace. Most production clusters use namespaces to separate environments, teams, or application tiers.
+The practical implication: your integration test files start with `//go:build integration` and may import packages like `testcontainers-go` and `github.com/docker/docker/client` that you do not want in the standard test binary.
 
 ---
 
-## What we are building
+## Tooling overview
 
-The library system will be deployed across three namespaces, each grouping logically related services:
+Three tools do the heavy lifting in this chapter.
 
-- **library** — the five application services: gateway, auth, catalog, reservation, search
-- **data** — the data stores: PostgreSQL and Meilisearch
-- **messaging** — the message broker: Kafka (and its dependency, ZooKeeper)
+**testcontainers-go**[^2] is a Go library that starts Docker containers programmatically from within a test. You describe the image, exposed ports, environment variables, and wait strategy (e.g., "wait until port 5432 accepts TCP connections"), and the library handles the Docker API calls. It is the Go equivalent of the `testcontainers-java` library that Spring developers use with `@Testcontainers`.
 
-This separation is not just organizational. Namespaces give you a unit of isolation for network policies, resource quotas, and RBAC (role-based access control). In a real multi-team environment, you might give different teams ownership over different namespaces. Here, the separation keeps infrastructure concerns out of the application namespace and makes it easy to reason about what belongs where.
-
-```mermaid
-graph TD
-    subgraph library [Namespace: library]
-        GW[gateway]
-        AUTH[auth]
-        CAT[catalog]
-        RES[reservation]
-        SRC[search]
-    end
-
-    subgraph data [Namespace: data]
-        PG[(PostgreSQL)]
-        MEI[(Meilisearch)]
-    end
-
-    subgraph messaging [Namespace: messaging]
-        KFK[Kafka]
-        ZK[ZooKeeper]
-    end
-
-    GW --> AUTH
-    GW --> CAT
-    GW --> RES
-    GW --> SRC
-    CAT --> PG
-    AUTH --> PG
-    RES --> PG
-    SRC --> MEI
-    CAT --> KFK
-    RES --> KFK
-    SRC --> KFK
-    KFK --> ZK
+```go
+pgContainer, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
+    ContainerRequest: testcontainers.ContainerRequest{
+        Image:        "postgres:16-alpine",
+        ExposedPorts: []string{"5432/tcp"},
+        Env: map[string]string{
+            "POSTGRES_USER":     "test",
+            "POSTGRES_PASSWORD": "test",
+            "POSTGRES_DB":       "catalog_test",
+        },
+        WaitingFor: wait.ForListeningPort("5432/tcp"),
+    },
+    Started: true,
+})
 ```
 
-Traffic enters the cluster through an Ingress controller that routes to the gateway. The gateway calls the other application services over gRPC. The application services reach their data stores and Kafka across namespace boundaries — Kubernetes DNS makes this straightforward, as a service in `data` is reachable at `postgres.data.svc.cluster.local` from any namespace.
+**bufconn**[^3] is a package in the gRPC library that provides an in-process network connection. Instead of binding to a real TCP port, your gRPC server listens on a `bufconn.Listener`. Clients connect through a custom dialer that routes traffic through an in-memory buffer. The full gRPC stack — interceptors, codec, metadata — runs exactly as it does in production, but no operating system network stack is involved. Tests run in milliseconds with full interceptor coverage.
+
+**`//go:build integration`** is not a library but a compiler convention. It is worth calling out explicitly because it shapes how you organize files. All testcontainers-based tests and all multi-service tests carry this tag. Pure bufconn tests, which need no external infrastructure, can run without Docker and may or may not carry the tag depending on your project's conventions. This project uses the tag for anything that starts a container.
 
 ---
 
 ## Chapter roadmap
 
-The remaining sections build the Kubernetes deployment of the library system step by step:
+The remaining sections build the testing strategy layer by layer:
 
-**11.1 — Local Cluster with kind** sets up a local Kubernetes cluster using kind (Kubernetes in Docker). You will install kind and kubectl, create a cluster, load locally-built images, and verify that the cluster is healthy. kind runs a full Kubernetes control plane inside Docker containers on your laptop, making it the fastest path to a real cluster without a cloud account.
+**10.1 — Unit Testing Patterns** revisits the mock-based approach from previous chapters with a critical eye. You will see when hand-written mocks are the right tool, when `gomock` or `testify/mock` is preferable, and how to structure table-driven tests for complex input spaces. This section also covers `t.Cleanup`, `t.Parallel`, and subtests — Go idioms that have no direct Kotlin/Java equivalent but pay dividends in test suite organization.
 
-**11.2 — Preparing Services for Kubernetes** revisits the five application services and makes them Kubernetes-ready: health check endpoints (for liveness and readiness probes), graceful shutdown handling, and configuration via environment variables rather than hardcoded values.
+**10.2 — Integration Testing with Testcontainers** applies testcontainers-go to the catalog and reservation service repositories. You will write a `TestMain` function that starts a PostgreSQL container, runs migrations using the same `golang-migrate` code the production service uses, and tears everything down after the suite. Every repository method gets a test against real SQL.
 
-**11.3 — Application Manifests** writes the Deployment, Service, ConfigMap, and Secret manifests for the five application services. You will apply them to the cluster and verify each service starts correctly.
+**10.3 — gRPC Testing with bufconn** wires up a full gRPC server — with the auth interceptor, the real service implementation, and the real repository (backed by the Testcontainers PostgreSQL from 10.2) — and dials it through a bufconn listener. You will test that unauthenticated calls are rejected, that valid JWTs are accepted, and that the server returns correct responses for normal operations.
 
-**11.4 — Infrastructure Manifests** writes StatefulSet and PersistentVolumeClaim manifests for PostgreSQL, Kafka, ZooKeeper, and Meilisearch — the workloads that require stable storage and identity.
+**10.4 — Kafka Testing** covers the serialization seam between the catalog service's event producer and the reservation and search service consumers. You will start a Kafka broker via Testcontainers, publish events through the production publisher code, consume them through the production consumer code, and assert that the full round-trip preserves all fields correctly.
 
-**11.5 — Kustomize Environments** introduces Kustomize, Kubernetes' built-in configuration management tool. You will create a base configuration and two overlays — development and production — so that the same manifests can be applied with environment-specific adjustments without duplication.
-
-**11.6 — Deploying and Verifying** ties everything together: applying all manifests in the correct order, verifying health, exercising the system through the Ingress, and walking through the debugging workflow when something goes wrong.
+**10.5 — Service-Level End-to-End Tests** composes the previous layers into a scenario-level test: a user reserves a book, the catalog service publishes a `BookReserved` event, the reservation service consumes it and updates its own database, and the search index is invalidated. The test starts all necessary containers, wires the services together, and drives the scenario through the gateway's HTTP API.
 
 ---
 
-By the end of the chapter, every service you have built will be running in a real Kubernetes cluster — self-healing, namespace-isolated, and configured exactly as they would be in a production cloud deployment. The Docker Compose file will still exist for local development; Kubernetes is not a replacement for that workflow, it is the production target that all your work has been building toward.
+By the end of this chapter, your test suite will be stratified, fast where it needs to be fast, thorough where thoroughness matters, and organized so that CI can run the right level of testing at the right time. The unit tests you already have are not wasted — they remain the fastest feedback loop for logic bugs. What you are building now is the infrastructure to catch the class of bugs they were never designed to find.
 
 ---
 
-[^1]: Kubernetes Documentation: https://kubernetes.io/docs/home/
-[^2]: Kubernetes Components: https://kubernetes.io/docs/concepts/overview/components/
-[^3]: kubectl Cheat Sheet: https://kubernetes.io/docs/reference/kubectl/cheatsheet/
+[^1]: The Test Pyramid — Martin Fowler: https://martinfowler.com/bliki/TestPyramid.html
+[^2]: Testcontainers for Go: https://golang.testcontainers.org/
+[^3]: gRPC bufconn package: https://pkg.go.dev/google.golang.org/grpc/test/bufconn

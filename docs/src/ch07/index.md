@@ -1,27 +1,34 @@
-# Chapter 7: Full-Text Search — Meilisearch & Event-Driven Indexing
+# Chapter 7: Event-Driven Architecture — Reservation Service & Kafka
 
-In this chapter we add full-text search to the library system. The Catalog service publishes `catalog.books.changed` events to Kafka whenever books are created, updated, or deleted. A new Search service consumes those events, maintains a Meilisearch index, and exposes Search and Suggest gRPC RPCs. The Gateway gets a search page with HTMX-powered autocomplete.
+In this chapter we build the Reservation service and introduce Apache Kafka for asynchronous inter-service communication. Users can reserve and return books through the gateway, and the catalog's available copies update automatically via event-driven messaging.
+
+> **Tip:** If you haven't already, create an admin account and seed the catalog using the CLI tools from Chapter 6. Having sample books in the catalog will make it easier to see events flowing through the system.
 
 ## What You'll Learn
 
-- Publishing domain events from an existing service (Catalog → Kafka)
-- Meilisearch fundamentals: indexes, searchable/filterable attributes, faceted search
-- The meilisearch-go client library
-- Bootstrap pattern: syncing state on startup when events are unavailable
-- Building autocomplete with HTMX and server-rendered partials
-- Adding a new service end-to-end (proto → index → service → handler → gateway)
+- Kafka fundamentals: topics, partitions, consumer groups, KRaft mode
+- The sarama Go client library for producing and consuming messages
+- Event-driven vs. synchronous communication tradeoffs
+- Eventual consistency and its implications for UI design
+- Building a complete microservice end-to-end (proto → DB → service → handler → gateway)
 
 ## Architecture Overview
 
 ```
-Catalog Service → Kafka "catalog.books.changed" → Search Consumer → Meilisearch
+Browser → Gateway (HTTP) → Reservation Service (gRPC)
+                                    ↓ (sync read)
+                           Catalog Service (gRPC)
 
-Gateway → Search Service (gRPC) → Meilisearch
+Reservation Service → Kafka "reservations" topic → Catalog Consumer → updates available_copies
 ```
+
+**Reads are synchronous** — the reservation service calls the catalog via gRPC to check availability before creating a reservation.
+
+**Writes are asynchronous** — state changes (created, returned, expired) are published as events to Kafka. The catalog service runs a consumer goroutine that processes these events and updates book availability.
 
 ## Sections
 
-- [7.1 Catalog Event Publishing](./catalog-events.md) — Adding a Kafka producer to the Catalog service
-- [7.2 Search Service](./search-service.md) — Building the Search service: index layer, service, handler
-- [7.3 Meilisearch Integration](./meilisearch.md) — Meilisearch concepts, configuration, and the Go client
-- [7.4 Search UI](./search-ui.md) — Gateway search page, autocomplete, Docker setup
+- [7.1 Event-Driven Architecture](./event-driven-architecture.md) — Kafka fundamentals and the sarama Go client
+- [7.2 Reservation Service](./reservation-service.md) — Building the service: state machine, expiration on read, TDD
+- [7.3 Kafka Consumer](./kafka-consumer.md) — Consumer groups, the co-located consumer pattern, idempotency
+- [7.4 Reservation UI](./reservation-ui.md) — Gateway changes, eventual consistency in the UI, Docker setup

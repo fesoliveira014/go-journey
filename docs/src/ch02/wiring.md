@@ -307,7 +307,7 @@ The idiomatic proto3 solution is `google.protobuf.FieldMask` for partial updates
 
 You may notice `UpdateAvailability` in the handler and service — it adjusts `available_copies` by a signed delta. This RPC is not driven by catalog management; it is driven by the reservations service. When a user checks out a book, the reservations service will call `UpdateAvailability(id, -1)` on the catalog service. When the book is returned, it calls `UpdateAvailability(id, +1)`.
 
-This is part of the inter-service communication pattern covered in Chapter 6. The RPC exists now because the catalog service needs to own the availability invariant — no other service should directly manipulate `available_copies`. For now, you can exercise it via `grpcurl`:
+This is part of the inter-service communication pattern covered in Chapter 7. The RPC exists now because the catalog service needs to own the availability invariant — no other service should directly manipulate `available_copies`. For now, you can exercise it via `grpcurl`:
 
 ```bash
 grpcurl -plaintext -d '{"id": "a1b2c3d4-...", "delta": -1}' \

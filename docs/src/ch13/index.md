@@ -1,75 +1,21 @@
-# Chapter 13: Production Hardening
+# Chapter 13: From Local to Cloud — Deploying to AWS
 
-Chapter 12 deployed the library system to real infrastructure: an EKS cluster running five services, three RDS instances holding persistent state, an MSK cluster brokering Kafka events, and a GitHub Actions pipeline shipping code on every push to `main`. That is a genuine production deployment — the application is reachable, the data survives pod restarts, and nobody has to run `kubectl apply` from a laptop. But "reachable" and "production-ready" are not the same thing. Three gaps remained when Chapter 12 ended, each one deferred in the name of getting the system running before addressing hardening. This chapter closes all three. None of them require changes to application code, Dockerfiles, or Earthfiles — everything that needs to change lives in Terraform and the production Kustomize overlay.
+Chapter 12 got every service running in a real Kubernetes cluster: probes passing, StatefulSets stable, Ingress routing requests from your laptop to the gateway. kind gave you a full control plane in Docker containers, which is exactly the right tool for developing and validating manifests without spending a cent. But kind is a development tool. The cluster lives on your machine, behind your home router, inaccessible from the internet. There is no persistent storage that outlives a `kind delete cluster`. There are no managed databases with automatic backups, no multi-AZ brokers, no autoscaling node pools. If your laptop goes to sleep, the cluster does too.
 
----
-
-## The three gaps
-
-| Gap | Chapter 12 state | Chapter 13 target |
-|-----|-----------------|-------------------|
-| DNS + TLS | HTTP via ALB hostname, no custom domain | HTTPS with a custom domain via Route 53 + ACM |
-| Secrets | Placeholder values in the production overlay's `secretGenerator` | External Secrets Operator syncing live values from AWS Secrets Manager |
-| Kafka encryption | Plaintext connections on port 9092 | TLS connections on port 9094 |
-
-Each row is a separate concern with its own tools and its own section in this chapter. They are also independent of each other — you can apply them in any order, or apply just one if that is what your situation calls for. The sections below treat them sequentially because that matches the natural dependency order when you are also setting up DNS for the first time.
-
----
-
-## Why these gaps matter
-
-It is tempting to think of these as polish — things you would fix before a real public launch but can ignore while learning. That framing undersells the risk. Each gap is an audit failure in any environment subject to compliance frameworks, and the risks are concrete even if you are running a personal project.
-
-Serving HTTP without TLS means every request between the browser and your ALB travels in plaintext. That includes session tokens, API responses, and any user data in query strings or response bodies. The ALB terminates TLS at the edge in Chapter 13's target state — traffic inside the VPC between the ALB and the pods can remain HTTP, which is a common and acceptable pattern — but the public-facing leg must be encrypted. Modern browsers actively warn users about non-HTTPS sites; more practically, OAuth2 providers including Google will refuse to complete a login flow if the redirect URI is HTTP.
-
-Pasting database passwords manually into a Kustomize `secretGenerator` creates several problems at once. The secrets are almost certainly committed to git at some point — either accidentally or because someone thinks "I'll fix it later." Even if you avoid git, the values exist in someone's terminal history, in CI logs if you print them for debugging, and in every K8s Secret object that was ever created with the wrong value and then deleted. Proper secrets management means the application retrieves credentials from a single authoritative source — AWS Secrets Manager in this case — and the Kubernetes Secret is populated automatically and rotated without human intervention.
-
-Kafka's plaintext listener (port 9092) transmits all broker traffic unencrypted inside the VPC. VPCs are not the internet, and an attacker who has not already breached your network boundary cannot read that traffic — but that is a weaker guarantee than it sounds. Lateral movement from a compromised pod, misconfigured security groups, or VPC peering arrangements can all expose plaintext traffic to unintended readers. MSK supports TLS-only listener configuration; enabling it costs nothing and closes the exposure entirely.
-
----
-
-## What stays the same
-
-The Kustomize layering from Chapter 11 and the CI/CD pipeline from Chapter 12 are not touched. The base manifests under `k8s/base/` remain unchanged — a deliberate constraint that demonstrates the value of the overlay pattern. Application services do not need to know anything about where TLS terminates, how secrets reach the pod's environment, or what port the Kafka broker is listening on. They connect to hostnames and read environment variables; the infrastructure layer handles everything else.
-
-The Earthfile CI targets — `+lint`, `+test`, `+build`, `+integration-test` — run exactly as they did in Chapter 12. The GitHub Actions pipeline that calls them is unchanged. The only files that change in this chapter are:
-
-- Terraform files under `terraform/` — for the Route 53 hosted zone, ACM certificate, and MSK listener configuration
-- The production Kustomize overlay under `k8s/overlays/production/` — for the External Secrets Operator configuration and the updated Kafka broker address
-- A new Terraform module for the External Secrets Operator IAM role and its associated Kubernetes resources
-
-If you have been following the "what changes and what stays the same" framing from earlier chapters, the pattern holds here too.
-
----
-
-## Cost impact
-
-All three changes are either free or negligible.
-
-| Addition | Monthly cost |
-|----------|-------------|
-| Route 53 hosted zone | $0.50 |
-| ACM certificate | Free |
-| MSK TLS listener | No additional cost |
-| External Secrets Operator | No additional cost (open-source operator running on existing nodes) |
-
-The only new line item is the Route 53 hosted zone, which is billed at fifty cents per month regardless of query volume up to one billion queries. ACM certificates for domains managed in Route 53 are issued and renewed automatically at no charge. MSK supports TLS as a configuration flag on the existing brokers — there is no separate TLS broker tier. External Secrets Operator runs as a Deployment in your EKS cluster, consuming a small amount of CPU and memory on nodes you are already paying for.
-
-If you already own a domain and it is managed elsewhere — GoDaddy, Namecheap, Cloudflare — you have two options: transfer the domain to Route 53 (a one-time process that preserves your existing records) or keep the domain where it is and create an NS delegation for a subdomain. The sections below assume you are creating a new hosted zone; the delegation path is noted where it matters.
+This chapter takes the same application — the same manifests, the same container images, the same Kustomize base — and deploys it to AWS. The application services will run on Amazon EKS. PostgreSQL will move from a StatefulSet to Amazon RDS instances, one per service. Kafka will move from a StatefulSet to Amazon MSK. Images will be stored in Amazon ECR. Deployments will be triggered by GitHub Actions, not `kubectl apply` from a terminal. By the end, you will have a production-grade deployment pipeline that runs on every push to `main`.
 
 ---
 
 ## Target architecture
 
-The diagram below shows the system after all three changes are applied. Compare it to the Chapter 12 diagram: the public-facing edge now terminates HTTPS, the pod environment variables arrive via External Secrets, and the Kafka connections use the TLS listener.
+The diagram below shows the system's target state after this chapter. The application namespace, the manifest structure, and the service communication patterns are identical to Chapter 12. What changes is the infrastructure surrounding the cluster.
 
 ```mermaid
 graph TD
-    Internet([Internet]) --> R53[Route 53\nDNS]
-    R53 --> ALB[AWS ALB\nHTTPS :443\nACM Certificate]
+    Internet([Internet]) --> ALB[AWS Application Load Balancer]
 
     subgraph VPC [AWS VPC]
-        ALB -->|HTTP :80 internal| GW[gateway]
+        ALB --> GW[gateway]
 
         subgraph EKS [Amazon EKS Cluster]
             subgraph library [Namespace: library]
@@ -79,59 +25,161 @@ graph TD
                 GW --> SRC[search]
             end
 
-            subgraph ops [Namespace: external-secrets]
-                ESO[External Secrets\nOperator]
+            subgraph data [Namespace: data]
+                MEI[(Meilisearch\nStatefulSet)]
             end
         end
 
-        ESO -->|sync| ASM[AWS Secrets Manager]
-        ASM -.->|K8s Secrets| AUTH
-        ASM -.->|K8s Secrets| CAT
-        ASM -.->|K8s Secrets| RES
-
+        SRC --> MEI
         AUTH --> RDS_AUTH[(RDS: auth-db)]
         CAT --> RDS_CAT[(RDS: catalog-db)]
         RES --> RDS_RES[(RDS: reservation-db)]
-
-        CAT -->|TLS :9094| MSK[Amazon MSK\nKafka TLS]
-        RES -->|TLS :9094| MSK
-        SRC -->|TLS :9094| MSK
-
-        SRC --> MEI[(Meilisearch\nStatefulSet)]
+        CAT --> MSK[Amazon MSK\nKafka]
+        RES --> MSK
+        SRC --> MSK
     end
 
     ECR[Amazon ECR] -.->|pull images| EKS
     GHA[GitHub Actions\nOIDC] -.->|kubectl apply| EKS
 ```
 
-The changes touch three edges in this diagram: the public entry point gains TLS termination at the ALB, the secret values gain a managed sync path through External Secrets Operator, and the Kafka edges switch from port 9092 to port 9094. Everything else — the service topology, the RDS connections, the Meilisearch StatefulSet, the ECR image pulls, the OIDC-authenticated deployments — is carried forward from Chapter 12 without modification.
+A few details worth noting. Meilisearch remains a StatefulSet inside EKS — AWS has no managed full-text search offering that matches Meilisearch's API, and the data it holds is re-indexable from PostgreSQL, so the operational simplicity of keeping it in-cluster outweighs the risk. Everything else that held persistent state in Chapter 12 moves to managed services.
+
+The load balancer is an AWS Application Load Balancer provisioned by the AWS Load Balancer Controller — an EKS add-on that watches Ingress resources and creates ALBs automatically. It replaces the NGINX Ingress Controller from Chapter 12. The routing rules in the Ingress manifest stay the same; only the controller annotation changes.
+
+GitHub Actions authenticates to AWS and to EKS using OIDC federation — no long-lived credentials stored as secrets. A push to `main` builds images, pushes them to ECR, and applies the production Kustomize overlay to the EKS cluster.
+
+---
+
+## Mapping local to cloud
+
+Every piece of infrastructure from Chapter 12 has a direct AWS counterpart. The table below is your translation guide for the rest of the chapter.
+
+| Local (kind) | AWS | Purpose |
+|---|---|---|
+| kind cluster | Amazon EKS | Kubernetes control plane and worker nodes |
+| `kind load docker-image` | Amazon ECR | Container image storage and distribution |
+| NGINX Ingress Controller | AWS Load Balancer Controller + ALB | External HTTP/S traffic routing |
+| PostgreSQL StatefulSets | Amazon RDS (db.t3.micro) | Managed PostgreSQL with automated backups |
+| Kafka StatefulSet + ZooKeeper | Amazon MSK (kafka.t3.small) | Managed Kafka with multi-AZ replication |
+| `kubectl apply` from laptop | GitHub Actions + OIDC | Automated, auditable deployment pipeline |
+| Kustomize local overlay | Kustomize production overlay | Environment-specific configuration |
+
+The right column is not a replacement in the "throw out the old thing" sense. kind stays in the development workflow. Your local overlay still works. The production overlay is additive — it targets the same base manifests and overrides the values that differ between environments: image registries, resource limits, replica counts, and external service endpoints.
+
+---
+
+## What changes and what stays the same
+
+The Kustomize layering from Chapter 12 is paying its first serious dividend here. The base manifests under `k8s/base/` are untouched. You wrote them once, validated them against a kind cluster, and they are now ready to be promoted to production without modification.
+
+What changes lives entirely in a new Kustomize overlay at `k8s/overlays/production/`. That overlay patches:
+
+- **Image references** — from local names like `library/catalog:latest` to ECR URIs like `123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog:abc1234`
+- **Database endpoints** — the `DB_HOST` environment variable for each service now points to an RDS endpoint rather than `postgres.data.svc.cluster.local`
+- **Kafka bootstrap servers** — the `KAFKA_BROKERS` variable points to MSK broker endpoints rather than `kafka.messaging.svc.cluster.local`
+- **Replica counts** — production runs two replicas of each stateless service for availability
+- **Resource limits** — tighter CPU and memory bounds appropriate for a paid compute environment
+- **Ingress annotations** — the `kubernetes.io/ingress.class` annotation changes from `nginx` to `alb`, and ALB-specific annotations are added for certificate ARN, scheme, and target type
+
+The application services themselves do not know or care whether they are talking to a Kubernetes StatefulSet or a managed cloud service. They connect to a hostname and a port. That hostname is what the overlay changes. This is the practical value of externalizing configuration: the same binary runs in every environment.
+
+What also stays the same: namespaces, Service objects, ConfigMaps structure, gRPC communication patterns between services, health check endpoints, and the Earthfile CI targets from Chapter 11. The production pipeline will call the same `earthly +build` and `earthly +test` targets before deploying.
+
+---
+
+## Cost awareness
+
+Running this infrastructure continuously is not free. Before you apply a single Terraform plan, understand what you are signing up for.
+
+| Resource | Type | Monthly cost (approx.) |
+|---|---|---|
+| EKS control plane | — | $73 |
+| Worker nodes | 2x t3.medium | $61 |
+| RDS auth-db | db.t3.micro | $13 |
+| RDS catalog-db | db.t3.micro | $13 |
+| RDS reservation-db | db.t3.micro | $13 |
+| MSK brokers | 2x kafka.t3.small | $73 |
+| NAT Gateway | — | $33 |
+| ALB | — | ~$16 |
+| **Total** | | **~$295/month** |
+
+These numbers are us-east-1 on-demand pricing as of early 2026 and will drift. The EKS control plane flat fee ($73/month, or about $0.10/hour) and the NAT Gateway are the costs that catch people off guard — they run whether or not any traffic flows.
+
+The single most important habit when working through this chapter: **run `terraform destroy` when you are done for the day.** Terraform will tear down every resource it created in a few minutes. Leaving the cluster running overnight costs roughly $10. Leaving it running for a week costs roughly $70. The Terraform state is stored remotely (you will configure an S3 backend in section 13.1), so destroying and recreating the cluster is safe — your application state lives in RDS, and your configuration lives in git.
+
+A cost-saving shortcut: if you only need the cluster for a few hours, set the MSK broker count to 1 and skip multi-AZ for RDS. You will lose the high-availability story, but the cluster will still function for learning purposes and the bill drops to roughly $160/month.
+
+---
+
+## Prerequisites
+
+You need four things in place before starting section 13.1.
+
+**AWS account** with sufficient IAM permissions to create EKS clusters, RDS instances, MSK clusters, VPCs, IAM roles, and ECR repositories. If you are using a personal account, attaching the `AdministratorAccess` policy to your IAM user is the path of least resistance. For a shared or corporate account, work with your administrator to scope the permissions appropriately.
+
+**AWS CLI v2** — version 2.x is required; version 1 will not work with all EKS authentication mechanisms used here. Verify with:
+
+```
+aws --version
+# aws-cli/2.x.x ...
+```
+
+Configure it with `aws configure` or by setting `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_DEFAULT_REGION` in your environment.
+
+**Terraform >= 1.5** — this chapter uses features introduced in 1.5, including `check` blocks for post-apply validation. Verify with:
+
+```
+terraform version
+# Terraform v1.5.x
+```
+
+**kubectl** — you already have this from Chapter 12. After the EKS cluster is provisioned, you will update your kubeconfig to point at it:
+
+```
+aws eks update-kubeconfig --region us-east-1 --name library-cluster
+```
+
+From that point, every `kubectl` command you used in Chapter 12 works against the EKS cluster unchanged.
 
 ---
 
 ## Chapter roadmap
 
-**13.1 — DNS with Route 53** creates a hosted zone for your domain and adds the A-record alias that points your domain's apex (or a subdomain) at the ALB. You will use Terraform's `aws_route53_zone` and `aws_route53_record` resources. By the end of this section, the application is reachable at a human-readable URL — still over HTTP, but at the right address.
+The remaining sections build the AWS deployment of the library system in layers, starting with the network and working up to the application.
 
-**13.2 — TLS with ACM** provisions an ACM certificate for your domain and attaches it to the ALB. ACM handles certificate issuance via DNS validation — it writes a CNAME record to your hosted zone and polls for it, which Terraform orchestrates in a single `apply`. You will update the Ingress annotations in the production overlay to reference the certificate ARN and redirect HTTP to HTTPS. After this section, the application is reachable at `https://yourdomain.com`.
+**13.1 — Terraform Fundamentals** sets up the Terraform project: remote state in S3, the provider configuration, core concepts (providers, resources, variables, state), and the project structure.
 
-**13.3 — Secrets Management with External Secrets Operator** installs the External Secrets Operator into the cluster via Helm, creates the IAM role and policy that allow it to read from Secrets Manager, and writes the `ExternalSecret` and `SecretStore` resources that define which secrets to sync and how often. You will also write a small Terraform module that creates the Secrets Manager entries for each service's database credentials, replacing the placeholder values in the `secretGenerator`.
+**13.2 — VPC and Networking** provisions the VPC with public and private subnets, NAT gateways, and the security groups that will govern traffic between EKS, RDS, and MSK.
 
-**13.4 — Kafka Encryption (MSK TLS)** enables the TLS listener on the MSK cluster and disables the plaintext listener, updates the security group rules to allow port 9094 instead of 9092, and patches the `KAFKA_BROKERS` environment variable in the production overlay to use the TLS bootstrap server addresses. The application-level Kafka client configuration requires no changes — the Go Kafka library picks up the TLS requirement from the broker address scheme.
+**13.3 — Amazon ECR and the Build Pipeline** creates ECR repositories for each service image and wires up the GitHub Actions workflow to build, tag, and push images on every commit to `main`.
 
-**13.5 — Applying the Changes** walks through the full `terraform apply` and `kubectl apply` sequence, verifies each gap is closed, and confirms the integration tests from Chapter 10 still pass against the hardened cluster. You will also review the AWS Security Hub findings — if you enabled it in Chapter 12 — to confirm that the three controls that were previously failing now show as passed.
+**13.4 — Amazon RDS** provisions three PostgreSQL instances — one per service that owns a database — with private subnets, automated backups, and parameter groups. You will run schema migrations as Kubernetes Jobs rather than embedding them in the application startup path.
+
+**13.5 — Amazon MSK** provisions a two-broker Kafka cluster in private subnets. You will configure the bootstrap server addresses as a ConfigMap consumed by the catalog, reservation, and search services.
+
+**13.6 — EKS Cluster** provisions the EKS control plane and a managed node group. You will install the AWS Load Balancer Controller and configure OIDC federation so that pods can assume IAM roles without storing credentials.
+
+**13.7 — Production Kustomize Overlay** writes the overlay that patches image references, external endpoints, replica counts, and Ingress annotations. You will apply it manually first to verify the cluster comes up healthy, then hand control to the GitHub Actions pipeline.
+
+**13.8 — Continuous Deployment with GitHub Actions** builds the full pipeline: OIDC authentication, image build and push, Kustomize render and apply, and a smoke-test job that runs the integration tests from Chapter 11 against the live cluster.
+
+**13.9 — Deploying and Verifying** walks through the full `terraform apply` and `kubectl apply` sequence, verifies each resource is healthy, and provides a troubleshooting guide for common issues.
+
+**13.10 — GitOps with ArgoCD** discusses the GitOps deployment model, introduces ArgoCD, and explains how it would replace the push-based pipeline — without implementing it in the project.
 
 ---
 
-By the end of this chapter, the library system will pass a basic security review: encrypted traffic on every public-facing edge, secrets sourced from a managed store rather than committed configuration, and encrypted broker connections inside the cluster. These are not exotic hardening measures — they are the baseline that any production system deployed to a regulated environment is expected to meet, and they are the baseline that a careful engineer expects even in environments that are not formally regulated. Getting comfortable applying them in a learning project means they will not be unfamiliar when the stakes are higher.
+By the end of this chapter, the library system will be running on durable infrastructure, deployed automatically on every push, and accessible over HTTPS from any network. The skills you have practiced — writing manifests, layering Kustomize overlays, thinking about probes and graceful shutdown — transfer directly. The cloud layer is new tooling around the same fundamentals.
 
-Before moving to section 13.1, confirm that your Chapter 12 cluster is still running and healthy: `kubectl get pods -n library` should show all pods in the `Running` state. If you have run `terraform destroy` since Chapter 12, re-apply the Chapter 12 Terraform before continuing — the changes in this chapter build on top of the existing infrastructure rather than replacing it.
+Before we write a line of Terraform, run `aws sts get-caller-identity` and confirm your credentials are working. Every section from here forward assumes that command succeeds.
 
 ---
 
-[^1]: AWS Route 53 Documentation: https://docs.aws.amazon.com/Route53/latest/DeveloperGuide/Welcome.html
-[^2]: AWS Certificate Manager Documentation: https://docs.aws.amazon.com/acm/latest/userguide/acm-overview.html
-[^3]: External Secrets Operator Documentation: https://external-secrets.io/latest/
-[^4]: AWS Secrets Manager Documentation: https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html
-[^5]: Amazon MSK TLS Encryption: https://docs.aws.amazon.com/msk/latest/developerguide/msk-encryption.html
-[^6]: AWS Load Balancer Controller — TLS: https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/ingress/annotations/#ssl
-[^7]: Route 53 Pricing: https://aws.amazon.com/route53/pricing/
+[^1]: Amazon EKS Documentation: https://docs.aws.amazon.com/eks/latest/userguide/what-is-eks.html
+[^2]: Amazon RDS Documentation: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html
+[^3]: Amazon MSK Documentation: https://docs.aws.amazon.com/msk/latest/developerguide/what-is-msk.html
+[^4]: Amazon ECR Documentation: https://docs.aws.amazon.com/AmazonECR/latest/userguide/what-is-ecr.html
+[^5]: AWS Load Balancer Controller: https://kubernetes-sigs.github.io/aws-load-balancer-controller/
+[^6]: Configuring OIDC for EKS: https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html
+[^7]: Kustomize Documentation: https://kubectl.docs.kubernetes.io/references/kustomize/

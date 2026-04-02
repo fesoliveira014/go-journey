@@ -248,6 +248,10 @@ We covered `httptest` in Chapter 1, so we will not repeat the details here. The 
 
 ---
 
+The admin routes are ready, but we don't yet have an admin account or sample books. In the next chapter, we'll build CLI tools to create admin accounts and seed the catalog with sample data.
+
+---
+
 ## References
 
 [^1]: [Go net/http package -- FormValue](https://pkg.go.dev/net/http#Request.FormValue) -- Documentation for HTTP form value parsing.

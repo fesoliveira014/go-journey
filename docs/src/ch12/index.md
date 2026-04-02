@@ -1,185 +1,233 @@
-# Chapter 12: From Local to Cloud — Deploying to AWS
+# Chapter 12: Kubernetes
 
-Chapter 11 got every service running in a real Kubernetes cluster: probes passing, StatefulSets stable, Ingress routing requests from your laptop to the gateway. kind gave you a full control plane in Docker containers, which is exactly the right tool for developing and validating manifests without spending a cent. But kind is a development tool. The cluster lives on your machine, behind your home router, inaccessible from the internet. There is no persistent storage that outlives a `kind delete cluster`. There are no managed databases with automatic backups, no multi-AZ brokers, no autoscaling node pools. If your laptop goes to sleep, the cluster does too.
+Chapter 3 got all five services running locally with Docker Compose: a single `docker compose up` starts PostgreSQL, Kafka, Meilisearch, and every application container. For development and demonstration that is exactly right. But Docker Compose is a single-machine orchestrator. If the machine running it goes down, every service goes with it. If the catalog service crashes, nothing restarts it. If traffic doubles overnight, there is no mechanism to add replicas. Deploying a new image means a gap in service while the old container stops and the new one starts.
 
-This chapter takes the same application — the same manifests, the same container images, the same Kustomize base — and deploys it to AWS. The application services will run on Amazon EKS. PostgreSQL will move from a StatefulSet to Amazon RDS instances, one per service. Kafka will move from a StatefulSet to Amazon MSK. Images will be stored in Amazon ECR. Deployments will be triggered by GitHub Actions, not `kubectl apply` from a terminal. By the end, you will have a production-grade deployment pipeline that runs on every push to `main`.
+Kubernetes is the production-grade answer to all of those problems. It is a platform for running containerized workloads across a cluster of machines, with built-in self-healing, rolling updates, service discovery, autoscaling, and declarative configuration management. The same mental model you developed in Chapter 3 carries forward — containers, images, environment variables, volume mounts — but Kubernetes layers a control plane on top that continuously reconciles what is running against what you declared you want.
+
+This chapter introduces that control plane, maps the Docker Compose concepts you already know to their Kubernetes equivalents, and lays the groundwork for the sections that follow, where you will write real manifests and deploy the library system to a local cluster.
 
 ---
 
-## Target architecture
+## From Compose to Kubernetes
 
-The diagram below shows the system's target state after this chapter. The application namespace, the manifest structure, and the service communication patterns are identical to Chapter 11. What changes is the infrastructure surrounding the cluster.
+The most practical entry point into Kubernetes is a direct comparison with what you already know. Every Docker Compose concept has a Kubernetes counterpart. The semantics differ in important ways, but the mapping makes the unfamiliar familiar.
+
+| Docker Compose | Kubernetes | Purpose |
+|----------------|------------|---------|
+| `container` | Pod | Smallest deployable unit |
+| `services:` block | Deployment | Manages replica sets and rolling updates |
+| `ports:` | Service (ClusterIP/NodePort) | Internal service discovery and load balancing |
+| `depends_on` | Readiness probes | Health-based dependency management |
+| `volumes:` | PersistentVolumeClaim | Persistent storage |
+| `docker-compose.yml` | Manifests (YAML) | Declarative desired state |
+| Port mapping to host | Ingress | External traffic routing |
+
+A few nuances are worth calling out.
+
+`depends_on` in Compose controls startup order — service B won't start until service A's container exists. Kubernetes does not have startup ordering. Instead, it has **readiness probes**: a container signals that it is ready to receive traffic by passing a health check (an HTTP endpoint, a TCP connection, or an exec command). Kubernetes only routes traffic to a pod once its readiness probe passes. The implication is that your services must tolerate dependencies being temporarily unavailable and retry — a property called **graceful degradation** that is good practice in any distributed system.
+
+`ports:` in Compose binds a container port to a host port, making the service reachable at `localhost:8080`. Kubernetes decouples this into two steps: a **Service** object provides stable DNS and load balancing inside the cluster (no host port needed), and an **Ingress** object handles traffic arriving from outside the cluster.
+
+PersistentVolumeClaims are notably heavier than Compose volumes. A Compose volume is just a directory on the Docker host. A PVC is a request for storage from the cluster's storage subsystem — it can be fulfilled by a local disk, an NFS share, a cloud block device, or any storage provider that implements the Container Storage Interface (CSI). The application does not know or care which; it sees a mounted filesystem either way.
+
+---
+
+## The control plane
+
+A Kubernetes cluster has two kinds of machines: **control plane nodes** that manage the cluster, and **worker nodes** that run your workloads. In a production cluster there are typically three control plane nodes for high availability. In a local development cluster (which you will set up in section 12.1), a single node plays both roles.
+
+The control plane runs four core components:
+
+**API Server** is the front door to the cluster. Every interaction — from `kubectl` on your laptop to a controller inside the cluster — goes through the API server. It validates requests, persists state to etcd, and notifies components that care about changes. It exposes a RESTful HTTP API; `kubectl` is just a command-line client for that API.
+
+**etcd** is a distributed key-value store that holds all cluster state: every resource you have created, every status the system has observed, every configuration change. It is the single source of truth. If etcd is lost without a backup, the cluster's desired state is gone.
+
+**Scheduler** watches for pods that have been created but not yet assigned to a node. It evaluates each unscheduled pod against the available nodes — considering resource requests, node selectors, affinity rules, taints and tolerations — and writes a node assignment back to the API server. It does not start pods; it just decides where they go.
+
+**Controller Manager** runs a collection of control loops, each watching a specific resource type and reconciling the cluster's actual state toward the desired state. The Deployment controller, for example, watches Deployment objects and ensures the correct number of pod replicas are running at all times. When a pod crashes, the controller notices the discrepancy and creates a replacement.
 
 ```mermaid
 graph TD
-    Internet([Internet]) --> ALB[AWS Application Load Balancer]
+    kubectl([kubectl / API clients]) --> API[API Server]
+    API --> etcd[(etcd)]
+    API --> Scheduler[Scheduler]
+    API --> CM[Controller Manager]
+    CM -->|watches & reconciles| API
+    Scheduler -->|assigns pods| API
+```
 
-    subgraph VPC [AWS VPC]
-        ALB --> GW[gateway]
+The diagram shows that everything flows through the API server. No component talks directly to another — they all read and write through the central API. This design makes the system auditable, extensible, and resilient to component restarts.
 
-        subgraph EKS [Amazon EKS Cluster]
-            subgraph library [Namespace: library]
-                GW --> AUTH[auth]
-                GW --> CAT[catalog]
-                GW --> RES[reservation]
-                GW --> SRC[search]
-            end
+---
 
-            subgraph data [Namespace: data]
-                MEI[(Meilisearch\nStatefulSet)]
-            end
-        end
+## Node components
 
-        SRC --> MEI
-        AUTH --> RDS_AUTH[(RDS: auth-db)]
-        CAT --> RDS_CAT[(RDS: catalog-db)]
-        RES --> RDS_RES[(RDS: reservation-db)]
-        CAT --> MSK[Amazon MSK\nKafka]
-        RES --> MSK
-        SRC --> MSK
+On every worker node, two components handle the actual work of running containers.
+
+**kubelet** is an agent that runs on each node. It watches the API server for pods assigned to its node, instructs the container runtime (typically containerd) to pull images and start containers, monitors their health, and reports status back to the API server. If a container's liveness probe fails, the kubelet restarts it. The kubelet is how the control plane's intent reaches the physical machine.
+
+**kube-proxy** manages the network rules that implement Kubernetes Services. When you create a Service pointing to three catalog pods, kube-proxy ensures that traffic arriving at the Service's virtual IP is load-balanced across those three pods. On Linux it does this using iptables or IPVS rules. It is transparent to your application — your code connects to the Service name, and the network layer handles the rest.
+
+---
+
+## The declarative model
+
+The most important conceptual shift from Compose to Kubernetes is the move from **imperative** to **declarative** operations.
+
+Docker Compose is imperative: you run `docker compose up` and Compose starts the containers you described. If a container crashes later, nothing brings it back unless you run the command again. If you want three copies of catalog, you decide when to start the second and third.
+
+Kubernetes is declarative: you write a manifest that says "I want three replicas of the catalog service running, using image `library/catalog:v1.2.0`, with 256 MB of memory and 100m of CPU." You apply that manifest once. Kubernetes stores it as the desired state and then continuously reconciles. If a pod crashes, the controller creates a replacement — not because you asked it to, but because the actual state (two running replicas) diverged from the desired state (three). If a node goes down, the pods on it are rescheduled to healthy nodes automatically.
+
+This reconciliation loop runs forever. It is not a one-time action but an ongoing process. The practical consequence is that Kubernetes manifests are **idempotent**: applying the same manifest twice has the same effect as applying it once. If nothing has changed, nothing happens. If the image tag changed, Kubernetes performs a rolling update.
+
+For a system built to run continuously and recover from failure, this model is fundamentally more reliable than issuing imperative commands. You describe the outcome; Kubernetes figures out how to achieve and maintain it.
+
+---
+
+## Key resource types
+
+Kubernetes organizes everything around **resources** — typed objects stored in etcd and managed by controllers. The following are the resource types you will use in this chapter.
+
+**Pod** is the smallest deployable unit in Kubernetes. A pod contains one or more containers that share a network namespace and can share volumes. All containers in a pod are scheduled on the same node and started together. In practice, most pods contain a single application container; the multi-container pattern (called a sidecar) is used for cross-cutting concerns like log collection or service mesh proxies. You will rarely create pods directly — you use Deployments or StatefulSets, which manage pods on your behalf.
+
+**Deployment** is the standard way to run stateless application services. It manages a ReplicaSet (a group of identical pods) and handles rolling updates: when you change the image tag, it starts new pods with the new image before terminating old ones, ensuring continuous availability. It also handles rollback: if the new version fails its health checks, you can revert to the previous version with a single command. Every stateless service in the library system — gateway, auth, catalog, reservation, search — will run as a Deployment.
+
+**Service** gives a stable network identity to a dynamic set of pods. Pods are ephemeral: they are created and destroyed as replicas scale up and down, and each gets a new IP address when it starts. A Service selects pods using label selectors and provides a stable virtual IP and DNS name that other services can use regardless of which pods are currently running. The default type, ClusterIP, is only reachable inside the cluster. NodePort exposes the service on a port on each node. LoadBalancer provisions an external load balancer in cloud environments.
+
+**StatefulSet** is like a Deployment but designed for stateful workloads — databases, message brokers, anything that needs stable network identities, ordered startup and shutdown, and persistent storage. Each pod in a StatefulSet gets a predictable name (postgres-0, postgres-1) and its own PersistentVolumeClaim. Kafka and PostgreSQL will run as StatefulSets.
+
+**ConfigMap** holds non-sensitive configuration data as key-value pairs or entire files. You mount ConfigMaps into pods as environment variables or as files in the filesystem. They decouple configuration from the container image, allowing the same image to run in development, staging, and production with different settings.
+
+**Secret** is structurally identical to a ConfigMap but intended for sensitive data: passwords, API keys, TLS certificates, OAuth credentials. Secrets are base64-encoded (not encrypted by default at rest, though encryption can be enabled) and treated with additional care by the API server — they are not included in API responses unless explicitly requested.
+
+**Ingress** manages external HTTP and HTTPS traffic into the cluster. An Ingress resource defines routing rules: requests to `library.example.com/api` go to the gateway service; requests to `library.example.com/auth` go to the auth service. An Ingress Controller (a reverse proxy like nginx or Traefik that runs inside the cluster) reads these rules and configures itself accordingly. Ingress is what replaces the `ports:` host binding from Docker Compose for production deployments.
+
+**PersistentVolumeClaim** is a request for storage. A PVC specifies the size, access mode (ReadWriteOnce for a single writer, ReadWriteMany for shared access), and optionally a StorageClass. The cluster satisfies the PVC by binding it to a PersistentVolume — the actual storage backend. Applications mount the PVC as a directory; they do not know whether the storage is a local disk, an NFS share, or a cloud volume.
+
+---
+
+## kubectl basics
+
+`kubectl` is the command-line client for the Kubernetes API. Every operation you perform on a cluster goes through it. The commands you will use most often are:
+
+**Apply** submits a manifest to the API server. Kubernetes creates the resource if it does not exist, or updates it if it does. This is the primary way to deploy changes.
+
+```
+kubectl apply -f catalog-deployment.yaml
+kubectl apply -f k8s/
+```
+
+**Get** lists resources. The output shows name, status, age, and a few key fields depending on the resource type.
+
+```
+kubectl get pods
+kubectl get pods -n library
+kubectl get deployments,services -n library
+```
+
+**Describe** shows detailed information about a resource, including its events — the most useful first stop when debugging why a pod won't start.
+
+```
+kubectl describe pod catalog-7d9f4b-xvz2k -n library
+kubectl describe deployment catalog -n library
+```
+
+**Logs** streams or prints container logs. For a pod with multiple containers, use `-c` to specify which container.
+
+```
+kubectl logs catalog-7d9f4b-xvz2k -n library
+kubectl logs -f catalog-7d9f4b-xvz2k -n library
+kubectl logs deployment/catalog -n library
+```
+
+**Port-forward** creates a tunnel from a local port to a port on a pod or service. Useful for accessing services without an Ingress during development.
+
+```
+kubectl port-forward svc/catalog 50051:50051 -n library
+kubectl port-forward pod/postgres-0 5432:5432 -n data
+```
+
+**Delete** removes a resource. For Deployments, this also removes the pods it manages.
+
+```
+kubectl delete -f catalog-deployment.yaml
+kubectl delete pod catalog-7d9f4b-xvz2k -n library
+```
+
+One concept that runs through all of these commands: **namespaces**. Namespaces partition a cluster's resources into isolated groups. The `-n` flag specifies which namespace to operate in. Without it, `kubectl` defaults to the `default` namespace. Most production clusters use namespaces to separate environments, teams, or application tiers.
+
+---
+
+## What we are building
+
+The library system will be deployed across three namespaces, each grouping logically related services:
+
+- **library** — the five application services: gateway, auth, catalog, reservation, search
+- **data** — the data stores: PostgreSQL and Meilisearch
+- **messaging** — the message broker: Kafka (and its dependency, ZooKeeper)
+
+This separation is not just organizational. Namespaces give you a unit of isolation for network policies, resource quotas, and RBAC (role-based access control). In a real multi-team environment, you might give different teams ownership over different namespaces. Here, the separation keeps infrastructure concerns out of the application namespace and makes it easy to reason about what belongs where.
+
+```mermaid
+graph TD
+    subgraph library [Namespace: library]
+        GW[gateway]
+        AUTH[auth]
+        CAT[catalog]
+        RES[reservation]
+        SRC[search]
     end
 
-    ECR[Amazon ECR] -.->|pull images| EKS
-    GHA[GitHub Actions\nOIDC] -.->|kubectl apply| EKS
+    subgraph data [Namespace: data]
+        PG[(PostgreSQL)]
+        MEI[(Meilisearch)]
+    end
+
+    subgraph messaging [Namespace: messaging]
+        KFK[Kafka]
+        ZK[ZooKeeper]
+    end
+
+    GW --> AUTH
+    GW --> CAT
+    GW --> RES
+    GW --> SRC
+    CAT --> PG
+    AUTH --> PG
+    RES --> PG
+    SRC --> MEI
+    CAT --> KFK
+    RES --> KFK
+    SRC --> KFK
+    KFK --> ZK
 ```
 
-A few details worth noting. Meilisearch remains a StatefulSet inside EKS — AWS has no managed full-text search offering that matches Meilisearch's API, and the data it holds is re-indexable from PostgreSQL, so the operational simplicity of keeping it in-cluster outweighs the risk. Everything else that held persistent state in Chapter 11 moves to managed services.
-
-The load balancer is an AWS Application Load Balancer provisioned by the AWS Load Balancer Controller — an EKS add-on that watches Ingress resources and creates ALBs automatically. It replaces the NGINX Ingress Controller from Chapter 11. The routing rules in the Ingress manifest stay the same; only the controller annotation changes.
-
-GitHub Actions authenticates to AWS and to EKS using OIDC federation — no long-lived credentials stored as secrets. A push to `main` builds images, pushes them to ECR, and applies the production Kustomize overlay to the EKS cluster.
-
----
-
-## Mapping local to cloud
-
-Every piece of infrastructure from Chapter 11 has a direct AWS counterpart. The table below is your translation guide for the rest of the chapter.
-
-| Local (kind) | AWS | Purpose |
-|---|---|---|
-| kind cluster | Amazon EKS | Kubernetes control plane and worker nodes |
-| `kind load docker-image` | Amazon ECR | Container image storage and distribution |
-| NGINX Ingress Controller | AWS Load Balancer Controller + ALB | External HTTP/S traffic routing |
-| PostgreSQL StatefulSets | Amazon RDS (db.t3.micro) | Managed PostgreSQL with automated backups |
-| Kafka StatefulSet + ZooKeeper | Amazon MSK (kafka.t3.small) | Managed Kafka with multi-AZ replication |
-| `kubectl apply` from laptop | GitHub Actions + OIDC | Automated, auditable deployment pipeline |
-| Kustomize local overlay | Kustomize production overlay | Environment-specific configuration |
-
-The right column is not a replacement in the "throw out the old thing" sense. kind stays in the development workflow. Your local overlay still works. The production overlay is additive — it targets the same base manifests and overrides the values that differ between environments: image registries, resource limits, replica counts, and external service endpoints.
-
----
-
-## What changes and what stays the same
-
-The Kustomize layering from Chapter 11 is paying its first serious dividend here. The base manifests under `k8s/base/` are untouched. You wrote them once, validated them against a kind cluster, and they are now ready to be promoted to production without modification.
-
-What changes lives entirely in a new Kustomize overlay at `k8s/overlays/production/`. That overlay patches:
-
-- **Image references** — from local names like `library/catalog:latest` to ECR URIs like `123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog:abc1234`
-- **Database endpoints** — the `DB_HOST` environment variable for each service now points to an RDS endpoint rather than `postgres.data.svc.cluster.local`
-- **Kafka bootstrap servers** — the `KAFKA_BROKERS` variable points to MSK broker endpoints rather than `kafka.messaging.svc.cluster.local`
-- **Replica counts** — production runs two replicas of each stateless service for availability
-- **Resource limits** — tighter CPU and memory bounds appropriate for a paid compute environment
-- **Ingress annotations** — the `kubernetes.io/ingress.class` annotation changes from `nginx` to `alb`, and ALB-specific annotations are added for certificate ARN, scheme, and target type
-
-The application services themselves do not know or care whether they are talking to a Kubernetes StatefulSet or a managed cloud service. They connect to a hostname and a port. That hostname is what the overlay changes. This is the practical value of externalizing configuration: the same binary runs in every environment.
-
-What also stays the same: namespaces, Service objects, ConfigMaps structure, gRPC communication patterns between services, health check endpoints, and the Earthfile CI targets from Chapter 10. The production pipeline will call the same `earthly +build` and `earthly +test` targets before deploying.
-
----
-
-## Cost awareness
-
-Running this infrastructure continuously is not free. Before you apply a single Terraform plan, understand what you are signing up for.
-
-| Resource | Type | Monthly cost (approx.) |
-|---|---|---|
-| EKS control plane | — | $73 |
-| Worker nodes | 2x t3.medium | $61 |
-| RDS auth-db | db.t3.micro | $13 |
-| RDS catalog-db | db.t3.micro | $13 |
-| RDS reservation-db | db.t3.micro | $13 |
-| MSK brokers | 2x kafka.t3.small | $73 |
-| NAT Gateway | — | $33 |
-| ALB | — | ~$16 |
-| **Total** | | **~$295/month** |
-
-These numbers are us-east-1 on-demand pricing as of early 2026 and will drift. The EKS control plane flat fee ($73/month, or about $0.10/hour) and the NAT Gateway are the costs that catch people off guard — they run whether or not any traffic flows.
-
-The single most important habit when working through this chapter: **run `terraform destroy` when you are done for the day.** Terraform will tear down every resource it created in a few minutes. Leaving the cluster running overnight costs roughly $10. Leaving it running for a week costs roughly $70. The Terraform state is stored remotely (you will configure an S3 backend in section 12.1), so destroying and recreating the cluster is safe — your application state lives in RDS, and your configuration lives in git.
-
-A cost-saving shortcut: if you only need the cluster for a few hours, set the MSK broker count to 1 and skip multi-AZ for RDS. You will lose the high-availability story, but the cluster will still function for learning purposes and the bill drops to roughly $160/month.
-
----
-
-## Prerequisites
-
-You need four things in place before starting section 12.1.
-
-**AWS account** with sufficient IAM permissions to create EKS clusters, RDS instances, MSK clusters, VPCs, IAM roles, and ECR repositories. If you are using a personal account, attaching the `AdministratorAccess` policy to your IAM user is the path of least resistance. For a shared or corporate account, work with your administrator to scope the permissions appropriately.
-
-**AWS CLI v2** — version 2.x is required; version 1 will not work with all EKS authentication mechanisms used here. Verify with:
-
-```
-aws --version
-# aws-cli/2.x.x ...
-```
-
-Configure it with `aws configure` or by setting `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, and `AWS_DEFAULT_REGION` in your environment.
-
-**Terraform >= 1.5** — this chapter uses features introduced in 1.5, including `check` blocks for post-apply validation. Verify with:
-
-```
-terraform version
-# Terraform v1.5.x
-```
-
-**kubectl** — you already have this from Chapter 11. After the EKS cluster is provisioned, you will update your kubeconfig to point at it:
-
-```
-aws eks update-kubeconfig --region us-east-1 --name library-cluster
-```
-
-From that point, every `kubectl` command you used in Chapter 11 works against the EKS cluster unchanged.
+Traffic enters the cluster through an Ingress controller that routes to the gateway. The gateway calls the other application services over gRPC. The application services reach their data stores and Kafka across namespace boundaries — Kubernetes DNS makes this straightforward, as a service in `data` is reachable at `postgres.data.svc.cluster.local` from any namespace.
 
 ---
 
 ## Chapter roadmap
 
-The remaining sections build the AWS deployment of the library system in layers, starting with the network and working up to the application.
+The remaining sections build the Kubernetes deployment of the library system step by step:
 
-**12.1 — Terraform Fundamentals** sets up the Terraform project: remote state in S3, the provider configuration, core concepts (providers, resources, variables, state), and the project structure.
+**11.1 — Local Cluster with kind** sets up a local Kubernetes cluster using kind (Kubernetes in Docker). You will install kind and kubectl, create a cluster, load locally-built images, and verify that the cluster is healthy. kind runs a full Kubernetes control plane inside Docker containers on your laptop, making it the fastest path to a real cluster without a cloud account.
 
-**12.2 — VPC and Networking** provisions the VPC with public and private subnets, NAT gateways, and the security groups that will govern traffic between EKS, RDS, and MSK.
+**11.2 — Preparing Services for Kubernetes** revisits the five application services and makes them Kubernetes-ready: health check endpoints (for liveness and readiness probes), graceful shutdown handling, and configuration via environment variables rather than hardcoded values.
 
-**12.3 — Amazon ECR and the Build Pipeline** creates ECR repositories for each service image and wires up the GitHub Actions workflow to build, tag, and push images on every commit to `main`.
+**11.3 — Application Manifests** writes the Deployment, Service, ConfigMap, and Secret manifests for the five application services. You will apply them to the cluster and verify each service starts correctly.
 
-**12.4 — Amazon RDS** provisions three PostgreSQL instances — one per service that owns a database — with private subnets, automated backups, and parameter groups. You will run schema migrations as Kubernetes Jobs rather than embedding them in the application startup path.
+**11.4 — Infrastructure Manifests** writes StatefulSet and PersistentVolumeClaim manifests for PostgreSQL, Kafka, ZooKeeper, and Meilisearch — the workloads that require stable storage and identity.
 
-**12.5 — Amazon MSK** provisions a two-broker Kafka cluster in private subnets. You will configure the bootstrap server addresses as a ConfigMap consumed by the catalog, reservation, and search services.
+**11.5 — Kustomize Environments** introduces Kustomize, Kubernetes' built-in configuration management tool. You will create a base configuration and two overlays — development and production — so that the same manifests can be applied with environment-specific adjustments without duplication.
 
-**12.6 — EKS Cluster** provisions the EKS control plane and a managed node group. You will install the AWS Load Balancer Controller and configure OIDC federation so that pods can assume IAM roles without storing credentials.
-
-**12.7 — Production Kustomize Overlay** writes the overlay that patches image references, external endpoints, replica counts, and Ingress annotations. You will apply it manually first to verify the cluster comes up healthy, then hand control to the GitHub Actions pipeline.
-
-**12.8 — Continuous Deployment with GitHub Actions** builds the full pipeline: OIDC authentication, image build and push, Kustomize render and apply, and a smoke-test job that runs the integration tests from Chapter 10 against the live cluster.
-
-**12.9 — Deploying and Verifying** walks through the full `terraform apply` and `kubectl apply` sequence, verifies each resource is healthy, and provides a troubleshooting guide for common issues.
-
-**12.10 — GitOps with ArgoCD** discusses the GitOps deployment model, introduces ArgoCD, and explains how it would replace the push-based pipeline — without implementing it in the project.
+**11.6 — Deploying and Verifying** ties everything together: applying all manifests in the correct order, verifying health, exercising the system through the Ingress, and walking through the debugging workflow when something goes wrong.
 
 ---
 
-By the end of this chapter, the library system will be running on durable infrastructure, deployed automatically on every push, and accessible over HTTPS from any network. The skills you have practiced — writing manifests, layering Kustomize overlays, thinking about probes and graceful shutdown — transfer directly. The cloud layer is new tooling around the same fundamentals.
-
-Before we write a line of Terraform, run `aws sts get-caller-identity` and confirm your credentials are working. Every section from here forward assumes that command succeeds.
+By the end of the chapter, every service you have built will be running in a real Kubernetes cluster — self-healing, namespace-isolated, and configured exactly as they would be in a production cloud deployment. The Docker Compose file will still exist for local development; Kubernetes is not a replacement for that workflow, it is the production target that all your work has been building toward.
 
 ---
 
-[^1]: Amazon EKS Documentation: https://docs.aws.amazon.com/eks/latest/userguide/what-is-eks.html
-[^2]: Amazon RDS Documentation: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/Welcome.html
-[^3]: Amazon MSK Documentation: https://docs.aws.amazon.com/msk/latest/developerguide/what-is-msk.html
-[^4]: Amazon ECR Documentation: https://docs.aws.amazon.com/AmazonECR/latest/userguide/what-is-ecr.html
-[^5]: AWS Load Balancer Controller: https://kubernetes-sigs.github.io/aws-load-balancer-controller/
-[^6]: Configuring OIDC for EKS: https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html
-[^7]: Kustomize Documentation: https://kubectl.docs.kubernetes.io/references/kustomize/
+[^1]: Kubernetes Documentation: https://kubernetes.io/docs/home/
+[^2]: Kubernetes Components: https://kubernetes.io/docs/concepts/overview/components/
+[^3]: kubectl Cheat Sheet: https://kubernetes.io/docs/reference/kubectl/cheatsheet/
