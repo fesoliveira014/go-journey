@@ -35,10 +35,6 @@ func main() {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
 
-	if err := db.AutoMigrate(&model.User{}); err != nil {
-		log.Fatalf("failed to migrate: %v", err)
-	}
-
 	hash, err := bcrypt.GenerateFromPassword([]byte(*password), bcrypt.DefaultCost)
 	if err != nil {
 		log.Fatalf("failed to hash password: %v", err)

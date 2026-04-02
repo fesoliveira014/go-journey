@@ -53,6 +53,7 @@ func main() {
 	authConn, err := grpc.NewClient(authAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithUnaryInterceptor(pkgauth.UnaryForwardAuthInterceptor()),
 	)
 	if err != nil {
 		slog.Error("connect to auth service", "error", err)

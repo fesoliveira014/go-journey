@@ -183,38 +183,14 @@ func buildFilterString(filters SearchFilters) []string {
 }
 
 func hitToDocument(hit interface{}) (model.BookDocument, error) {
-	m, ok := hit.(map[string]interface{})
+	h, ok := hit.(meilisearch.Hit)
 	if !ok {
-		return model.BookDocument{}, fmt.Errorf("unexpected hit type")
+		return model.BookDocument{}, fmt.Errorf("unexpected hit type: %T", hit)
 	}
 
-	doc := model.BookDocument{}
-	if v, ok := m["id"].(string); ok {
-		doc.ID = v
-	}
-	if v, ok := m["title"].(string); ok {
-		doc.Title = v
-	}
-	if v, ok := m["author"].(string); ok {
-		doc.Author = v
-	}
-	if v, ok := m["isbn"].(string); ok {
-		doc.ISBN = v
-	}
-	if v, ok := m["genre"].(string); ok {
-		doc.Genre = v
-	}
-	if v, ok := m["description"].(string); ok {
-		doc.Description = v
-	}
-	if v, ok := m["published_year"].(float64); ok {
-		doc.PublishedYear = int(v)
-	}
-	if v, ok := m["total_copies"].(float64); ok {
-		doc.TotalCopies = int(v)
-	}
-	if v, ok := m["available_copies"].(float64); ok {
-		doc.AvailableCopies = int(v)
+	var doc model.BookDocument
+	if err := h.Decode(&doc); err != nil {
+		return model.BookDocument{}, fmt.Errorf("decode hit: %w", err)
 	}
 	return doc, nil
 }
