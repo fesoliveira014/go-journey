@@ -61,7 +61,7 @@ Every piece of infrastructure from Chapter 12 has a direct AWS counterpart. The 
 | `kind load docker-image` | Amazon ECR | Container image storage and distribution |
 | NGINX Ingress Controller | AWS Load Balancer Controller + ALB | External HTTP/S traffic routing |
 | PostgreSQL StatefulSets | Amazon RDS (db.t3.micro) | Managed PostgreSQL with automated backups |
-| Kafka StatefulSet + ZooKeeper | Amazon MSK (kafka.t3.small) | Managed Kafka with multi-AZ replication |
+| Kafka StatefulSet (KRaft) | Amazon MSK (kafka.t3.small) | Managed Kafka with multi-AZ replication |
 | `kubectl apply` from laptop | GitHub Actions + OIDC | Automated, auditable deployment pipeline |
 | Kustomize local overlay | Kustomize production overlay | Environment-specific configuration |
 

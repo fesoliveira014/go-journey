@@ -1,6 +1,6 @@
 # 11.5 Service-Level End-to-End Tests
 
-Sections 10.1 through 10.4 each tested one layer of the stack in isolation. Unit tests verified service logic with mocked dependencies. Testcontainers-backed integration tests verified that the SQL was correct. bufconn tests verified that the gRPC wiring — interceptors, metadata, codec — was correct. Kafka tests verified that the serialization round-trip between producer and consumer was correct.
+Sections 11.1 through 11.4 each tested one layer of the stack in isolation. Unit tests verified service logic with mocked dependencies. Testcontainers-backed integration tests verified that the SQL was correct. bufconn tests verified that the gRPC wiring — interceptors, metadata, codec — was correct. Kafka tests verified that the serialization round-trip between producer and consumer was correct.
 
 Each of those tests answers a narrow question. None of them answers the question a system operator actually cares about: "if a client sends a valid gRPC request, does the right thing happen all the way down to the database and the message broker?"
 
@@ -83,56 +83,74 @@ package e2e_test
 import (
     "context"
     "testing"
+    "time"
 
+    "github.com/golang-migrate/migrate/v4"
+    pgmigrate "github.com/golang-migrate/migrate/v4/database/postgres"
+    "github.com/golang-migrate/migrate/v4/source/iofs"
     "github.com/testcontainers/testcontainers-go"
+    kafkatc "github.com/testcontainers/testcontainers-go/modules/kafka"
+    tcpostgres "github.com/testcontainers/testcontainers-go/modules/postgres"
     "github.com/testcontainers/testcontainers-go/wait"
-    "gorm.io/driver/postgres"
+    gormpostgres "gorm.io/driver/postgres"
     "gorm.io/gorm"
 
     "github.com/yourorg/library/services/catalog/internal/repository"
+    "github.com/yourorg/library/services/catalog/migrations"
 )
 
 func setupPostgres(t *testing.T) *gorm.DB {
     t.Helper()
     ctx := context.Background()
 
-    container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-        ContainerRequest: testcontainers.ContainerRequest{
-            Image:        "postgres:16-alpine",
-            ExposedPorts: []string{"5432/tcp"},
-            Env: map[string]string{
-                "POSTGRES_USER":     "test",
-                "POSTGRES_PASSWORD": "test",
-                "POSTGRES_DB":       "catalog_test",
-            },
-            WaitingFor: wait.ForListeningPort("5432/tcp"),
-        },
-        Started: true,
-    })
+    pgContainer, err := tcpostgres.Run(ctx,
+        "postgres:16-alpine",
+        tcpostgres.WithDatabase("catalog_test"),
+        tcpostgres.WithUsername("test"),
+        tcpostgres.WithPassword("test"),
+        testcontainers.WithWaitStrategy(
+            wait.ForLog("database system is ready to accept connections").
+                WithOccurrence(2).
+                WithStartupTimeout(30*time.Second),
+        ),
+    )
     if err != nil {
         t.Fatalf("failed to start postgres container: %v", err)
     }
-    t.Cleanup(func() { _ = container.Terminate(ctx) })
+    t.Cleanup(func() {
+        if err := pgContainer.Terminate(ctx); err != nil {
+            t.Logf("failed to terminate postgres container: %v", err)
+        }
+    })
 
-    host, err := container.Host(ctx)
+    connStr, err := pgContainer.ConnectionString(ctx, "sslmode=disable")
     if err != nil {
-        t.Fatalf("failed to get container host: %v", err)
-    }
-    port, err := container.MappedPort(ctx, "5432/tcp")
-    if err != nil {
-        t.Fatalf("failed to get mapped port: %v", err)
-    }
-
-    dsn := fmt.Sprintf("host=%s port=%s user=test password=test dbname=catalog_test sslmode=disable",
-        host, port.Port())
-    db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
-    if err != nil {
-        t.Fatalf("failed to open gorm connection: %v", err)
+        t.Fatalf("failed to get connection string: %v", err)
     }
 
-    // Run migrations using the same path production uses.
-    err = repository.RunMigrations(db)
+    db, err := gorm.Open(gormpostgres.Open(connStr), &gorm.Config{})
     if err != nil {
+        t.Fatalf("failed to connect to postgres: %v", err)
+    }
+
+    // Run migrations using golang-migrate with embedded SQL files.
+    sqlDB, err := db.DB()
+    if err != nil {
+        t.Fatalf("failed to get sql.DB: %v", err)
+    }
+    driver, err := pgmigrate.WithInstance(sqlDB, &pgmigrate.Config{})
+    if err != nil {
+        t.Fatalf("failed to create migration driver: %v", err)
+    }
+    source, err := iofs.New(migrations.FS, ".")
+    if err != nil {
+        t.Fatalf("failed to create migration source: %v", err)
+    }
+    m, err := migrate.NewWithInstance("iofs", source, "postgres", driver)
+    if err != nil {
+        t.Fatalf("failed to create migrator: %v", err)
+    }
+    if err := m.Up(); err != nil && err != migrate.ErrNoChange {
         t.Fatalf("failed to run migrations: %v", err)
     }
 
@@ -140,7 +158,7 @@ func setupPostgres(t *testing.T) *gorm.DB {
 }
 ```
 
-The call to `repository.RunMigrations` is important. It is not a test-only migration script — it is the exact same function the production `main.go` calls at startup. If you drift from that, you risk passing e2e tests against a schema that does not match the production schema.
+Two things to note here. First, `setupPostgres` uses the Testcontainers Postgres module (`testcontainers-go/modules/postgres`) rather than the lower-level `GenericContainer`. The module provides typed helpers like `WithDatabase` and `ConnectionString` that eliminate manual host/port assembly. Second, migrations run through `golang-migrate` using the same embedded SQL files that production uses (`migrations.FS`). This guarantees the test schema matches production exactly — if you drift from that, you risk passing e2e tests against a schema that does not match what runs in deployment.
 
 ### setupKafka
 
@@ -149,38 +167,27 @@ func setupKafka(t *testing.T) []string {
     t.Helper()
     ctx := context.Background()
 
-    container, err := testcontainers.GenericContainer(ctx, testcontainers.GenericContainerRequest{
-        ContainerRequest: testcontainers.ContainerRequest{
-            Image:        "confluentinc/cp-kafka:7.6.0",
-            ExposedPorts: []string{"9092/tcp"},
-            Env: map[string]string{
-                "KAFKA_BROKER_ID":                        "1",
-                "KAFKA_ZOOKEEPER_CONNECT":                "localhost:2181",
-                "KAFKA_ADVERTISED_LISTENERS":             "PLAINTEXT://localhost:9092",
-                "KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR": "1",
-                "KAFKA_AUTO_CREATE_TOPICS_ENABLE":        "true",
-            },
-            WaitingFor: wait.ForListeningPort("9092/tcp"),
-        },
-        Started: true,
-    })
+    kafkaContainer, err := kafkatc.Run(ctx,
+        "confluentinc/confluent-local:7.6.0",
+    )
     if err != nil {
         t.Fatalf("failed to start kafka container: %v", err)
     }
-    t.Cleanup(func() { _ = container.Terminate(ctx) })
+    t.Cleanup(func() {
+        if err := kafkaContainer.Terminate(ctx); err != nil {
+            t.Logf("failed to terminate kafka container: %v", err)
+        }
+    })
 
-    host, err := container.Host(ctx)
+    brokers, err := kafkaContainer.Brokers(ctx)
     if err != nil {
-        t.Fatalf("failed to get container host: %v", err)
+        t.Fatalf("failed to get kafka brokers: %v", err)
     }
-    port, err := container.MappedPort(ctx, "9092/tcp")
-    if err != nil {
-        t.Fatalf("failed to get mapped port: %v", err)
-    }
-
-    return []string{fmt.Sprintf("%s:%s", host, port.Port())}
+    return brokers
 }
 ```
+
+Unlike PostgreSQL, where we used `GenericContainer`, Kafka uses the Testcontainers Kafka module (`testcontainers-go/modules/kafka`). The module handles all the KRaft-mode configuration internally — node IDs, controller quorum voters, listener protocols — so you don't have to set any Kafka environment variables yourself. The `confluent-local` image is purpose-built for single-node testing: it starts in KRaft mode (no ZooKeeper) and auto-creates topics by default.
 
 The return value is a `[]string` of broker addresses — the same type that `sarama.NewSyncProducer` and `sarama.NewConsumerGroup` both accept. Keeping the signature consistent with what your application packages expect means you can pass the slice directly without any adaptation.
 
@@ -827,7 +834,7 @@ The service-level e2e tests in this section occupy a useful middle ground. They 
 
 ## Putting it all together
 
-Looking back at the full test strategy from section 11.0:
+Looking back at the full test strategy from this chapter:
 
 | Layer | Tool | What it catches |
 |---|---|---|
