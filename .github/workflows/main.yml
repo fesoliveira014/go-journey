@@ -20,8 +20,20 @@ jobs:
       - name: Run CI
         run: earthly +ci
 
-  build-and-push:
+  integration-test:
     needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Earthly
+        uses: earthly/actions-setup@v1
+        with:
+          version: v0.8.15
+      - name: Run integration tests
+        run: earthly -P +integration-test
+
+  build-and-push:
+    needs: [ci, integration-test]
     runs-on: ubuntu-latest
     strategy:
       matrix:
