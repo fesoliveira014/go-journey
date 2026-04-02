@@ -26,3 +26,9 @@ variable "github_repo" {
   description = "GitHub repository in owner/repo format for OIDC federation"
   type        = string
 }
+
+variable "domain_name" {
+  description = "Domain name for the application (e.g., library.example.com)"
+  type        = string
+  default     = ""
+}

@@ -53,12 +53,12 @@ resource "aws_security_group" "msk" {
   tags = { Name = "${var.project_name}-msk" }
 }
 
-resource "aws_security_group_rule" "msk_ingress_plaintext" {
+resource "aws_security_group_rule" "msk_ingress_tls" {
   type                     = "ingress"
-  from_port                = 9092
-  to_port                  = 9092
+  from_port                = 9094
+  to_port                  = 9094
   protocol                 = "tcp"
   security_group_id        = aws_security_group.msk.id
   source_security_group_id = module.eks.node_security_group_id
-  description              = "Kafka plaintext from EKS nodes"
+  description              = "Kafka TLS from EKS nodes"
 }

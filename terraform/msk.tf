@@ -36,8 +36,8 @@ resource "aws_msk_cluster" "main" {
 
   encryption_info {
     encryption_in_transit {
-      client_broker = "PLAINTEXT"
-      # Chapter 13 changes this to "TLS" and updates service configs to use port 9094
+      client_broker = "TLS"
+      in_cluster    = true
     }
   }
 }
