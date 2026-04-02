@@ -41,3 +41,8 @@ output "oidc_provider_arn" {
   description = "EKS OIDC provider ARN (for IRSA)"
   value       = module.eks.oidc_provider_arn
 }
+
+output "github_actions_role_arn" {
+  description = "IAM role ARN for GitHub Actions OIDC federation"
+  value       = aws_iam_role.github_actions.arn
+}
