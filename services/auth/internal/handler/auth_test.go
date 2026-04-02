@@ -7,7 +7,11 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
+	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	"github.com/fesoliveira014/library-system/services/auth/internal/handler"
 	"github.com/fesoliveira014/library-system/services/auth/internal/model"
 	"github.com/fesoliveira014/library-system/services/auth/internal/service"
@@ -59,6 +63,14 @@ func (r *inMemoryRepo) GetByOAuthID(ctx context.Context, provider, oauthID strin
 		}
 	}
 	return nil, model.ErrUserNotFound
+}
+
+func (r *inMemoryRepo) List(_ context.Context) ([]*model.User, error) {
+	users := make([]*model.User, 0, len(r.users))
+	for _, u := range r.users {
+		users = append(users, u)
+	}
+	return users, nil
 }
 
 func (r *inMemoryRepo) Update(ctx context.Context, user *model.User) (*model.User, error) {
@@ -168,4 +180,37 @@ func TestAuthHandler_GetUser_InvalidID(t *testing.T) {
 	if st.Code() != codes.InvalidArgument {
 		t.Errorf("expected InvalidArgument, got %v", st.Code())
 	}
+}
+
+func TestAuthHandler_ListUsers_Success(t *testing.T) {
+	svc := service.NewAuthService(newInMemoryRepo(), "test-secret", "24h")
+	h := handler.NewAuthHandler(svc)
+
+	// Register two users
+	_, err := h.Register(context.Background(), &authv1.RegisterRequest{
+		Email: "user1@example.com", Password: "pass1", Name: "User One",
+	})
+	require.NoError(t, err)
+
+	_, err = h.Register(context.Background(), &authv1.RegisterRequest{
+		Email: "user2@example.com", Password: "pass2", Name: "User Two",
+	})
+	require.NoError(t, err)
+
+	// List as admin
+	adminCtx := pkgauth.ContextWithUser(context.Background(), uuid.New(), "admin")
+	resp, err := h.ListUsers(adminCtx, &authv1.ListUsersRequest{})
+	require.NoError(t, err)
+	assert.Len(t, resp.GetUsers(), 2)
+}
+
+func TestAuthHandler_ListUsers_NonAdmin(t *testing.T) {
+	svc := service.NewAuthService(newInMemoryRepo(), "test-secret", "24h")
+	h := handler.NewAuthHandler(svc)
+
+	// List as regular user
+	userCtx := pkgauth.ContextWithUser(context.Background(), uuid.New(), "user")
+	_, err := h.ListUsers(userCtx, &authv1.ListUsersRequest{})
+	st, _ := status.FromError(err)
+	assert.Equal(t, codes.PermissionDenied, st.Code())
 }

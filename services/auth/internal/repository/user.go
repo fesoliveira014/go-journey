@@ -74,6 +74,14 @@ func (r *UserRepository) Update(ctx context.Context, user *model.User) (*model.U
 	return user, nil
 }
 
+func (r *UserRepository) List(ctx context.Context) ([]*model.User, error) {
+	var users []*model.User
+	if err := r.db.WithContext(ctx).Order("created_at DESC").Find(&users).Error; err != nil {
+		return nil, err
+	}
+	return users, nil
+}
+
 func isDuplicateKeyError(err error) bool {
 	if err == nil {
 		return false

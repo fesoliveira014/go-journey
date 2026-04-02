@@ -6,6 +6,8 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
 	"github.com/fesoliveira014/library-system/services/auth/internal/model"
@@ -55,6 +57,14 @@ func (m *mockUserRepo) GetByOAuthID(ctx context.Context, provider, oauthID strin
 		}
 	}
 	return nil, model.ErrUserNotFound
+}
+
+func (m *mockUserRepo) List(_ context.Context) ([]*model.User, error) {
+	users := make([]*model.User, 0, len(m.users))
+	for _, u := range m.users {
+		users = append(users, u)
+	}
+	return users, nil
 }
 
 func (m *mockUserRepo) Update(ctx context.Context, user *model.User) (*model.User, error) {
@@ -200,4 +210,18 @@ func TestAuthService_GetUser_Success(t *testing.T) {
 	if found.Email != "getuser@example.com" {
 		t.Errorf("expected email %q, got %q", "getuser@example.com", found.Email)
 	}
+}
+
+func TestAuthService_ListUsers(t *testing.T) {
+	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
+
+	// Register two users
+	_, _, err := svc.Register(context.Background(), "list1@example.com", "pass1", "User One")
+	require.NoError(t, err)
+	_, _, err = svc.Register(context.Background(), "list2@example.com", "pass2", "User Two")
+	require.NoError(t, err)
+
+	users, err := svc.ListUsers(context.Background())
+	require.NoError(t, err)
+	assert.Len(t, users, 2)
 }

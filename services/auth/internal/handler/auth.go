@@ -18,6 +18,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
+	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	"github.com/fesoliveira014/library-system/services/auth/internal/model"
 	"github.com/fesoliveira014/library-system/services/auth/internal/service"
 )
@@ -202,6 +203,21 @@ func (h *AuthHandler) CompleteOAuth2(ctx context.Context, req *authv1.CompleteOA
 		Token: token,
 		User:  userToProto(user),
 	}, nil
+}
+
+func (h *AuthHandler) ListUsers(ctx context.Context, _ *authv1.ListUsersRequest) (*authv1.ListUsersResponse, error) {
+	if err := pkgauth.RequireRole(ctx, "admin"); err != nil {
+		return nil, err
+	}
+	users, err := h.svc.ListUsers(ctx)
+	if err != nil {
+		return nil, toGRPCError(err)
+	}
+	protos := make([]*authv1.User, len(users))
+	for i, u := range users {
+		protos[i] = userToProto(u)
+	}
+	return &authv1.ListUsersResponse{Users: protos}, nil
 }
 
 func userToProto(u *model.User) *authv1.User {

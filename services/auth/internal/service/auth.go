@@ -20,6 +20,7 @@ type UserRepository interface {
 	GetByEmail(ctx context.Context, email string) (*model.User, error)
 	GetByOAuthID(ctx context.Context, provider, oauthID string) (*model.User, error)
 	Update(ctx context.Context, user *model.User) (*model.User, error)
+	List(ctx context.Context) ([]*model.User, error)
 }
 
 // AuthService contains business logic for authentication.
@@ -120,6 +121,11 @@ func (s *AuthService) ValidateToken(_ context.Context, tokenString string) (uuid
 // GetUser retrieves a user by ID.
 func (s *AuthService) GetUser(ctx context.Context, id uuid.UUID) (*model.User, error) {
 	return s.repo.GetByID(ctx, id)
+}
+
+// ListUsers returns all users.
+func (s *AuthService) ListUsers(ctx context.Context) ([]*model.User, error) {
+	return s.repo.List(ctx)
 }
 
 // FindOrCreateOAuthUser looks up a user by OAuth provider+ID, creating one if not found.
