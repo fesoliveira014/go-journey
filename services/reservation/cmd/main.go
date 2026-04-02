@@ -6,8 +6,10 @@ import (
 	"log/slog"
 	"net"
 	"os"
+	"os/signal"
 	"strconv"
 	"strings"
+	"syscall"
 
 	"github.com/golang-migrate/migrate/v4"
 	pgmigrate "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -16,6 +18,8 @@ import (
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
@@ -109,6 +113,9 @@ func main() {
 	reservationSvc := service.NewReservationService(repo, catalogClient, publisher, maxActive)
 	reservationHandler := handler.NewReservationHandler(reservationSvc)
 
+	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer cancel()
+
 	interceptor := pkgauth.UnaryAuthInterceptor(jwtSecret, nil)
 
 	lis, err := net.Listen("tcp", ":"+grpcPort)
@@ -123,6 +130,17 @@ func main() {
 	)
 	reservationv1.RegisterReservationServiceServer(grpcServer, reservationHandler)
 	reflection.Register(grpcServer)
+
+	healthServer := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, healthServer)
+	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+
+	go func() {
+		<-ctx.Done()
+		slog.Info("shutting down reservation service")
+		healthServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
+		grpcServer.GracefulStop()
+	}()
 
 	slog.Info("reservation service listening", "port", grpcPort)
 	if err := grpcServer.Serve(lis); err != nil {
