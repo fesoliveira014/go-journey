@@ -1,0 +1,18 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - namespace.yaml
+  - postgres-catalog-configmap.yaml
+  - postgres-catalog-statefulset.yaml
+  - postgres-catalog-service.yaml
+  - postgres-auth-configmap.yaml
+  - postgres-auth-statefulset.yaml
+  - postgres-auth-service.yaml
+  - postgres-reservation-configmap.yaml
+  - postgres-reservation-statefulset.yaml
+  - postgres-reservation-service.yaml
+  - meilisearch-configmap.yaml
+  - meilisearch-statefulset.yaml
+  - meilisearch-service.yaml
+  - secrets.yaml

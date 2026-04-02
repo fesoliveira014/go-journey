@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres-reservation
+  namespace: data
+spec:
+  clusterIP: None
+  selector:
+    app: postgres-reservation
+  ports:
+    - port: 5432
+      targetPort: 5432

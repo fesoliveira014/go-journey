@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-reservation-config
+  namespace: data
+data:
+  POSTGRES_DB: reservation
+  POSTGRES_USER: postgres
