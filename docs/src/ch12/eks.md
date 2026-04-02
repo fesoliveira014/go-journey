@@ -1,4 +1,4 @@
-# 12.7 Kubernetes Cluster: EKS
+# 12.6 Kubernetes Cluster: EKS
 
 The Terraform foundation from the previous section gave you a VPC with public and private subnets, an Internet Gateway, NAT Gateways, and route tables. That is the network. What runs on top of it is a Kubernetes cluster — and specifically, Amazon EKS.
 

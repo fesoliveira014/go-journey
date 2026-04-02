@@ -1,4 +1,4 @@
-# 12.x ECR — Container Registry for EKS
+# 12.3 ECR — Container Registry for EKS
 
 Chapter 9 built a CI pipeline that publishes five Docker images to the GitHub Container Registry (GHCR) on every push to `main`. GHCR is the right choice for a project hosted on GitHub — authentication is automatic via `GITHUB_TOKEN`, and the registry lives next to the source. When running on EKS, though, GHCR is an external registry. Every node that pulls an image needs credentials, and those credentials need to be rotated, distributed, and kept out of your manifests.
 
@@ -20,7 +20,7 @@ This is the IAM-native authentication pattern that runs through all AWS service 
 
 ## ecr.tf
 
-Create `infra/ecr.tf`. This file provisions one ECR repository per service and attaches a lifecycle policy to each.
+Create `terraform/ecr.tf`. This file provisions one ECR repository per service and attaches a lifecycle policy to each.
 
 ```hcl
 locals {

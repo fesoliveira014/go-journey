@@ -1,8 +1,8 @@
-# 12.8 — GitOps with ArgoCD
+# 12.10 — GitOps with ArgoCD
 
-Section 12.7 built a deployment pipeline where GitHub Actions calls `kubectl apply`. When tests pass, the pipeline renders the production Kustomize overlay and pushes the result to EKS. This works, and for a single team with a single environment it is perfectly reasonable. But it encodes a directional assumption: the CI system holds the cluster's desired state and pushes it outward on demand.
+Section 12.8 built a deployment pipeline where GitHub Actions calls `kubectl apply`. When tests pass, the pipeline renders the production Kustomize overlay and pushes the result to EKS. This works, and for a single team with a single environment it is perfectly reasonable. But it encodes a directional assumption: the CI system holds the cluster's desired state and pushes it outward on demand.
 
-GitOps inverts that relationship. The cluster watches its own desired state in Git and pulls it in continuously. There is no push step. The CI pipeline's job ends at "commit the new image tag to the repository." From that moment, a controller running inside the cluster detects the change and reconciles. This section explains that model, introduces ArgoCD as the most widely adopted implementation, and maps out exactly how it would replace the pipeline you built in section 12.7 — without touching a line of application code.
+GitOps inverts that relationship. The cluster watches its own desired state in Git and pulls it in continuously. There is no push step. The CI pipeline's job ends at "commit the new image tag to the repository." From that moment, a controller running inside the cluster detects the change and reconciles. This section explains that model, introduces ArgoCD as the most widely adopted implementation, and maps out exactly how it would replace the pipeline you built in section 12.8 — without touching a line of application code.
 
 This section is a discussion, not an implementation. ArgoCD is not added to the project here. The goal is to give you enough context to evaluate it against the simpler approach you already have and to know what adopting it later would require.
 
@@ -14,7 +14,7 @@ The term was coined by Weaveworks in 2017 to describe a practice they had develo
 
 **Git is the single source of truth.** Every change to the system — configuration, image tags, replica counts, secrets references — is expressed as a commit. The cluster's running state should always be derivable from the repository. If it is not, something has drifted.
 
-**Desired state is declarative.** You describe what you want, not how to achieve it. This is already true of Kubernetes manifests, which is why Kubernetes and GitOps fit together so naturally. The Kustomize overlays you wrote in Chapter 11 and extended in section 12.6 are already in the right shape.
+**Desired state is declarative.** You describe what you want, not how to achieve it. This is already true of Kubernetes manifests, which is why Kubernetes and GitOps fit together so naturally. The Kustomize overlays you wrote in Chapter 11 and extended in section 12.7 are already in the right shape.
 
 **Approved changes are applied automatically.** A merge to the production branch is sufficient authorization to deploy. There is no separate "run the pipeline" step. The controller watches the branch and acts.
 
@@ -67,7 +67,7 @@ ArgoCD is not the only GitOps controller worth knowing. **Flux** (also a CNCF gr
 
 ---
 
-## How ArgoCD would replace section 12.7
+## How ArgoCD would replace section 12.8
 
 With the `kubectl apply` pipeline, the flow is:
 
@@ -92,7 +92,7 @@ The CI pipeline's deployment step changes from `kubectl apply` to a Git commit. 
 
 The CI pipeline's job boundaries change significantly. Previously, a successful pipeline both validated the code and mutated the cluster. With ArgoCD, those two responsibilities are separated: CI validates and publishes artifacts; ArgoCD is solely responsible for cluster mutations. This separation of concerns is easier to reason about and easier to audit.
 
-The pipeline no longer needs OIDC permission to call `kubectl` against EKS. Its only AWS interaction is pushing the image to ECR. The `kubectl apply` step and the EKS OIDC configuration from section 12.7 are removed. ArgoCD, running inside the cluster, has the necessary permissions by virtue of its service account — no external credentials are involved.
+The pipeline no longer needs OIDC permission to call `kubectl` against EKS. Its only AWS interaction is pushing the image to ECR. The `kubectl apply` step and the EKS OIDC configuration from section 12.8 are removed. ArgoCD, running inside the cluster, has the necessary permissions by virtue of its service account — no external credentials are involved.
 
 This is a meaningful security reduction. The CI system goes from "can modify any resource in the cluster" to "can write to a Git repository." The blast radius of a compromised CI token shrinks considerably.
 
@@ -168,7 +168,7 @@ The signal that a push pipeline is no longer sufficient usually comes from one o
 
 ## The foundation is already in place
 
-ArgoCD is not implemented in this project, and you should not feel compelled to add it. The pipeline in section 12.7 is sufficient for the learning context here, it is easier to follow step by step, and it avoids introducing a new system in the last chapter.
+ArgoCD is not implemented in this project, and you should not feel compelled to add it. The pipeline in section 12.8 is sufficient for the learning context here, it is easier to follow step by step, and it avoids introducing a new system in the last chapter.
 
 What matters is that the groundwork for adopting ArgoCD later requires almost nothing new. The Kustomize overlay structure — `k8s/base/`, `k8s/overlays/staging/`, `k8s/overlays/production/` — is precisely the directory layout that ArgoCD expects as input. There are no ArgoCD-specific files inside an overlay; it reads standard Kustomize output.
 

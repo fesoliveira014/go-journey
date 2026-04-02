@@ -16,7 +16,7 @@ In this chapter, we build a production-grade CI/CD pipeline for the library syst
 ```
 Pull Request
   │
-  └─► GitHub Actions: pr-check.yml
+  └─► GitHub Actions: pr.yml
             │
             └─► earthly +ci          (per service)
                     ├── +lint         (golangci-lint)
@@ -24,7 +24,7 @@ Pull Request
 
 Merge to main
   │
-  └─► GitHub Actions: publish.yml
+  └─► GitHub Actions: main.yml
             │
             └─► earthly +ci          (per service, matrix)
                     ├── +lint

@@ -1,4 +1,4 @@
-# 13.4 Secrets Management with External Secrets Operator
+# 13.3 Secrets Management with External Secrets Operator
 
 Chapter 12's production overlay left a comment in the `secretGenerator` block that was easy to skim past:
 
@@ -327,7 +327,7 @@ apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
   name: meilisearch-secret
-  namespace: library
+  namespace: data          # Meilisearch runs in the data namespace, not library
 spec:
   refreshInterval: 1h
   secretStoreRef:
@@ -343,7 +343,9 @@ spec:
         property: key
 ```
 
-Each `ExternalSecret` maps a single field from a Secrets Manager secret to a single key in a Kubernetes Secret. The `target.name` matches exactly the name used in the Deployment patches' `secretKeyRef.name` — `postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `jwt-secret`, and `meilisearch-secret`. No Deployment manifest changes are required.
+Note that the meilisearch ExternalSecret targets the `data` namespace — not `library` — because the Meilisearch StatefulSet runs in the `data` namespace. This also requires a SecretStore in the `data` namespace; see `secret-store.yaml` for the second SecretStore definition.
+
+Each `ExternalSecret` maps a single field from a Secrets Manager secret to a single key in a Kubernetes Secret. The `target.name` matches exactly the name used in the StatefulSet or Deployment's `secretKeyRef.name` — `postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `jwt-secret`, and `meilisearch-secret`. No application manifest changes are required.
 
 The `creationPolicy: Owner` setting is worth understanding. It means ESO creates the Kubernetes Secret and marks itself as the owner via a Kubernetes owner reference. If you run `kubectl delete externalsecret postgres-catalog-secret -n library`, Kubernetes will garbage-collect the associated Secret automatically. This is the right policy for production: the Secret should not outlive its source of truth. The alternative, `creationPolicy: Merge`, is useful when you want to add ESO-managed keys into an existing Secret that is partially managed by other means — not the case here.
 
@@ -504,7 +506,7 @@ The shape of what changed:
 | Rotation requires manual Secret update + restart | Rotation is automatic; restart is optional via Reloader |
 | Re-deploy to a new cluster requires reconstructing secrets | Re-deploy applies `external-secrets.yaml`; ESO fetches values |
 
-The next section addresses the remaining production gap: Kafka connections currently use the plaintext listener on port 9092. Section 13.5 enables the TLS listener on MSK and updates the `KAFKA_BROKERS` environment variable in the production overlay to use port 9094.
+The next section addresses the remaining production gap: Kafka connections currently use the plaintext listener on port 9092. Section 13.4 enables the TLS listener on MSK and updates the `KAFKA_BROKERS` environment variable in the production overlay to use port 9094.
 
 ---
 

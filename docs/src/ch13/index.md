@@ -34,7 +34,7 @@ The Kustomize layering from Chapter 11 and the CI/CD pipeline from Chapter 12 ar
 
 The Earthfile CI targets — `+lint`, `+test`, `+build`, `+integration-test` — run exactly as they did in Chapter 12. The GitHub Actions pipeline that calls them is unchanged. The only files that change in this chapter are:
 
-- Terraform modules under `infra/` — for the Route 53 hosted zone, ACM certificate, and MSK listener configuration
+- Terraform files under `terraform/` — for the Route 53 hosted zone, ACM certificate, and MSK listener configuration
 - The production Kustomize overlay under `k8s/overlays/production/` — for the External Secrets Operator configuration and the updated Kafka broker address
 - A new Terraform module for the External Secrets Operator IAM role and its associated Kubernetes resources
 
@@ -110,21 +110,21 @@ The changes touch three edges in this diagram: the public entry point gains TLS 
 
 ## Chapter roadmap
 
-**13.2 — DNS with Route 53** creates a hosted zone for your domain and adds the A-record alias that points your domain's apex (or a subdomain) at the ALB. You will use Terraform's `aws_route53_zone` and `aws_route53_record` resources. By the end of this section, the application is reachable at a human-readable URL — still over HTTP, but at the right address.
+**13.1 — DNS with Route 53** creates a hosted zone for your domain and adds the A-record alias that points your domain's apex (or a subdomain) at the ALB. You will use Terraform's `aws_route53_zone` and `aws_route53_record` resources. By the end of this section, the application is reachable at a human-readable URL — still over HTTP, but at the right address.
 
-**13.3 — TLS with ACM** provisions an ACM certificate for your domain and attaches it to the ALB. ACM handles certificate issuance via DNS validation — it writes a CNAME record to your hosted zone and polls for it, which Terraform orchestrates in a single `apply`. You will update the Ingress annotations in the production overlay to reference the certificate ARN and redirect HTTP to HTTPS. After this section, the application is reachable at `https://yourdomain.com`.
+**13.2 — TLS with ACM** provisions an ACM certificate for your domain and attaches it to the ALB. ACM handles certificate issuance via DNS validation — it writes a CNAME record to your hosted zone and polls for it, which Terraform orchestrates in a single `apply`. You will update the Ingress annotations in the production overlay to reference the certificate ARN and redirect HTTP to HTTPS. After this section, the application is reachable at `https://yourdomain.com`.
 
-**13.4 — Secrets Management with External Secrets Operator** installs the External Secrets Operator into the cluster via Helm, creates the IAM role and policy that allow it to read from Secrets Manager, and writes the `ExternalSecret` and `SecretStore` resources that define which secrets to sync and how often. You will also write a small Terraform module that creates the Secrets Manager entries for each service's database credentials, replacing the placeholder values in the `secretGenerator`.
+**13.3 — Secrets Management with External Secrets Operator** installs the External Secrets Operator into the cluster via Helm, creates the IAM role and policy that allow it to read from Secrets Manager, and writes the `ExternalSecret` and `SecretStore` resources that define which secrets to sync and how often. You will also write a small Terraform module that creates the Secrets Manager entries for each service's database credentials, replacing the placeholder values in the `secretGenerator`.
 
-**13.5 — Kafka Encryption (MSK TLS)** enables the TLS listener on the MSK cluster and disables the plaintext listener, updates the security group rules to allow port 9094 instead of 9092, and patches the `KAFKA_BROKERS` environment variable in the production overlay to use the TLS bootstrap server addresses. The application-level Kafka client configuration requires no changes — the Go Kafka library picks up the TLS requirement from the broker address scheme.
+**13.4 — Kafka Encryption (MSK TLS)** enables the TLS listener on the MSK cluster and disables the plaintext listener, updates the security group rules to allow port 9094 instead of 9092, and patches the `KAFKA_BROKERS` environment variable in the production overlay to use the TLS bootstrap server addresses. The application-level Kafka client configuration requires no changes — the Go Kafka library picks up the TLS requirement from the broker address scheme.
 
-**13.6 — Applying the Changes** walks through the full `terraform apply` and `kubectl apply` sequence, verifies each gap is closed, and confirms the integration tests from Chapter 10 still pass against the hardened cluster. You will also review the AWS Security Hub findings — if you enabled it in Chapter 12 — to confirm that the three controls that were previously failing now show as passed.
+**13.5 — Applying the Changes** walks through the full `terraform apply` and `kubectl apply` sequence, verifies each gap is closed, and confirms the integration tests from Chapter 10 still pass against the hardened cluster. You will also review the AWS Security Hub findings — if you enabled it in Chapter 12 — to confirm that the three controls that were previously failing now show as passed.
 
 ---
 
 By the end of this chapter, the library system will pass a basic security review: encrypted traffic on every public-facing edge, secrets sourced from a managed store rather than committed configuration, and encrypted broker connections inside the cluster. These are not exotic hardening measures — they are the baseline that any production system deployed to a regulated environment is expected to meet, and they are the baseline that a careful engineer expects even in environments that are not formally regulated. Getting comfortable applying them in a learning project means they will not be unfamiliar when the stakes are higher.
 
-Before moving to section 13.2, confirm that your Chapter 12 cluster is still running and healthy: `kubectl get pods -n library` should show all pods in the `Running` state. If you have run `terraform destroy` since Chapter 12, re-apply the Chapter 12 Terraform before continuing — the changes in this chapter build on top of the existing infrastructure rather than replacing it.
+Before moving to section 13.1, confirm that your Chapter 12 cluster is still running and healthy: `kubectl get pods -n library` should show all pods in the `Running` state. If you have run `terraform destroy` since Chapter 12, re-apply the Chapter 12 Terraform before continuing — the changes in this chapter build on top of the existing infrastructure rather than replacing it.
 
 ---
 

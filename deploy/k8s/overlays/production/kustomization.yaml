@@ -243,4 +243,4 @@ patches:
 # Secrets are now managed by External Secrets Operator (ESO).
 # ESO reads from AWS Secrets Manager and creates the Kubernetes Secrets
 # that the Deployments reference. See secret-store.yaml and
-# external-secrets.yaml, and section 13.4 for setup instructions.
+# external-secrets.yaml, and section 13.3 for setup instructions.

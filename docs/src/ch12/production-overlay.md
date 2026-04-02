@@ -1,4 +1,4 @@
-# 12.6 Production Kustomize Overlay
+# 12.7 Production Kustomize Overlay
 
 Chapter 11 introduced Kustomize and structured the manifests into a base and two overlays. The local overlay configured kind-specific settings: a `secretGenerator` with plaintext development credentials, a single replica per service, and `imagePullPolicy: IfNotPresent` so kind's locally loaded images are used without hitting a registry. That overlay is still correct for local development and remains untouched.
 

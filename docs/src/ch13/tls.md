@@ -1,4 +1,4 @@
-# 13.3 TLS with ACM
+# 13.2 TLS with ACM
 
 TLS is table stakes for any production web application. Browsers label plain HTTP connections as "Not Secure" in the address bar, OAuth2 providers refuse to complete login flows when the redirect URI is HTTP, and any session token or API response that crosses an unencrypted connection is readable by anyone on the same network path. None of these are theoretical concerns — they are the default behavior of the tooling your users are already running.
 
@@ -95,14 +95,14 @@ Walk through each resource:
 
 ## Updating the ALB Annotations
 
-The production Kustomize overlay contains an Ingress patch for the ALB. Section 13.2 added the Route 53 alias annotation. Now add three more annotations to the same patch:
+The production Kustomize overlay contains an Ingress patch for the ALB. Section 13.1 added the Route 53 alias annotation. Now add three more annotations to the same patch:
 
 ```yaml
-# deploy/k8s/overlays/production/ingress-patch.yaml
+# Ingress patch in deploy/k8s/overlays/production/kustomization.yaml
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: gateway
+  name: library-ingress
   namespace: library
   annotations:
     alb.ingress.kubernetes.io/scheme: internet-facing
@@ -209,7 +209,7 @@ output "certificate_arn" {
 }
 ```
 
-This output is needed in two places: manually, to paste into the Ingress patch file as shown above, and potentially by a CI/CD step that generates the overlay automatically via `terraform output`. Chapter 13.6 revisits this when running the full end-to-end apply sequence.
+This output is needed in two places: manually, to paste into the Ingress patch file as shown above, and potentially by a CI/CD step that generates the overlay automatically via `terraform output`. Chapter 13.5 revisits this when running the full end-to-end apply sequence.
 
 ---
 

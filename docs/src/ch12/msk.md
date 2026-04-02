@@ -1,4 +1,4 @@
-# 12.6 Amazon MSK
+# 12.5 Amazon MSK
 
 Chapter 11 ran Kafka as a StatefulSet in the `messaging` namespace. That approach required you to manage KRaft quorum configuration, ordinal pod naming for stable advertised listeners, and persistent volume sizing yourself. Just as Chapter 12 replaced the self-managed PostgreSQL StatefulSets with RDS, it is time to apply the same trade-off to Kafka: hand off the operational burden to a managed service and keep your focus on application logic.
 

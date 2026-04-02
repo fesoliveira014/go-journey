@@ -1,4 +1,4 @@
-# Terraform Fundamentals
+# 12.1 Terraform Fundamentals
 
 Chapter 11 ended with every service running in a Kubernetes cluster on your laptop. Kubernetes answered the question of *what* to run: which containers, how many replicas, what configuration, which volumes. But it left another question open: *where* does the cluster itself run when you move to production?
 
@@ -173,7 +173,7 @@ The backend configuration goes in a `backend.tf` file. The resources it referenc
 # }
 ```
 
-While working through this chapter, leave the backend block commented out. The local state file is sufficient, and it avoids the prerequisite of creating AWS resources just to store Terraform's bookkeeping. Section 12.8 revisits remote state when discussing production hardening.
+While working through this chapter, leave the backend block commented out. The local state file is sufficient, and it avoids the prerequisite of creating AWS resources just to store Terraform's bookkeeping. Section 12.7 revisits remote state when discussing production hardening.
 
 ---
 

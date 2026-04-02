@@ -1,4 +1,4 @@
-# 12.7 Deploying and Verifying
+# 12.9 Deploying and Verifying
 
 This section is the payoff for everything in Chapter 12. The Terraform modules are written, the production Kustomize overlay is configured, and the ECR repositories, RDS cluster, and MSK broker are defined in code. Now you actually run it.
 
@@ -10,7 +10,7 @@ If you prefer not to deploy, the verification and troubleshooting sections descr
 
 ## Provision Infrastructure with Terraform
 
-Start in the `deploy/terraform/` directory.
+Start in the `terraform/` directory.
 
 **Initialize the working directory:**
 
@@ -45,10 +45,18 @@ Apply complete! Resources: 47 added, 0 changed, 0 destroyed.
 
 Outputs:
 
-ecr_registry        = "123456789012.dkr.ecr.us-east-1.amazonaws.com"
-eks_cluster_name    = "library-production"
-msk_bootstrap       = "b-1.library.xxxxx.kafka.us-east-1.amazonaws.com:9092,b-2.library.xxxxx.kafka.us-east-1.amazonaws.com:9092"
-rds_endpoint        = "library-cluster.cluster-xxxxxxxxxxxx.us-east-1.rds.amazonaws.com"
+ecr_repository_urls = {
+  "auth"        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/auth"
+  "catalog"     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/catalog"
+  ...
+}
+cluster_name             = "library-system"
+msk_bootstrap_brokers_tls = "b-1.xxxxx.kafka.us-east-1.amazonaws.com:9094,..."
+rds_endpoints            = {
+  "auth"        = "library-system-auth.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
+  "catalog"     = "library-system-catalog.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
+  "reservation" = "library-system-reservation.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
+}
 ```
 
 Save these output values — you will need them in the next steps. You can always retrieve them later with `terraform output`.
@@ -94,15 +102,15 @@ aws ecr describe-repositories \
 
 You should see entries for `library/gateway`, `library/auth`, `library/catalog`, `library/reservation`, and `library/search`.
 
-**RDS cluster:**
+**RDS instances:**
 
 ```bash
-aws rds describe-db-clusters \
-  --query 'DBClusters[*].{Identifier:DBClusterIdentifier,Status:Status,Endpoint:Endpoint}' \
+aws rds describe-db-instances \
+  --query 'DBInstances[?starts_with(DBInstanceIdentifier,`library-system`)].{Identifier:DBInstanceIdentifier,Status:DBInstanceStatus,Endpoint:Endpoint.Address}' \
   --output table
 ```
 
-The `Status` column should read `available`.
+You should see three rows — one per service database — with `Status` reading `available`.
 
 **MSK cluster:**
 
@@ -308,11 +316,11 @@ The result should contain the book you just created. If the catalog write succee
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
 | `ImagePullBackOff` | ECR permissions or wrong image URI | Verify the node IAM role has `AmazonEC2ContainerRegistryReadOnly`. Check `kubectl describe pod <pod>` for the exact URI Kubernetes tried to pull. Compare with `aws ecr describe-repositories`. |
-| `CrashLoopBackOff` | RDS or MSK unreachable at startup | Check security group rules: the EKS node security group must be allowed inbound on port 5432 (RDS) and 9092 (MSK). Run `kubectl logs <pod> -n library --previous` for the actual error. |
+| `CrashLoopBackOff` | RDS or MSK unreachable at startup | Check security group rules: the EKS node security group must be allowed inbound on port 5432 (RDS) and 9094 (MSK TLS). Run `kubectl logs <pod> -n library --previous` for the actual error. |
 | Ingress no ADDRESS | ALB controller not running or subnet tags missing | Check `kubectl get pods -n kube-system | grep aws-load-balancer`. Public subnets need `kubernetes.io/role/elb: 1` tag; private subnets need `kubernetes.io/role/internal-elb: 1`. |
-| Pods `Pending` | Node capacity exhausted | Check `kubectl describe pod <pod>` for `Insufficient cpu` or `Insufficient memory`. Review the node group scaling limits in `terraform/modules/eks/main.tf` and increase `max_size`. |
+| Pods `Pending` | Node capacity exhausted | Check `kubectl describe pod <pod>` for `Insufficient cpu` or `Insufficient memory`. Review the node group scaling limits in `terraform/eks.tf` and increase `max_size`. |
 | RDS connection refused | RDS security group misconfigured | Verify the RDS security group has an inbound rule allowing the EKS node security group on port 5432. Check with `aws ec2 describe-security-groups --group-ids <rds-sg-id>`. |
-| MSK timeout on startup | Wrong bootstrap string in ConfigMap | Run `terraform output msk_bootstrap` and compare with the value in `kubectl get configmap library-config -n library -o yaml`. Update and re-apply if they differ. |
+| MSK timeout on startup | Wrong bootstrap string in ConfigMap | Run `terraform output msk_bootstrap_brokers_tls` and compare with the value in `kubectl get configmap library-config -n library -o yaml`. Update and re-apply if they differ. |
 
 For deeper inspection use the standard describe commands:
 

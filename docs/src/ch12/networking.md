@@ -66,7 +66,7 @@ The CIDR block `10.0.0.0/16` gives you 65,536 IP addresses to distribute across 
 
 Rather than assembling a VPC from individual `aws_vpc`, `aws_subnet`, `aws_route_table`, and `aws_route` resources — a dozen-plus resource blocks for what is fundamentally a standard configuration — you will use the community-maintained `terraform-aws-modules/vpc/aws` module. It is the most widely used Terraform module in the registry and encapsulates the entire standard VPC pattern behind a clean interface.
 
-Create `infra/terraform/vpc.tf`:
+Create `terraform/vpc.tf`:
 
 ```hcl
 data "aws_availability_zones" "available" {
@@ -141,7 +141,7 @@ This tag tells EKS that these subnets belong to the cluster and may be used for 
 
 The VPC module creates the networking infrastructure. Security groups control which traffic is allowed to flow between the resources within it. Two security groups are needed immediately: one for RDS and one for MSK.
 
-Create `infra/terraform/security_groups.tf`:
+Add the following to `terraform/vpc.tf`, below the VPC module:
 
 ```hcl
 # RDS security group — allows PostgreSQL access from EKS nodes only

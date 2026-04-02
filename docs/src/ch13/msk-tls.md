@@ -1,4 +1,4 @@
-# 13.5 Kafka Encryption: MSK TLS
+# 13.4 Kafka Encryption: MSK TLS
 
 Chapter 12 deployed the MSK cluster with `client_broker = "PLAINTEXT"` and opened port 9092 in the security group. The comment in the Terraform file acknowledged the gap: port 9094 and TLS were deferred to this chapter. This section closes that gap.
 

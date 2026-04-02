@@ -1,6 +1,6 @@
-# 13.2 — DNS with Route 53
+# 13.1 — DNS with Route 53
 
-At the end of Chapter 12, the library system was reachable — but only via a hostname that looks something like `k8s-library-ingress-a1b2c3d4e5-987654321.us-east-1.elb.amazonaws.com`. That URL works, but it is not something you would print on a business card, give to a user, or embed in a mobile app. It is also not a hostname you can obtain a TLS certificate for in any meaningful way — a certificate for `*.us-east-1.elb.amazonaws.com` is not yours to request, and ACM (which you will use in section 13.3) requires that you demonstrate control over the domain you are issuing a certificate for.
+At the end of Chapter 12, the library system was reachable — but only via a hostname that looks something like `k8s-library-ingress-a1b2c3d4e5-987654321.us-east-1.elb.amazonaws.com`. That URL works, but it is not something you would print on a business card, give to a user, or embed in a mobile app. It is also not a hostname you can obtain a TLS certificate for in any meaningful way — a certificate for `*.us-east-1.elb.amazonaws.com` is not yours to request, and ACM (which you will use in section 13.2) requires that you demonstrate control over the domain you are issuing a certificate for.
 
 A custom domain solves three problems at once: it gives users a stable, human-readable address; it gives you a hostname you can anchor a TLS certificate to; and it decouples your application's public identity from whatever AWS generates internally. When your ALB is replaced — during a cluster migration, a region failover, or a blue/green deployment — the DNS record is the only thing that changes. Clients see no difference.
 
@@ -187,7 +187,7 @@ Once DNS resolves correctly, try an HTTP request to confirm the ALB routes traff
 curl -v http://library.example.com/healthz
 ```
 
-At this point, the connection will succeed over plain HTTP. Section 13.3 will add ACM and HTTPS termination at the ALB, after which port 80 will redirect to port 443.
+At this point, the connection will succeed over plain HTTP. Section 13.2 will add ACM and HTTPS termination at the ALB, after which port 80 will redirect to port 443.
 
 ---
 
