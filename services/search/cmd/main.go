@@ -11,6 +11,8 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/health"
+	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
@@ -79,6 +81,16 @@ func main() {
 	grpcServer := grpc.NewServer()
 	searchv1.RegisterSearchServiceServer(grpcServer, searchHandler)
 	reflection.Register(grpcServer)
+	healthServer := health.NewServer()
+	healthpb.RegisterHealthServer(grpcServer, healthServer)
+	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+
+	go func() {
+		<-ctx.Done()
+		log.Println("shutting down search service")
+		healthServer.SetServingStatus("", healthpb.HealthCheckResponse_NOT_SERVING)
+		grpcServer.GracefulStop()
+	}()
 
 	log.Printf("search service listening on :%s", grpcPort)
 	if err := grpcServer.Serve(lis); err != nil {
