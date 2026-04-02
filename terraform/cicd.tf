@@ -1,8 +1,15 @@
+# Fetch the OIDC thumbprint dynamically from GitHub's discovery endpoint.
+# AWS now validates tokens via the OIDC discovery document rather than
+# thumbprints, but the field is still required by the API.
+data "tls_certificate" "github_actions" {
+  url = "https://token.actions.githubusercontent.com/.well-known/openid-configuration"
+}
+
 # GitHub Actions OIDC provider
 resource "aws_iam_openid_connect_provider" "github" {
   url             = "https://token.actions.githubusercontent.com"
   client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = ["6938fd4d98bab03faadb97b34396831e3780aea1"]
+  thumbprint_list = [data.tls_certificate.github_actions.certificates[0].sha1_fingerprint]
 }
 
 # IAM role for GitHub Actions

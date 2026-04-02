@@ -53,10 +53,10 @@ The control plane sits entirely inside AWS infrastructure — you never SSH into
 
 AWS maintains an official Terraform module for EKS. It handles the cluster resource, the managed node group, the OIDC provider, and several IAM policies that worker nodes need. Using it directly means you write configuration rather than boilerplate.
 
-Create `infrastructure/eks.tf`:
+Create `terraform/eks.tf`:
 
 ```hcl
-# infrastructure/eks.tf
+# terraform/eks.tf
 
 module "eks" {
   source  = "terraform-aws-modules/eks/aws"
@@ -144,7 +144,7 @@ The result is least-privilege by default: a pod running the EBS CSI driver can c
 Two roles are needed: one for the EBS CSI driver (already referenced in the add-on configuration above), and one for the AWS Load Balancer Controller you will install next.
 
 ```hcl
-# infrastructure/eks.tf (continued)
+# terraform/eks.tf (continued)
 
 # --- IRSA: EBS CSI Driver ---
 # The EBS CSI driver manages PersistentVolume lifecycle: provisioning, attaching,
@@ -202,7 +202,7 @@ From a user perspective, you write a standard Kubernetes Ingress manifest, annot
 Install it with Helm:
 
 ```hcl
-# infrastructure/eks.tf (continued)
+# terraform/eks.tf (continued)
 
 resource "helm_release" "aws_load_balancer_controller" {
   name       = "aws-load-balancer-controller"
@@ -263,7 +263,7 @@ The `depends_on = [module.eks]` is necessary because Terraform's dependency grap
 The `helm_release` resource requires the Helm provider, which needs the cluster's kubeconfig details. Add the following to your provider configuration:
 
 ```hcl
-# infrastructure/providers.tf (additions)
+# terraform/providers.tf (additions)
 
 provider "helm" {
   kubernetes {
@@ -292,10 +292,10 @@ The `exec` block tells the Helm provider to call `aws eks get-token` each time i
 
 ## Outputs
 
-Add these to `infrastructure/outputs.tf`. Downstream Terraform configurations and CI/CD pipelines read these values to connect to the cluster.
+Add these to `terraform/outputs.tf`. Downstream Terraform configurations and CI/CD pipelines read these values to connect to the cluster.
 
 ```hcl
-# infrastructure/outputs.tf (additions)
+# terraform/outputs.tf (additions)
 
 output "cluster_name" {
   description = "EKS cluster name, used by kubectl and the Helm provider."

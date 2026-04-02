@@ -40,10 +40,10 @@ The credentials STS returns are temporary — they expire in 15 minutes by defau
 
 ## Terraform: wiring up the OIDC provider
 
-Before the pipeline can use OIDC, you need to register GitHub's OIDC provider with your AWS account and create an IAM role with a trust policy scoped to your repository. This lives in `infrastructure/cicd.tf`.
+Before the pipeline can use OIDC, you need to register GitHub's OIDC provider with your AWS account and create an IAM role with a trust policy scoped to your repository. This lives in `terraform/cicd.tf`.
 
 ```hcl
-# infrastructure/cicd.tf
+# terraform/cicd.tf
 
 # Fetch the OIDC thumbprint from GitHub's well-known endpoint.
 # Terraform retrieves this automatically; you do not hardcode it.
@@ -378,7 +378,7 @@ A common extension is running `terraform plan` on pull requests so reviewers can
 #         with:
 #           script: |
 #             const fs = require('fs');
-#             const plan = fs.readFileSync('infrastructure/plan.txt', 'utf8');
+#             const plan = fs.readFileSync('terraform/plan.txt', 'utf8');
 #             github.rest.issues.createComment({
 #               ...context.repo,
 #               issue_number: context.issue.number,

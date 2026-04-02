@@ -33,11 +33,13 @@ deploy/k8s/
 ```
 deploy/k8s/
 ├── base/
-│   ├── kustomization.yaml       # includes only library/
-│   ├── local-infra/             # moved here from base/
+│   ├── kustomization.yaml       # includes data/, messaging/, library/
+│   ├── data/                    # Meilisearch only (Postgres moved out)
+│   ├── messaging/               # namespace only (Kafka moved out)
+│   ├── local-infra/             # local-only infrastructure
 │   │   ├── kustomization.yaml
-│   │   ├── data/                # Postgres + Meilisearch StatefulSets
-│   │   └── messaging/           # Kafka StatefulSet
+│   │   ├── data/                # Postgres StatefulSets (moved from base/data/)
+│   │   └── messaging/           # Kafka StatefulSet (moved from base/messaging/)
 │   └── library/                 # unchanged
 └── overlays/
     ├── local/
@@ -46,15 +48,32 @@ deploy/k8s/
         └── kustomization.yaml   # references only ../../base (no local-infra)
 ```
 
-Update `deploy/k8s/base/kustomization.yaml` to remove the data and messaging directories:
+The base `kustomization.yaml` stays unchanged — it still references `data/`, `messaging/`, and `library/`. What changed is the *contents* of those directories: `data/` now contains only Meilisearch resources, and `messaging/` contains only the namespace manifest. Postgres and Kafka moved to `local-infra/`.
+
+Update `deploy/k8s/base/data/kustomization.yaml` to remove the postgres entries, keeping only Meilisearch:
 
 ```yaml
-# deploy/k8s/base/kustomization.yaml
+# deploy/k8s/base/data/kustomization.yaml
 apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - library
+  - namespace.yaml
+  - meilisearch-configmap.yaml
+  - meilisearch-statefulset.yaml
+  - meilisearch-service.yaml
+```
+
+Update `deploy/k8s/base/messaging/kustomization.yaml` to remove Kafka entries:
+
+```yaml
+# deploy/k8s/base/messaging/kustomization.yaml
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+namespace: messaging
+
+resources:
+  - namespace.yaml
 ```
 
 Add a `kustomization.yaml` to the new `local-infra/` directory:
