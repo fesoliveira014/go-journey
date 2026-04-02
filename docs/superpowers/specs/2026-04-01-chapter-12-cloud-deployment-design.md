@@ -41,6 +41,9 @@ Take the reader from a local kind cluster (Chapter 11) to a production-grade AWS
 | VPC module | `terraform-aws-modules/vpc/aws` | Standard community module, avoids 100+ lines of raw resource definitions |
 | EKS module | `terraform-aws-modules/eks/aws` | Standard community module, handles IAM roles, OIDC provider, add-ons |
 | Hands-on execution | Optional with cost warnings | Complete runnable code, but reader can follow along without an AWS account |
+| EKS access control | EKS access entries | Modern API (GA 2024), Terraform-managed. Mention `aws-auth` ConfigMap as legacy alternative |
+| Local-only resource removal | Restructure base into shared + local-infra | Avoids Kustomize delete patches. Local overlay includes `local-infra/`, production does not |
+| Meilisearch storage | Default EKS `gp2` StorageClass | EBS CSI driver add-on provides `gp2` by default. Note `gp3` as a production optimization |
 
 ## Chapter Structure
 
@@ -76,6 +79,7 @@ Brief Terraform primer.
     rds.tf           # Postgres instances
     msk.tf           # Kafka cluster
     eks.tf           # EKS cluster + node group
+    cicd.tf          # GitHub Actions OIDC provider + IAM role
   ```
 - `terraform init`, `terraform plan`, `terraform apply`, `terraform destroy` walkthrough.
 
@@ -133,7 +137,7 @@ Replaces in-cluster Kafka StatefulSet.
 - Why managed Kafka: broker patching, storage scaling, KRaft management handled by AWS.
 - MSK config: `kafka.t3.small`, 2 brokers across 2 AZs, 10GB EBS per broker.
 - `msk.tf` with `aws_msk_cluster`. Plaintext listener for local parity; TLS noted as a production hardening step for Chapter 13.
-- Security group: inbound 9092 from EKS node SG.
+- Security group: inbound 9092 from EKS node SG (port 9094 for TLS will be added in Chapter 13).
 - `aws_msk_configuration` for `auto.create.topics.enable`.
 - `outputs.tf` for bootstrap broker strings — replace `kafka-0.kafka.messaging.svc.cluster.local:9092` in overlay.
 
@@ -147,7 +151,7 @@ Core infrastructure section.
 - EKS architecture: AWS-managed control plane, self-managed worker nodes via managed node groups.
 - `eks.tf` using `terraform-aws-modules/eks/aws` module.
 - Cluster config: K8s 1.29+, private + public API endpoints, add-ons (coredns, kube-proxy, vpc-cni, aws-ebs-csi-driver).
-- Managed node group: `t3.medium`, desired 2 / min 1 / max 3, IAM policies (`AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy`, `AmazonEC2ContainerRegistryReadOnly`).
+- Managed node group: `t3.medium`, desired 2 / min 1 / max 3. The EKS module automatically attaches standard node policies (`AmazonEKSWorkerNodePolicy`, `AmazonEKS_CNI_Policy`, `AmazonEC2ContainerRegistryReadOnly`) — list them for educational clarity.
 - AWS Load Balancer Controller: installed via Helm provider or manual `kubectl apply`. IRSA (IAM Roles for Service Accounts) for the controller — explain IRSA as the AWS pattern for pod-level AWS permissions.
 - `outputs.tf`: cluster name, endpoint, CA, OIDC provider ARN.
 - `kubeconfig` setup: `aws eks update-kubeconfig`.
@@ -163,9 +167,10 @@ Fills in the Chapter 11 stub.
   - `images` transformer: `library-system/<service>:latest` → ECR URIs with tags.
   - Resource limit patches: 250m-500m CPU, 256Mi-512Mi memory.
   - Replica patches: 2 replicas per app Deployment.
-  - ConfigMap patches: `DATABASE_URL` → RDS endpoints, `KAFKA_BROKERS` → MSK brokers, `OTEL_COLLECTOR_ENDPOINT` → empty.
+  - Deployment strategic merge patches for `DATABASE_URL` env vars (these live in the Deployment env block, not ConfigMaps) → RDS endpoints. ConfigMap patches for `KAFKA_BROKERS` → MSK brokers, `OTEL_COLLECTOR_ENDPOINT` → empty.
   - `imagePullPolicy: Always`.
-- Removing local-only resources: Postgres StatefulSets, Kafka StatefulSet, their Services/ConfigMaps from data and messaging namespaces. Discussion of approaches: Kustomize delete patches vs restructuring base.
+- Removing local-only resources: the base is restructured so that Postgres and Kafka resources (StatefulSets, Services, ConfigMaps) move to `deploy/k8s/base/local-infra/` — a directory only the local overlay references. The production overlay simply does not include it. This avoids Kustomize delete patches entirely and teaches clean base/overlay decomposition.
+- StorageClass for Meilisearch PVC: note that the EBS CSI driver add-on provides the default `gp2` StorageClass, which works without changes. Mention `gp3` as a production optimization.
 - What stays: Meilisearch StatefulSet, all app Deployments/Services, namespaces.
 - Ingress annotations for ALB: `alb.ingress.kubernetes.io/scheme: internet-facing`, `alb.ingress.kubernetes.io/target-type: ip`, `ingressClassName: alb`.
 - Secrets: `secretGenerator` with placeholder values + comment that Chapter 13 replaces with external-secrets. Reader manually substitutes real values.
@@ -186,7 +191,7 @@ Extends existing workflows.
   5. `kustomize edit set image` in production overlay.
   6. `kubectl apply -k deploy/k8s/overlays/production`.
   7. `kubectl rollout status` per service.
-- IAM role permissions: ECR push, EKS access via `aws-auth` ConfigMap or EKS access entries.
+- IAM role permissions: ECR push, EKS access via EKS access entries (the modern API, preferred over the legacy `aws-auth` ConfigMap). Managed in Terraform alongside the cluster.
 - `pr.yml`: optional `terraform plan` step that comments on the PR.
 - Rollback: `kubectl rollout undo`, previous images still in ECR.
 
@@ -201,9 +206,10 @@ End-to-end walkthrough.
   1. `terraform init` → `plan` → `apply` (~15-20 min).
   2. `aws eks update-kubeconfig`.
   3. Verify infrastructure: RDS available, MSK active, ECR repos exist.
-  4. Push images to ECR (manual first time).
-  5. `kubectl apply -k deploy/k8s/overlays/production`.
-  6. `kubectl get pods` — all Running/Ready.
+  4. Retrieve RDS credentials from AWS Secrets Manager (`aws secretsmanager get-secret-value`) and substitute into the production overlay's secretGenerator.
+  5. Push images to ECR (manual first time).
+  6. `kubectl apply -k deploy/k8s/overlays/production`.
+  7. `kubectl get pods` — all Running/Ready.
 - Verification:
   - `kubectl get ingress -n library` — ALB provisioned.
   - `curl http://<alb-dns-name>/healthz` — gateway responds.
@@ -273,13 +279,15 @@ Discussion section. No implementation.
 | `terraform/rds.tf` | Terraform | 3x RDS instances |
 | `terraform/msk.tf` | Terraform | MSK cluster |
 | `terraform/eks.tf` | Terraform | EKS cluster + node group + LB controller |
+| `terraform/cicd.tf` | Terraform | GitHub Actions OIDC provider + IAM role for CI/CD |
 
 ## Modified Files Summary
 
 | Path | Change |
 |------|--------|
-| `deploy/k8s/overlays/production/kustomization.yaml` | Fill in stub with complete production overlay |
-| `.github/workflows/main.yml` | Add ECR push + EKS deploy steps |
+| `deploy/k8s/overlays/production/kustomization.yaml` | Fill in stub with complete production overlay (images, patches, secrets, ALB ingress) |
+| `deploy/k8s/base/kustomization.yaml` | Restructure to separate shared resources from local-only infra |
+| `.github/workflows/main.yml` | Add OIDC auth, ECR login/push, kustomize set image, kubectl apply steps |
 | `.github/workflows/pr.yml` | Optional: add `terraform plan` comment step |
 | `docs/src/SUMMARY.md` | Add Chapter 12 entries |
 
