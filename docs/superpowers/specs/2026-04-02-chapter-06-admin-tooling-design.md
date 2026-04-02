@@ -159,7 +159,7 @@ All extend the existing `base.html` layout.
 
 ### 3.4 Navigation Update
 
-Update the base template's nav partial (`templates/partials/nav.html` or equivalent) to add an "Admin" link visible only when the user has admin role. Points to `/admin`.
+Update the base template's nav partial (`services/gateway/templates/partials/nav.html`) to add an "Admin" link visible only when the user has admin role. Points to `/admin`.
 
 ---
 
@@ -179,7 +179,7 @@ Update the base template's nav partial (`templates/partials/nav.html` or equival
 
 **Fixture file:** `services/catalog/cmd/seed/books.json` — ~15-20 books with title, author, isbn, genre, description, published_year. Spanning fiction, science, history, and technology genres.
 
-**Why gRPC instead of direct DB:** Exercises the full system path. Each `CreateBook` call triggers a Kafka `book.created` event, which the search service consumes to index the book. No separate search seeding needed.
+**Why gRPC instead of direct DB:** Exercises the full system path — auth, validation, and the catalog service layer. When Kafka is running (Ch.7+), each `CreateBook` call also triggers a `book.created` event that the search service consumes. Before Kafka is introduced, the catalog service uses a `noopPublisher` that silently discards events, so the seed CLI works fine without Kafka infrastructure. The denormalized resolution in `ListAllReservations` (N+1 calls to resolve book titles and user emails) is acceptable for a tutorial project without pagination — the chapter documentation should note this as a known trade-off.
 
 **Usage:**
 ```bash
