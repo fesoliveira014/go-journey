@@ -20,6 +20,7 @@ import (
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
 	searchv1 "github.com/fesoliveira014/library-system/gen/search/v1"
+	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	pkgotel "github.com/fesoliveira014/library-system/pkg/otel"
 	"github.com/fesoliveira014/library-system/services/gateway/internal/handler"
 	"github.com/fesoliveira014/library-system/services/gateway/internal/middleware"
@@ -66,6 +67,7 @@ func main() {
 	catalogConn, err := grpc.NewClient(catalogAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithUnaryInterceptor(pkgauth.UnaryForwardAuthInterceptor()),
 	)
 	if err != nil {
 		slog.Error("connect to catalog service", "error", err)
@@ -80,6 +82,7 @@ func main() {
 	reservationConn, err := grpc.NewClient(reservationAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithUnaryInterceptor(pkgauth.UnaryForwardAuthInterceptor()),
 	)
 	if err != nil {
 		slog.Error("connect to reservation service", "error", err)
@@ -94,6 +97,7 @@ func main() {
 	searchConn, err := grpc.NewClient(searchAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithUnaryInterceptor(pkgauth.UnaryForwardAuthInterceptor()),
 	)
 	if err != nil {
 		slog.Error("connect to search service", "error", err)

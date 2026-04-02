@@ -11,6 +11,25 @@ import (
 	"google.golang.org/grpc/status"
 )
 
+// UnaryForwardAuthInterceptor returns a gRPC unary client interceptor that
+// forwards the JWT token from the context (set by the HTTP auth middleware)
+// as a "Bearer" authorization header in outgoing gRPC metadata.
+func UnaryForwardAuthInterceptor() grpc.UnaryClientInterceptor {
+	return func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		if token, ok := TokenFromContext(ctx); ok {
+			ctx = metadata.AppendToOutgoingContext(ctx, "authorization", "Bearer "+token)
+		}
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+}
+
 // UnaryAuthInterceptor returns a gRPC unary server interceptor that validates
 // JWT tokens from the "authorization" metadata header.
 //

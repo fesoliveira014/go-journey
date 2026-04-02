@@ -20,6 +20,7 @@ func Auth(next http.Handler, jwtSecret string) http.Handler {
 			return
 		}
 		ctx := pkgauth.ContextWithUser(r.Context(), claims.UserID, claims.Role)
+		ctx = pkgauth.ContextWithToken(ctx, cookie.Value)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
