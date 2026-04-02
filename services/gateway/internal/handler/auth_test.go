@@ -60,6 +60,10 @@ func (m *mockAuthClient) CompleteOAuth2(ctx context.Context, in *authv1.Complete
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
+func (m *mockAuthClient) ListUsers(_ context.Context, _ *authv1.ListUsersRequest, _ ...grpc.CallOption) (*authv1.ListUsersResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+
 // authTestTemplates builds a template map sufficient for auth handler tests.
 // The base.html named template outputs the content block directly so tests can
 // inspect rendered form fields and error messages.

@@ -51,6 +51,10 @@ func (m *mockReservationClient) ListUserReservations(ctx context.Context, in *re
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
 
+func (m *mockReservationClient) ListAllReservations(_ context.Context, _ *reservationv1.ListAllReservationsRequest, _ ...grpc.CallOption) (*reservationv1.ListAllReservationsResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "not implemented")
+}
+
 func reservationTestTemplates(t *testing.T) map[string]*template.Template {
 	t.Helper()
 
