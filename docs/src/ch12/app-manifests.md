@@ -1,4 +1,4 @@
-# 12.4 Application Manifests
+# 12.3 Application Manifests
 
 With all five services containerized and the infrastructure layer (PostgreSQL, Kafka, Meilisearch) declared in the previous section, we are ready to write the manifests for the application services themselves. Every service needs three resources: a Deployment that runs the container, a Service that gives it a stable DNS name inside the cluster, and a ConfigMap that injects non-sensitive configuration. Secrets are declared separately as placeholder objects that a local overlay will fill in with real values.
 
@@ -26,7 +26,7 @@ metadata:
   name: library
 ```
 
-The `data` and `messaging` namespace manifests are identical in structure (just with different `name` fields) and were declared in section 12.3.
+The `data` and `messaging` namespace manifests are identical in structure (just with different `name` fields) and were declared in section 12.2.
 
 ---
 
@@ -131,7 +131,7 @@ Everything under `spec.template` describes the Pod that the Deployment creates. 
 
 #### `image` and `imagePullPolicy`
 
-`image: library-system/catalog:latest` references the image we built and loaded into kind in section 12.2. The `latest` tag is normally discouraged in production because it makes rollbacks ambiguous, but it is fine for a local development cluster where we control exactly what is in the cache.
+`image: library-system/catalog:latest` references the image we built and loaded into kind in section 12.1. The `latest` tag is normally discouraged in production because it makes rollbacks ambiguous, but it is fine for a local development cluster where we control exactly what is in the cache.
 
 `imagePullPolicy: IfNotPresent` is critical for kind. By default, Kubernetes tries to pull images from a registry. kind loads images directly into its internal containerd cache via `kind load docker-image`. If the pull policy is `Always`, the kubelet will still attempt a registry pull, which fails because `library-system/catalog:latest` does not exist in any public registry. `IfNotPresent` tells the kubelet: if the image is already present in the local cache, use it. This is the correct policy for locally built images in a kind cluster.
 
@@ -270,7 +270,7 @@ ConfigMaps[^4] store non-sensitive key-value data. All values must be strings �
 
 `KAFKA_BROKERS` uses the cross-namespace DNS name for the Kafka StatefulSet Pod. StatefulSet Pods get stable DNS names in the form `<pod-name>.<service-name>.<namespace>.svc.cluster.local`. The `kafka-0` pod is in the `messaging` namespace, so its address is `kafka-0.kafka.messaging.svc.cluster.local:9092`. A regular Service DNS name (`kafka.messaging.svc.cluster.local`) would also work but would route through the cluster's load balancer rather than directly to the pod — for Kafka, connecting directly to broker pods by their stable identity is the standard approach.
 
-`OTEL_COLLECTOR_ENDPOINT` is empty. The OTel collector is not deployed in the kind cluster (it is part of the observability stack in Docker Compose). Leaving this empty causes the services to skip exporting traces. Chapter 14 adds a lightweight collector to the cluster.
+`OTEL_COLLECTOR_ENDPOINT` is empty. The OTel collector is not deployed in the kind cluster (it is part of the observability stack in Docker Compose). Leaving this empty causes the services to skip exporting traces. The Docker Compose stack (Chapter 9) includes a full collector; the kind cluster omits it for simplicity.
 
 ---
 
@@ -699,7 +699,7 @@ data:
 
 ## Secrets
 
-Each Secret below is a placeholder with an empty `data: {}` field. These objects exist so that `kubectl apply -k` on the base alone does not fail when Deployments reference secrets that have no overlay applied — they define the expected names without committing any values to the repository. The local overlay in section 12.6 uses Kustomize's `secretGenerator` to create fully populated Secrets with real values, overriding these placeholders.
+Each Secret below is a placeholder with an empty `data: {}` field. These objects exist so that `kubectl apply -k` on the base alone does not fail when Deployments reference secrets that have no overlay applied — they define the expected names without committing any values to the repository. The local overlay in section 12.5 uses Kustomize's `secretGenerator` to create fully populated Secrets with real values, overriding these placeholders.
 
 The key names populated by the overlay (`JWT_SECRET`, `POSTGRES_PASSWORD`, `MEILI_MASTER_KEY`) match the `secretKeyRef.key` values in the Deployment manifests exactly. OAuth2 credentials (`GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`) are not stored as Secrets — they are left as empty strings in the auth ConfigMap for local development, where the OAuth2 flow is not used.
 
@@ -746,7 +746,7 @@ type: Opaque
 data: {}
 ```
 
-**Base64 is not encryption.** Anyone with read access to a Secret object — via `kubectl get secret jwt-secret -o yaml` — can decode the value with `base64 -d`. Secrets are only marginally better than ConfigMaps at rest (in etcd) unless you enable etcd encryption, and they are only as secure as your RBAC policy. The canonical solution for production is an external secret store (HashiCorp Vault, AWS Secrets Manager, GCP Secret Manager) synced to Kubernetes Secrets by an operator. We cover this in Chapter 13. For the local cluster, the local overlay's `secretGenerator` provides concrete values without putting them in version control.
+**Base64 is not encryption.** Anyone with read access to a Secret object — via `kubectl get secret jwt-secret -o yaml` — can decode the value with `base64 -d`. Secrets are only marginally better than ConfigMaps at rest (in etcd) unless you enable etcd encryption, and they are only as secure as your RBAC policy. The canonical solution for production is an external secret store (HashiCorp Vault, AWS Secrets Manager, GCP Secret Manager) synced to Kubernetes Secrets by an operator. We cover this in Chapter 14. For the local cluster, the local overlay's `secretGenerator` provides concrete values without putting them in version control.
 
 ---
 
@@ -843,7 +843,7 @@ The order of `resources` matters for readability but not for correctness — `ku
 
 ## Summary
 
-You now have complete Kubernetes manifests for all five application services. The pattern is consistent: a Deployment that runs the container with probes, resource bounds, and environment injection; a ClusterIP Service for stable in-cluster DNS; and a ConfigMap for non-sensitive configuration. Secrets are declared as placeholders — the local overlay in section 12.6 substitutes real values via `secretGenerator`.
+You now have complete Kubernetes manifests for all five application services. The pattern is consistent: a Deployment that runs the container with probes, resource bounds, and environment injection; a ClusterIP Service for stable in-cluster DNS; and a ConfigMap for non-sensitive configuration. Secrets are declared as placeholders — the local overlay in section 12.5 substitutes real values via `secretGenerator`.
 
 Three things to carry forward:
 
@@ -851,7 +851,7 @@ Three things to carry forward:
 2. In the `env` list, variables that reference other variables via `$(VAR_NAME)` must be declared after the variables they reference. The ordering is sequential, not lexicographic.
 3. Base64 encoding is not protection. Treat Secret manifests as sensitive files — never commit real values to source control.
 
-Section 12.5 assembles the top-level `kustomization.yaml` that ties all three namespaces together, and section 12.6 adds the local overlay with image name patches and `secretGenerator` entries.
+Section 12.4 assembles the top-level `kustomization.yaml` that ties all three namespaces together, and section 12.5 adds the local overlay with image name patches and `secretGenerator` entries.
 
 ---
 

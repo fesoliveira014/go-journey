@@ -1,4 +1,4 @@
-# 12.3 Preparing Services for Kubernetes
+# 12.2 Preparing Services for Kubernetes
 
 Before writing a single manifest, two code-level concerns need addressing: graceful shutdown and health checks. Docker Compose was forgiving about both — containers could exit abruptly without consequence and Compose had no built-in mechanism to check whether a service was actually ready to handle traffic. Kubernetes is not forgiving. It manages pod termination with a structured lifecycle, routes traffic based on probe results, and will kill a pod that fails to terminate cleanly within a configurable window. Getting both right before touching YAML saves a lot of confusing debugging later.
 

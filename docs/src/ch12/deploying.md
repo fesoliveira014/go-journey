@@ -1,4 +1,4 @@
-# 12.7 Deploying and Verifying
+# 12.6 Deploying and Verifying
 
 Everything is in place. The code changes that make services cluster-aware are committed. The Kubernetes manifests — Deployments, Services, ConfigMaps, PersistentVolumeClaims — are written. Kustomize knows about the `local` overlay. The kind cluster is running with NGINX installed.
 
@@ -8,7 +8,7 @@ This section walks through the final steps: building images, loading them into t
 
 ## Build and Load Images
 
-The first step is getting fresh images into the kind node. As covered in Section 12.2, kind nodes run their own `containerd` daemon and cannot see images in the host Docker daemon. You must build and then explicitly load.
+The first step is getting fresh images into the kind node. As covered in Section 12.1, kind nodes run their own `containerd` daemon and cannot see images in the host Docker daemon. You must build and then explicitly load.
 
 **Build all service images with Earthly:**
 
@@ -189,7 +189,7 @@ curl -s "http://library.local/api/search?q=Go+Programming" | jq .
 
 The search result should include the book you just created. This exercises: Gateway routing, Catalog service, PostgreSQL persistence, and the Search service (which is populated via a Kafka event emitted when the book was created).
 
-**Note on telemetry:** `OTEL_COLLECTOR_ENDPOINT` is intentionally empty in the `local` overlay — the kind cluster does not run an OpenTelemetry Collector. Traces and metrics are not collected in this environment. The services log a warning at startup but continue normally. Full observability will be configured in Chapter 14 when the stack is deployed to EKS.
+**Note on telemetry:** `OTEL_COLLECTOR_ENDPOINT` is intentionally empty in the `local` overlay — the kind cluster does not run an OpenTelemetry Collector. Traces and metrics are not collected in this environment. The services log a warning at startup but continue normally. Full observability is configured in the Docker Compose stack (Chapter 9); the kind cluster omits it for simplicity.
 
 ---
 

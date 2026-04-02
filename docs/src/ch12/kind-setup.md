@@ -1,4 +1,4 @@
-# 12.2 Local Cluster with kind
+# 12.1 Local Cluster with kind
 
 Before writing a single Kubernetes manifest, you need somewhere to run it. Cloud clusters (EKS, GKE, AKE) are the eventual target, but spinning one up just to test a YAML change is slow and expensive. kind solves this by running a full Kubernetes cluster entirely inside Docker containers on your laptop.
 

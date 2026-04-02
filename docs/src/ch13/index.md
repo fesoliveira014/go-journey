@@ -84,7 +84,7 @@ What changes lives entirely in a new Kustomize overlay at `k8s/overlays/producti
 
 The application services themselves do not know or care whether they are talking to a Kubernetes StatefulSet or a managed cloud service. They connect to a hostname and a port. That hostname is what the overlay changes. This is the practical value of externalizing configuration: the same binary runs in every environment.
 
-What also stays the same: namespaces, Service objects, ConfigMaps structure, gRPC communication patterns between services, health check endpoints, and the Earthfile CI targets from Chapter 11. The production pipeline will call the same `earthly +build` and `earthly +test` targets before deploying.
+What also stays the same: namespaces, Service objects, ConfigMaps structure, gRPC communication patterns between services, health check endpoints, and the Earthfile CI targets from Chapter 10. The production pipeline will call the same `earthly +build` and `earthly +test` targets before deploying.
 
 ---
 

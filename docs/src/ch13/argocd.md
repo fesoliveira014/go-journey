@@ -168,7 +168,7 @@ The signal that a push pipeline is no longer sufficient usually comes from one o
 
 ## The foundation is already in place
 
-ArgoCD is not implemented in this project, and you should not feel compelled to add it. The pipeline in section 13.8 is sufficient for the learning context here, it is easier to follow step by step, and it avoids introducing a new system in the last chapter.
+ArgoCD is not implemented in this project, and you should not feel compelled to add it. The pipeline in section 13.8 is sufficient for the learning context here, it is easier to follow step by step, and it avoids introducing a new system in a late chapter.
 
 What matters is that the groundwork for adopting ArgoCD later requires almost nothing new. The Kustomize overlay structure — `k8s/base/`, `k8s/overlays/staging/`, `k8s/overlays/production/` — is precisely the directory layout that ArgoCD expects as input. There are no ArgoCD-specific files inside an overlay; it reads standard Kustomize output.
 

@@ -1,4 +1,4 @@
-# 12.6 Kustomize Environments
+# 12.5 Kustomize Environments
 
 At the end of sections 11.3 and 11.4, the project has roughly thirty manifest files — Deployments, Services, ConfigMaps, StatefulSets, PersistentVolumeClaims, Ingress rules — organized across three namespaces. They work correctly in kind. The problem appears the moment you think about EKS.
 
@@ -272,7 +272,7 @@ resources:
 
 Each commented section maps to a concrete problem:
 
-- **External secrets** — credentials must not live in Git. The External Secrets Operator (ESO) reads from AWS Secrets Manager and creates native Kubernetes Secrets. Chapter 13 sets this up.
+- **External secrets** — credentials must not live in Git. The External Secrets Operator (ESO) reads from AWS Secrets Manager and creates native Kubernetes Secrets. Chapter 14 sets this up.
 - **Resource patches** — production pods need real CPU and memory limits. A strategic merge patch on a Deployment's `resources` block adds these without duplicating the whole manifest.
 - **Replica patches** — a JSON patch on `spec.replicas` sets each service's replica count independently.
 - **imagePullPolicy** — `IfNotPresent` is correct for kind (which loads images locally); `Always` is correct for ECR (which holds canonical tagged releases).
@@ -303,7 +303,7 @@ Two additional primitives appear in the production overlay comments but are not 
 
 ## Summary
 
-The manifests written in sections 11.3 and 11.4 live unchanged in `deploy/k8s/base/`. The local overlay adds generated Secrets and applies via `kubectl apply -k deploy/k8s/overlays/local`. The production overlay is a documented stub that Chapter 13 fills in with real patches, external secrets, and ECR image references.
+The manifests written in sections 12.3 and 12.4 live unchanged in `deploy/k8s/base/`. The local overlay adds generated Secrets and applies via `kubectl apply -k deploy/k8s/overlays/local`. The production overlay is a documented stub that Chapter 13 fills in with real patches, external secrets, and ECR image references.
 
 The important property is that environment differences are **explicit and isolated**. Looking at `overlays/local/kustomization.yaml` tells you exactly how local differs from the base. Looking at `overlays/production/kustomization.yaml` tells you exactly how production differs. The base contains no environment-specific assumptions. Adding a third environment — staging, or a CI-specific overlay — means adding one directory and one file without touching anything that already exists.
 

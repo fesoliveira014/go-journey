@@ -136,7 +136,7 @@ For any other error (e.g., validation failure, network issue), the CLI exits wit
 
 ## The Fixture File
 
-The fixture file (`services/catalog/cmd/seed/books.json`) contains 16 books across six genres:
+The fixture file (`services/catalog/cmd/seed/books.json`) contains 16 books across five genres:
 
 | Genre | Count | Examples |
 |-------|-------|---------|

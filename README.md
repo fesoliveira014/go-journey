@@ -135,7 +135,7 @@ Expected: `{"status":"ok"}`
 **3. Create an admin account:**
 
 ```bash
-DATABASE_URL="host=localhost port=5434 user=postgres password=postgres dbname=auth sslmode=disable" \
+DATABASE_URL="postgres://postgres:postgres@localhost:5434/auth?sslmode=disable" \
   go run services/auth/cmd/admin/main.go \
     --email admin@example.com --password secret --name "Admin"
 ```

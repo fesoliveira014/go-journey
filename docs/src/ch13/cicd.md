@@ -1,6 +1,6 @@
 # 13.8 CI/CD Pipeline
 
-Chapter 11 built a CI/CD pipeline that runs tests with Earthly and pushes container images to GitHub Container Registry (GHCR) on every push to `main`. That was the right scope for a pipeline with no cloud target: build it, verify it, store it. Now there is a cloud target. Every section of this chapter has added infrastructure — an EKS cluster, ECR repositories, an RDS database per service, an MSK broker — and none of it is doing anything useful until a deployment pipeline closes the loop. This section builds that pipeline.
+Chapter 10 built a CI/CD pipeline that runs tests with Earthly and pushes container images to GitHub Container Registry (GHCR) on every push to `main`. That was the right scope for a pipeline with no cloud target: build it, verify it, store it. Now there is a cloud target. Every section of this chapter has added infrastructure — an EKS cluster, ECR repositories, an RDS database per service, an MSK broker — and none of it is doing anything useful until a deployment pipeline closes the loop. This section builds that pipeline.
 
 The end state: a push to `main` runs the existing CI job, builds and pushes images to both GHCR and ECR, and then deploys to the EKS cluster by applying the production Kustomize overlay. No long-lived AWS credentials are stored in GitHub. A failed rollout rolls back automatically. The entire process is auditable in the GitHub Actions log.
 

@@ -1,4 +1,4 @@
-# 12.5 Infrastructure Manifests
+# 12.4 Infrastructure Manifests
 
 Application services — `auth`, `catalog`, `reservation`, `search`, `gateway` — are stateless. Every pod is interchangeable. Kubernetes can kill one, schedule a replacement on a different node, and nothing is lost because state lives elsewhere. That is what makes Deployments work: all replicas are equivalent, any pod can be discarded.
 
@@ -22,7 +22,7 @@ A Deployment gives pods random names (`postgres-catalog-7b4f9-xk2p`) and no guar
 
 ## PostgreSQL — Catalog Service
 
-The catalog database lives in the `data` namespace. The manifest set is three objects: a headless Service, a StatefulSet, and a ConfigMap. The Secret is assumed to be pre-created (covered in Section 12.6).
+The catalog database lives in the `data` namespace. The manifest set is three objects: a headless Service, a StatefulSet, and a ConfigMap. The Secret is assumed to be pre-created (covered in Section 12.5).
 
 ### Headless Service
 
