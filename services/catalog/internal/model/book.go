@@ -12,7 +12,7 @@ type Book struct {
 	ID              uuid.UUID `gorm:"type:uuid;primaryKey;default:uuid_generate_v4()"`
 	Title           string    `gorm:"type:varchar(500);not null"`
 	Author          string    `gorm:"type:varchar(500);not null"`
-	ISBN            string    `gorm:"type:varchar(13);uniqueIndex"`
+	ISBN            string    `gorm:"type:varchar(20);uniqueIndex"`
 	Genre           string    `gorm:"type:varchar(100)"`
 	Description     string    `gorm:"type:text"`
 	PublishedYear   int       `gorm:"type:integer"`
