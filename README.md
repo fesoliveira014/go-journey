@@ -74,8 +74,8 @@ See [ARCHITECTURE.md](ARCHITECTURE.md) for the system design, service descriptio
 **1. Clone and start the stack:**
 
 ```bash
-git clone https://github.com/fesoliveira014/library-system.git
-cd library-system/deploy
+git clone https://github.com/fesoliveira014/go-journey.git
+cd go-journey/deploy
 docker compose up --build
 ```
 

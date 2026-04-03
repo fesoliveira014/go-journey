@@ -10,7 +10,7 @@ build-dir = "../site"
 [output.html]
 default-theme = "navy"
 preferred-dark-theme = "navy"
-git-repository-url = "https://github.com/fesoliveira014/library-system"
+git-repository-url = "https://github.com/fesoliveira014/go-journey"
 additional-js = ["mermaid.min.js", "mermaid-init.js"]
 
 [preprocessor]
