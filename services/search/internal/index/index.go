@@ -189,7 +189,7 @@ func hitToDocument(hit interface{}) (model.BookDocument, error) {
 	}
 
 	var doc model.BookDocument
-	if err := h.Decode(&doc); err != nil {
+	if err := h.DecodeInto(&doc); err != nil {
 		return model.BookDocument{}, fmt.Errorf("decode hit: %w", err)
 	}
 	return doc, nil
