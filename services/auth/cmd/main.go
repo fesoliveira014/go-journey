@@ -40,7 +40,7 @@ func main() {
 	}
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "dev-secret-change-in-production"
+		log.Fatal("JWT_SECRET environment variable is required")
 	}
 	jwtExpiry := os.Getenv("JWT_EXPIRY")
 	if jwtExpiry == "" {

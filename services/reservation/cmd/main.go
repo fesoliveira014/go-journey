@@ -56,7 +56,8 @@ func main() {
 	}
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "dev-secret-change-in-production"
+		slog.Error("JWT_SECRET environment variable is required")
+		os.Exit(1)
 	}
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	if kafkaBrokers == "" {

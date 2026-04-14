@@ -255,8 +255,11 @@ This is analogous to a Spring `@ControllerAdvice` exception handler that maps do
 The `main.go` wires everything together using constructor functions -- no framework, no reflection:
 
 ```go
-// Configuration from environment
+// Configuration from environment. JWT_SECRET is required — no default.
 jwtSecret := os.Getenv("JWT_SECRET")
+if jwtSecret == "" {
+    log.Fatal("JWT_SECRET environment variable is required")
+}
 jwtExpiry := os.Getenv("JWT_EXPIRY")
 googleClientID := os.Getenv("GOOGLE_CLIENT_ID")
 
@@ -277,6 +280,8 @@ authv1.RegisterAuthServiceServer(grpcServer, authHandler)
 ```
 
 Each layer only knows about the layer directly below it. The handler does not know about GORM. The service does not know about gRPC. This is the same layered architecture as the Catalog service, and it makes testing straightforward -- you can mock any interface boundary.
+
+> **Why `log.Fatal` on missing `JWT_SECRET`?** An earlier draft of this code fell back to `"dev-secret-change-in-production"` when the env var was unset. That pattern is dangerous: a misconfigured deployment (forgotten Kubernetes Secret, typo in a ConfigMap key) would silently start a production service that accepts tokens signed with a publicly known string. The [12-Factor App's Config factor](https://12factor.net/config) is clear here — config belongs in the environment, and missing required config should fail fast. Development defaults belong in a `.env` file or Compose env block, not in the binary itself.
 
 ---
 
