@@ -165,6 +165,35 @@ for _, tt := range tests {
 
 For the validation table above, the cases are independent, so option 1 is appropriate. For tests that verify state built up across calls (e.g., "create a book, then retrieve it"), sequential subtests sharing a mock make the test easier to read.
 
+### Top-level `t.Parallel()`
+
+`t.Parallel()` also works at the top of a test function — not just inside subtests. When a top-level test calls `t.Parallel()`, it runs concurrently with every other top-level parallel test in the same package. Non-parallel tests still run first; then all parallel tests run together.
+
+```go
+func TestCreateBook_Validation(t *testing.T) {
+    t.Parallel()
+    // ... test body using fresh mocks per invocation
+}
+
+func TestCreateBook_DuplicateISBN(t *testing.T) {
+    t.Parallel()
+    // ... independent test
+}
+```
+
+For unit tests that use mocks or in-memory fakes built inside each test function, this is essentially free speed: a package with thirty independent tests, each doing a bit of setup and one assertion, finishes in the time of the slowest single test rather than the sum of all of them. On a CI runner with many cores, the wall-clock difference can be significant.
+
+Two conditions must hold for a test to safely opt into `t.Parallel()`:
+
+1. **The test must not depend on global mutable state.** If the test sets a package-level variable, mutates a shared map, or re-registers a singleton (OpenTelemetry global tracer, `log.SetOutput`, `os.Setenv`), another parallel test could observe the change mid-run. Either isolate the state into test-local instances or keep the test sequential.
+2. **The test must not depend on shared external state.** Anything that hits a real database, a real Kafka broker, a real filesystem path shared with other tests, or reserves a well-known TCP port cannot run in parallel with siblings that touch the same resource. In this project, files named `integration_test.go`, `e2e_test.go`, and the repository tests that reach a real PostgreSQL instance are deliberately left sequential.
+
+The project's unit tests build a fresh mock repository, fake publisher, and `httptest.Server` per test invocation, so they satisfy both conditions and have `t.Parallel()` at the top of every `Test*` function. Running the suite under `go test -race ./...` confirms the promise — the race detector will fail the build if any test does accidentally share state across goroutines.
+
+A good sanity check when adding new tests is to run `go test -race -count=3 ./...`. The `-count=3` flag re-runs each test three times, which tends to surface flakes that only show up under specific scheduler interleavings. If a test passes with `-count=1` but fails with `-count=3`, there is almost certainly shared state you have not noticed yet.
+
+Mitchell Hashimoto's "Advanced Testing with Go" talk[^3] is a good deeper dive into this and several adjacent patterns (dependency injection, integration boundaries, golden files). The `t.Parallel()` discussion there is short but memorable: parallel tests force you to write tests that do not leak state, which is a property worth having even before the wall-clock win.
+
 ---
 
 ## Test Helpers and `t.Helper()`
@@ -322,3 +351,4 @@ These four patterns cover the vast majority of unit test needs in a Go service. 
 
 [^1]: Go blog — Using Subtests and Sub-benchmarks: https://go.dev/blog/subtests
 [^2]: Go testing package documentation: https://pkg.go.dev/testing
+[^3]: Mitchell Hashimoto — Advanced Testing with Go (GopherCon 2017): https://www.youtube.com/watch?v=8hQG7QlcLBk

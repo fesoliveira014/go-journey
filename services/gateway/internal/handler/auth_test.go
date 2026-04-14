@@ -119,6 +119,7 @@ func registerTemplates(t *testing.T) map[string]*template.Template {
 // ---- Tests ----
 
 func TestLoginPage_RendersForm(t *testing.T) {
+	t.Parallel()
 	tmpl := loginTemplates(t)
 	srv := handler.New(nil, nil, nil, nil, tmpl)
 
@@ -136,6 +137,7 @@ func TestLoginPage_RendersForm(t *testing.T) {
 }
 
 func TestLoginSubmit_Success(t *testing.T) {
+	t.Parallel()
 	mock := &mockAuthClient{
 		loginFn: func(_ context.Context, _ *authv1.LoginRequest, _ ...grpc.CallOption) (*authv1.AuthResponse, error) {
 			return &authv1.AuthResponse{Token: "tok-abc"}, nil
@@ -175,6 +177,7 @@ func TestLoginSubmit_Success(t *testing.T) {
 }
 
 func TestLoginSubmit_InvalidCredentials(t *testing.T) {
+	t.Parallel()
 	mock := &mockAuthClient{
 		loginFn: func(_ context.Context, _ *authv1.LoginRequest, _ ...grpc.CallOption) (*authv1.AuthResponse, error) {
 			return nil, status.Error(codes.Unauthenticated, "invalid credentials")
@@ -199,6 +202,7 @@ func TestLoginSubmit_InvalidCredentials(t *testing.T) {
 }
 
 func TestLoginSubmit_EmptyFields(t *testing.T) {
+	t.Parallel()
 	tmpl := loginTemplates(t)
 	srv := handler.New(nil, nil, nil, nil, tmpl)
 
@@ -218,6 +222,7 @@ func TestLoginSubmit_EmptyFields(t *testing.T) {
 }
 
 func TestRegisterSubmit_Success(t *testing.T) {
+	t.Parallel()
 	mock := &mockAuthClient{
 		registerFn: func(_ context.Context, _ *authv1.RegisterRequest, _ ...grpc.CallOption) (*authv1.AuthResponse, error) {
 			return &authv1.AuthResponse{Token: "tok-new"}, nil
@@ -260,6 +265,7 @@ func TestRegisterSubmit_Success(t *testing.T) {
 }
 
 func TestLogout_ClearsCookie(t *testing.T) {
+	t.Parallel()
 	srv := handler.New(nil, nil, nil, nil, nil)
 
 	req := httptest.NewRequest(http.MethodPost, "/logout", nil)
@@ -291,6 +297,7 @@ func TestLogout_ClearsCookie(t *testing.T) {
 }
 
 func TestOAuth2Start_RedirectsToGoogle(t *testing.T) {
+	t.Parallel()
 	const oauthURL = "https://accounts.google.com/o/oauth2/auth?client_id=test"
 	mock := &mockAuthClient{
 		initOAuth2Fn: func(_ context.Context, _ *authv1.InitOAuth2Request, _ ...grpc.CallOption) (*authv1.InitOAuth2Response, error) {
@@ -314,6 +321,7 @@ func TestOAuth2Start_RedirectsToGoogle(t *testing.T) {
 }
 
 func TestOAuth2Callback_Success(t *testing.T) {
+	t.Parallel()
 	mock := &mockAuthClient{
 		completeOAuth2Fn: func(_ context.Context, in *authv1.CompleteOAuth2Request, _ ...grpc.CallOption) (*authv1.AuthResponse, error) {
 			if in.Code != "mycode" || in.State != "mystate" {

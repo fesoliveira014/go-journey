@@ -112,6 +112,7 @@ func catalogTestTemplates(t *testing.T) map[string]*template.Template {
 // ---- Tests ----
 
 func TestBookList_RendersBooks(t *testing.T) {
+	t.Parallel()
 	mock := &mockCatalogClient{
 		listBooksFn: func(_ context.Context, _ *catalogv1.ListBooksRequest, _ ...grpc.CallOption) (*catalogv1.ListBooksResponse, error) {
 			return &catalogv1.ListBooksResponse{
@@ -143,6 +144,7 @@ func TestBookList_RendersBooks(t *testing.T) {
 }
 
 func TestBookList_HTMXRequest(t *testing.T) {
+	t.Parallel()
 	mock := &mockCatalogClient{
 		listBooksFn: func(_ context.Context, _ *catalogv1.ListBooksRequest, _ ...grpc.CallOption) (*catalogv1.ListBooksResponse, error) {
 			return &catalogv1.ListBooksResponse{
@@ -175,6 +177,7 @@ func TestBookList_HTMXRequest(t *testing.T) {
 }
 
 func TestBookList_GenreFilter(t *testing.T) {
+	t.Parallel()
 	var capturedGenre string
 	mock := &mockCatalogClient{
 		listBooksFn: func(_ context.Context, in *catalogv1.ListBooksRequest, _ ...grpc.CallOption) (*catalogv1.ListBooksResponse, error) {
@@ -196,6 +199,7 @@ func TestBookList_GenreFilter(t *testing.T) {
 }
 
 func TestBookList_GRPCError(t *testing.T) {
+	t.Parallel()
 	mock := &mockCatalogClient{
 		listBooksFn: func(_ context.Context, _ *catalogv1.ListBooksRequest, _ ...grpc.CallOption) (*catalogv1.ListBooksResponse, error) {
 			return nil, status.Error(codes.NotFound, "no books")
@@ -218,6 +222,7 @@ func TestBookList_GRPCError(t *testing.T) {
 }
 
 func TestBookDetail_Success(t *testing.T) {
+	t.Parallel()
 	mock := &mockCatalogClient{
 		getBookFn: func(_ context.Context, in *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
 			if in.Id != "42" {
@@ -252,6 +257,7 @@ func TestBookDetail_Success(t *testing.T) {
 }
 
 func TestBookDetail_NotFound(t *testing.T) {
+	t.Parallel()
 	mock := &mockCatalogClient{
 		getBookFn: func(_ context.Context, _ *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
 			return nil, status.Error(codes.NotFound, "book not found")
@@ -311,6 +317,7 @@ func withMember(r *http.Request) *http.Request {
 // ---- Admin handler tests ----
 
 func TestAdminBookNew_RequiresAdmin(t *testing.T) {
+	t.Parallel()
 	tmpl := adminTestTemplates(t)
 	srv := handler.New(nil, &mockCatalogClient{}, nil, nil, tmpl)
 
@@ -329,6 +336,7 @@ func TestAdminBookNew_RequiresAdmin(t *testing.T) {
 }
 
 func TestAdminBookNew_NonAdmin(t *testing.T) {
+	t.Parallel()
 	tmpl := adminTestTemplates(t)
 	srv := handler.New(nil, &mockCatalogClient{}, nil, nil, tmpl)
 
@@ -344,6 +352,7 @@ func TestAdminBookNew_NonAdmin(t *testing.T) {
 }
 
 func TestAdminBookNew_Admin(t *testing.T) {
+	t.Parallel()
 	tmpl := adminTestTemplates(t)
 	srv := handler.New(nil, &mockCatalogClient{}, nil, nil, tmpl)
 
@@ -362,6 +371,7 @@ func TestAdminBookNew_Admin(t *testing.T) {
 }
 
 func TestAdminBookCreate_Success(t *testing.T) {
+	t.Parallel()
 	var captured *catalogv1.CreateBookRequest
 	mock := &mockCatalogClient{
 		createBookFn: func(_ context.Context, in *catalogv1.CreateBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
@@ -407,6 +417,7 @@ func TestAdminBookCreate_Success(t *testing.T) {
 }
 
 func TestAdminBookEdit_LoadsBook(t *testing.T) {
+	t.Parallel()
 	mock := &mockCatalogClient{
 		getBookFn: func(_ context.Context, in *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
 			if in.Id != "42" {
@@ -439,6 +450,7 @@ func TestAdminBookEdit_LoadsBook(t *testing.T) {
 }
 
 func TestAdminBookUpdate_Success(t *testing.T) {
+	t.Parallel()
 	var capturedID string
 	mock := &mockCatalogClient{
 		updateBookFn: func(_ context.Context, in *catalogv1.UpdateBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
@@ -481,6 +493,7 @@ func TestAdminBookUpdate_Success(t *testing.T) {
 }
 
 func TestAdminBookDelete_Success(t *testing.T) {
+	t.Parallel()
 	var deletedID string
 	mock := &mockCatalogClient{
 		deleteBookFn: func(_ context.Context, in *catalogv1.DeleteBookRequest, _ ...grpc.CallOption) (*catalogv1.DeleteBookResponse, error) {

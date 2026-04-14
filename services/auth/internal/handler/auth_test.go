@@ -82,6 +82,7 @@ func (r *inMemoryRepo) Update(ctx context.Context, user *model.User) (*model.Use
 }
 
 func TestAuthHandler_Register_Success(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newInMemoryRepo(), "test-secret", "24h")
 	h := handler.NewAuthHandler(svc)
 
@@ -102,6 +103,7 @@ func TestAuthHandler_Register_Success(t *testing.T) {
 }
 
 func TestAuthHandler_Register_MissingEmail(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newInMemoryRepo(), "test-secret", "24h")
 	h := handler.NewAuthHandler(svc)
 
@@ -116,6 +118,7 @@ func TestAuthHandler_Register_MissingEmail(t *testing.T) {
 }
 
 func TestAuthHandler_Register_MissingPassword(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newInMemoryRepo(), "test-secret", "24h")
 	h := handler.NewAuthHandler(svc)
 
@@ -130,6 +133,7 @@ func TestAuthHandler_Register_MissingPassword(t *testing.T) {
 }
 
 func TestAuthHandler_Login_Success(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newInMemoryRepo(), "test-secret", "24h")
 	h := handler.NewAuthHandler(svc)
 
@@ -153,6 +157,7 @@ func TestAuthHandler_Login_Success(t *testing.T) {
 }
 
 func TestAuthHandler_Login_WrongPassword(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newInMemoryRepo(), "test-secret", "24h")
 	h := handler.NewAuthHandler(svc)
 
@@ -172,6 +177,7 @@ func TestAuthHandler_Login_WrongPassword(t *testing.T) {
 }
 
 func TestAuthHandler_GetUser_InvalidID(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newInMemoryRepo(), "test-secret", "24h")
 	h := handler.NewAuthHandler(svc)
 
@@ -183,6 +189,7 @@ func TestAuthHandler_GetUser_InvalidID(t *testing.T) {
 }
 
 func TestAuthHandler_ListUsers_Success(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newInMemoryRepo(), "test-secret", "24h")
 	h := handler.NewAuthHandler(svc)
 
@@ -205,6 +212,7 @@ func TestAuthHandler_ListUsers_Success(t *testing.T) {
 }
 
 func TestAuthHandler_ListUsers_NonAdmin(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newInMemoryRepo(), "test-secret", "24h")
 	h := handler.NewAuthHandler(svc)
 

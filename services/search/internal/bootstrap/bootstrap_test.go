@@ -40,6 +40,7 @@ func (m *mockCatalogClient) ListBooks(_ context.Context, req *catalogv1.ListBook
 }
 
 func TestBootstrap_SkipsWhenIndexHasDocuments(t *testing.T) {
+	t.Parallel()
 	svc := &mockSearchService{count: 5}
 	catalog := &mockCatalogClient{}
 
@@ -56,6 +57,7 @@ func TestBootstrap_SkipsWhenIndexHasDocuments(t *testing.T) {
 }
 
 func TestBootstrap_IndexesAllBooksWhenEmpty(t *testing.T) {
+	t.Parallel()
 	svc := &mockSearchService{count: 0}
 	catalog := &mockCatalogClient{
 		books: []*catalogv1.Book{

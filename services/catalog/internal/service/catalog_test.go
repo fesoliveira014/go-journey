@@ -83,6 +83,7 @@ func (m *mockPublisher) Publish(_ context.Context, event service.BookEvent) erro
 }
 
 func TestCatalogService_CreateBook_Success(t *testing.T) {
+	t.Parallel()
 	pub := &mockPublisher{}
 	svc := service.NewCatalogService(newMockRepo(), pub)
 	ctx := context.Background()
@@ -111,6 +112,7 @@ func TestCatalogService_CreateBook_Success(t *testing.T) {
 }
 
 func TestCatalogService_CreateBook_MissingTitle(t *testing.T) {
+	t.Parallel()
 	svc := service.NewCatalogService(newMockRepo(), &mockPublisher{})
 	ctx := context.Background()
 
@@ -125,6 +127,7 @@ func TestCatalogService_CreateBook_MissingTitle(t *testing.T) {
 }
 
 func TestCatalogService_CreateBook_MissingAuthor(t *testing.T) {
+	t.Parallel()
 	svc := service.NewCatalogService(newMockRepo(), &mockPublisher{})
 	ctx := context.Background()
 
@@ -139,6 +142,7 @@ func TestCatalogService_CreateBook_MissingAuthor(t *testing.T) {
 }
 
 func TestCatalogService_CreateBook_NegativeCopies(t *testing.T) {
+	t.Parallel()
 	svc := service.NewCatalogService(newMockRepo(), &mockPublisher{})
 	ctx := context.Background()
 
@@ -150,6 +154,7 @@ func TestCatalogService_CreateBook_NegativeCopies(t *testing.T) {
 }
 
 func TestCatalogService_GetBook_NotFound(t *testing.T) {
+	t.Parallel()
 	svc := service.NewCatalogService(newMockRepo(), &mockPublisher{})
 	ctx := context.Background()
 
@@ -160,6 +165,7 @@ func TestCatalogService_GetBook_NotFound(t *testing.T) {
 }
 
 func TestCatalogService_UpdateBook_PublishesEvent(t *testing.T) {
+	t.Parallel()
 	repo := newMockRepo()
 	pub := &mockPublisher{}
 	svc := service.NewCatalogService(repo, pub)
@@ -183,6 +189,7 @@ func TestCatalogService_UpdateBook_PublishesEvent(t *testing.T) {
 }
 
 func TestCatalogService_DeleteBook_PublishesEvent(t *testing.T) {
+	t.Parallel()
 	repo := newMockRepo()
 	pub := &mockPublisher{}
 	svc := service.NewCatalogService(repo, pub)
@@ -208,6 +215,7 @@ func TestCatalogService_DeleteBook_PublishesEvent(t *testing.T) {
 }
 
 func TestCatalogService_UpdateAvailability_ReturnsBook(t *testing.T) {
+	t.Parallel()
 	repo := newMockRepo()
 	pub := &mockPublisher{}
 	svc := service.NewCatalogService(repo, pub)

@@ -10,6 +10,7 @@ import (
 )
 
 func TestUserIDFromContext(t *testing.T) {
+	t.Parallel()
 	id := uuid.New()
 	ctx := auth.ContextWithUser(context.Background(), id, "user")
 
@@ -23,6 +24,7 @@ func TestUserIDFromContext(t *testing.T) {
 }
 
 func TestUserIDFromContext_Missing(t *testing.T) {
+	t.Parallel()
 	_, err := auth.UserIDFromContext(context.Background())
 	if err == nil {
 		t.Fatal("expected error for missing user ID")
@@ -30,6 +32,7 @@ func TestUserIDFromContext_Missing(t *testing.T) {
 }
 
 func TestRoleFromContext(t *testing.T) {
+	t.Parallel()
 	ctx := auth.ContextWithUser(context.Background(), uuid.New(), "admin")
 
 	role, err := auth.RoleFromContext(ctx)
@@ -42,6 +45,7 @@ func TestRoleFromContext(t *testing.T) {
 }
 
 func TestRequireRole_Authorized(t *testing.T) {
+	t.Parallel()
 	ctx := auth.ContextWithUser(context.Background(), uuid.New(), "admin")
 	if err := auth.RequireRole(ctx, "admin"); err != nil {
 		t.Fatalf("expected no error, got %v", err)
@@ -49,6 +53,7 @@ func TestRequireRole_Authorized(t *testing.T) {
 }
 
 func TestRequireRole_Unauthorized(t *testing.T) {
+	t.Parallel()
 	ctx := auth.ContextWithUser(context.Background(), uuid.New(), "user")
 	err := auth.RequireRole(ctx, "admin")
 	if err == nil {

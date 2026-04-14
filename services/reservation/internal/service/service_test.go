@@ -120,6 +120,7 @@ func userCtx(userID uuid.UUID) context.Context {
 }
 
 func TestCreateReservation_Success(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	bookID := uuid.New()
 	pub := &mockPublisher{}
@@ -168,6 +169,7 @@ func TestCreateReservation_Success(t *testing.T) {
 }
 
 func TestCreateReservation_MaxReservations(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	pub := &mockPublisher{}
 
@@ -187,6 +189,7 @@ func TestCreateReservation_MaxReservations(t *testing.T) {
 }
 
 func TestCreateReservation_NoAvailableCopies(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	pub := &mockPublisher{}
 
@@ -218,6 +221,7 @@ func TestCreateReservation_NoAvailableCopies(t *testing.T) {
 }
 
 func TestCreateReservation_CompensatesOnCreateFailure(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	bookID := uuid.New()
 	pub := &mockPublisher{}
@@ -264,6 +268,7 @@ type errAssert string
 func (e errAssert) Error() string { return string(e) }
 
 func TestReturnBook_Success(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	resID := uuid.New()
 	pub := &mockPublisher{}
@@ -302,6 +307,7 @@ func TestReturnBook_Success(t *testing.T) {
 }
 
 func TestReturnBook_WrongUser(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.New()
 	otherID := uuid.New()
 	resID := uuid.New()
@@ -322,6 +328,7 @@ func TestReturnBook_WrongUser(t *testing.T) {
 }
 
 func TestReturnBook_AlreadyReturned(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	resID := uuid.New()
 
@@ -341,6 +348,7 @@ func TestReturnBook_AlreadyReturned(t *testing.T) {
 }
 
 func TestListUserReservations_ExpiresOnRead(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	pub := &mockPublisher{}
 
@@ -384,6 +392,7 @@ func TestListUserReservations_ExpiresOnRead(t *testing.T) {
 }
 
 func TestReapExpired_FlipsOverdueRowsAndPublishes(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	overdue := &model.Reservation{
 		ID: uuid.New(), UserID: userID, BookID: uuid.New(),
@@ -423,6 +432,7 @@ func TestReapExpired_FlipsOverdueRowsAndPublishes(t *testing.T) {
 }
 
 func TestReservationService_ListAllReservations(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	bookID := uuid.New()
 	now := time.Now()

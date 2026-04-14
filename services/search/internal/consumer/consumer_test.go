@@ -23,6 +23,7 @@ func (m *mockIndexer) Delete(_ context.Context, id string) error {
 }
 
 func TestHandleEvent_BookCreated(t *testing.T) {
+	t.Parallel()
 	idx := &mockIndexer{}
 	err := handleEvent(context.Background(), idx, []byte(`{
 		"event_type": "book.created",
@@ -49,6 +50,7 @@ func TestHandleEvent_BookCreated(t *testing.T) {
 }
 
 func TestHandleEvent_BookUpdated(t *testing.T) {
+	t.Parallel()
 	idx := &mockIndexer{}
 	err := handleEvent(context.Background(), idx, []byte(`{
 		"event_type": "book.updated",
@@ -69,6 +71,7 @@ func TestHandleEvent_BookUpdated(t *testing.T) {
 }
 
 func TestHandleEvent_BookDeleted(t *testing.T) {
+	t.Parallel()
 	idx := &mockIndexer{}
 	err := handleEvent(context.Background(), idx, []byte(`{
 		"event_type": "book.deleted",
@@ -86,6 +89,7 @@ func TestHandleEvent_BookDeleted(t *testing.T) {
 }
 
 func TestHandleEvent_UnknownType(t *testing.T) {
+	t.Parallel()
 	idx := &mockIndexer{}
 	err := handleEvent(context.Background(), idx, []byte(`{
 		"event_type": "book.unknown",

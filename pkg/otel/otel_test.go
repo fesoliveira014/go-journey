@@ -9,6 +9,7 @@ import (
 )
 
 func TestInit_SetsGlobalProviders(t *testing.T) {
+	t.Parallel()
 	shutdown, err := Init(context.Background(), "test-service", "0.0.1", "localhost:4317")
 	if err != nil {
 		t.Fatalf("Init() error: %v", err)
@@ -22,6 +23,7 @@ func TestInit_SetsGlobalProviders(t *testing.T) {
 }
 
 func TestInit_ShutdownIsIdempotent(t *testing.T) {
+	t.Parallel()
 	shutdown, err := Init(context.Background(), "test-service", "0.0.1", "localhost:4317")
 	if err != nil {
 		t.Fatalf("Init() error: %v", err)

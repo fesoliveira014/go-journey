@@ -47,6 +47,7 @@ func (m *mockIndex) EnsureIndex(_ context.Context) error {
 }
 
 func TestSearchService_Upsert(t *testing.T) {
+	t.Parallel()
 	idx := newMockIndex()
 	svc := service.NewSearchService(idx)
 
@@ -60,6 +61,7 @@ func TestSearchService_Upsert(t *testing.T) {
 }
 
 func TestSearchService_Delete(t *testing.T) {
+	t.Parallel()
 	idx := newMockIndex()
 	idx.docs["1"] = model.BookDocument{ID: "1"}
 	svc := service.NewSearchService(idx)
@@ -74,6 +76,7 @@ func TestSearchService_Delete(t *testing.T) {
 }
 
 func TestSearchService_Search_DefaultPagination(t *testing.T) {
+	t.Parallel()
 	idx := newMockIndex()
 	idx.searchRes = []model.BookDocument{{ID: "1", Title: "Go Book"}}
 	svc := service.NewSearchService(idx)
@@ -91,6 +94,7 @@ func TestSearchService_Search_DefaultPagination(t *testing.T) {
 }
 
 func TestSearchService_Suggest(t *testing.T) {
+	t.Parallel()
 	idx := newMockIndex()
 	idx.searchRes = []model.BookDocument{{ID: "1", Title: "Go in Action", Author: "Kennedy"}}
 	svc := service.NewSearchService(idx)
@@ -108,6 +112,7 @@ func TestSearchService_Suggest(t *testing.T) {
 }
 
 func TestSearchService_EnsureIndex(t *testing.T) {
+	t.Parallel()
 	idx := newMockIndex()
 	svc := service.NewSearchService(idx)
 
@@ -121,6 +126,7 @@ func TestSearchService_EnsureIndex(t *testing.T) {
 }
 
 func TestSearchService_Count(t *testing.T) {
+	t.Parallel()
 	idx := newMockIndex()
 	idx.docs["1"] = model.BookDocument{ID: "1"}
 	svc := service.NewSearchService(idx)

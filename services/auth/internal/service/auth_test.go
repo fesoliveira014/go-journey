@@ -76,6 +76,7 @@ func (m *mockUserRepo) Update(ctx context.Context, user *model.User) (*model.Use
 }
 
 func TestAuthService_Register_Success(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	token, user, err := svc.Register(context.Background(), "test@example.com", "password123", "Test User")
@@ -101,6 +102,7 @@ func TestAuthService_Register_Success(t *testing.T) {
 }
 
 func TestAuthService_Register_DuplicateEmail(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	if _, _, err := svc.Register(context.Background(), "dup@example.com", "pass1", "User 1"); err != nil {
@@ -113,6 +115,7 @@ func TestAuthService_Register_DuplicateEmail(t *testing.T) {
 }
 
 func TestAuthService_Register_EmptyPassword(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	_, _, err := svc.Register(context.Background(), "test@example.com", "", "Test")
@@ -122,6 +125,7 @@ func TestAuthService_Register_EmptyPassword(t *testing.T) {
 }
 
 func TestAuthService_Register_EmptyEmail(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	_, _, err := svc.Register(context.Background(), "", "password", "Test")
@@ -131,6 +135,7 @@ func TestAuthService_Register_EmptyEmail(t *testing.T) {
 }
 
 func TestAuthService_Login_Success(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	// Register first
@@ -152,6 +157,7 @@ func TestAuthService_Login_Success(t *testing.T) {
 }
 
 func TestAuthService_Login_WrongPassword(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	if _, _, err := svc.Register(context.Background(), "wrong@example.com", "correct", "User"); err != nil {
@@ -164,6 +170,7 @@ func TestAuthService_Login_WrongPassword(t *testing.T) {
 }
 
 func TestAuthService_Login_NonexistentUser(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	_, _, err := svc.Login(context.Background(), "nobody@example.com", "password")
@@ -173,6 +180,7 @@ func TestAuthService_Login_NonexistentUser(t *testing.T) {
 }
 
 func TestAuthService_ValidateToken_Success(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	token, _, _ := svc.Register(context.Background(), "validate@example.com", "pass", "User")
@@ -190,6 +198,7 @@ func TestAuthService_ValidateToken_Success(t *testing.T) {
 }
 
 func TestAuthService_ValidateToken_Invalid(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	_, _, err := svc.ValidateToken(context.Background(), "invalid-token")
@@ -199,6 +208,7 @@ func TestAuthService_ValidateToken_Invalid(t *testing.T) {
 }
 
 func TestAuthService_GetUser_Success(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	_, user, _ := svc.Register(context.Background(), "getuser@example.com", "pass", "Get User")
@@ -213,6 +223,7 @@ func TestAuthService_GetUser_Success(t *testing.T) {
 }
 
 func TestAuthService_ListUsers(t *testing.T) {
+	t.Parallel()
 	svc := service.NewAuthService(newMockRepo(), "test-secret", "24h")
 
 	// Register two users

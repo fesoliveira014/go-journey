@@ -36,6 +36,7 @@ func testTemplates(t *testing.T) map[string]*template.Template {
 }
 
 func TestRender_WritesTemplateOutput(t *testing.T) {
+	t.Parallel()
 	tmpl := testTemplates(t)
 	srv := handler.New(nil, nil, nil, nil, tmpl)
 
@@ -53,6 +54,7 @@ func TestRender_WritesTemplateOutput(t *testing.T) {
 }
 
 func TestRenderError_SetsStatusCode(t *testing.T) {
+	t.Parallel()
 	tmpl := testTemplates(t)
 	srv := handler.New(nil, nil, nil, nil, tmpl)
 
@@ -70,6 +72,7 @@ func TestRenderError_SetsStatusCode(t *testing.T) {
 }
 
 func TestFlash_RoundTrip(t *testing.T) {
+	t.Parallel()
 	srv := handler.New(nil, nil, nil, nil, testTemplates(t))
 
 	// Set a flash on the first response.
@@ -104,6 +107,7 @@ func TestFlash_RoundTrip(t *testing.T) {
 }
 
 func TestConsumeFlash_RejectsTamperedCookie(t *testing.T) {
+	t.Parallel()
 	srv := handler.New(nil, nil, nil, nil, testTemplates(t))
 
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
@@ -117,6 +121,7 @@ func TestConsumeFlash_RejectsTamperedCookie(t *testing.T) {
 }
 
 func TestConsumeFlash_RejectsCrossServerCookie(t *testing.T) {
+	t.Parallel()
 	// A cookie minted by one server must not decode under another — this is
 	// the HMAC guarantee we rely on.
 	srvA := handler.New(nil, nil, nil, nil, testTemplates(t))
@@ -140,6 +145,7 @@ func TestConsumeFlash_RejectsCrossServerCookie(t *testing.T) {
 }
 
 func TestConsumeFlash_ReturnsEmptyWhenNoCookie(t *testing.T) {
+	t.Parallel()
 	srv := handler.New(nil, nil, nil, nil, testTemplates(t))
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()

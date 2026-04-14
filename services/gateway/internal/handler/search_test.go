@@ -56,6 +56,7 @@ func searchTestTemplates(t *testing.T) map[string]*template.Template {
 }
 
 func TestSearchPage_Success(t *testing.T) {
+	t.Parallel()
 	mock := &mockSearchClient{
 		searchResp: &searchv1.SearchResponse{
 			Books: []*searchv1.BookResult{
@@ -81,6 +82,7 @@ func TestSearchPage_Success(t *testing.T) {
 }
 
 func TestSearchPage_EmptyQuery(t *testing.T) {
+	t.Parallel()
 	tmpl := searchTestTemplates(t)
 	srv := handler.New(nil, nil, nil, nil, tmpl)
 
@@ -94,6 +96,7 @@ func TestSearchPage_EmptyQuery(t *testing.T) {
 }
 
 func TestSearchSuggest_Success(t *testing.T) {
+	t.Parallel()
 	mock := &mockSearchClient{
 		suggestResp: &searchv1.SuggestResponse{
 			Suggestions: []*searchv1.Suggestion{
@@ -114,6 +117,7 @@ func TestSearchSuggest_Success(t *testing.T) {
 }
 
 func TestSearchSuggest_ShortPrefix(t *testing.T) {
+	t.Parallel()
 	tmpl := searchTestTemplates(t)
 	srv := handler.New(nil, nil, nil, nil, tmpl)
 
