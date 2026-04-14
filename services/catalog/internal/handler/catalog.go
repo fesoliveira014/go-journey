@@ -177,6 +177,11 @@ func toGRPCError(err error) error {
 		return status.Error(codes.AlreadyExists, err.Error())
 	case errors.Is(err, model.ErrInvalidBook):
 		return status.Error(codes.InvalidArgument, err.Error())
+	case errors.Is(err, model.ErrNoAvailableCopies):
+		// FailedPrecondition: the book exists, the request is valid, but
+		// the current state of the row rules it out. The reservation
+		// service maps this back to its own ErrNoAvailableCopies sentinel.
+		return status.Error(codes.FailedPrecondition, err.Error())
 	default:
 		return status.Error(codes.Internal, "internal error")
 	}

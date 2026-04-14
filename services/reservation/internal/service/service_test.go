@@ -48,7 +48,8 @@ func (m *mockRepo) Update(ctx context.Context, r *model.Reservation) (*model.Res
 }
 
 type mockCatalog struct {
-	getBookFn func(ctx context.Context, in *catalogv1.GetBookRequest, opts ...grpc.CallOption) (*catalogv1.Book, error)
+	getBookFn            func(ctx context.Context, in *catalogv1.GetBookRequest, opts ...grpc.CallOption) (*catalogv1.Book, error)
+	updateAvailabilityFn func(ctx context.Context, in *catalogv1.UpdateAvailabilityRequest, opts ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error)
 }
 
 func (m *mockCatalog) ListBooks(context.Context, *catalogv1.ListBooksRequest, ...grpc.CallOption) (*catalogv1.ListBooksResponse, error) {
@@ -66,8 +67,11 @@ func (m *mockCatalog) UpdateBook(context.Context, *catalogv1.UpdateBookRequest, 
 func (m *mockCatalog) DeleteBook(context.Context, *catalogv1.DeleteBookRequest, ...grpc.CallOption) (*catalogv1.DeleteBookResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
-func (m *mockCatalog) UpdateAvailability(context.Context, *catalogv1.UpdateAvailabilityRequest, ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+func (m *mockCatalog) UpdateAvailability(ctx context.Context, in *catalogv1.UpdateAvailabilityRequest, opts ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+	if m.updateAvailabilityFn == nil {
+		return &catalogv1.UpdateAvailabilityResponse{}, nil
+	}
+	return m.updateAvailabilityFn(ctx, in, opts...)
 }
 
 type mockPublisher struct {
@@ -116,6 +120,7 @@ func TestCreateReservation_Success(t *testing.T) {
 	bookID := uuid.New()
 	pub := &mockPublisher{}
 
+	var decrementCalled bool
 	repo := &mockRepo{
 		countActiveFn: func(_ context.Context, _ uuid.UUID) (int64, error) { return 0, nil },
 		createFn: func(_ context.Context, r *model.Reservation) (*model.Reservation, error) {
@@ -124,8 +129,15 @@ func TestCreateReservation_Success(t *testing.T) {
 		},
 	}
 	catalog := &mockCatalog{
-		getBookFn: func(_ context.Context, in *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
-			return &catalogv1.Book{Id: in.Id, AvailableCopies: 3}, nil
+		updateAvailabilityFn: func(_ context.Context, in *catalogv1.UpdateAvailabilityRequest, _ ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+			if in.Delta != -1 {
+				t.Errorf("expected decrement of -1, got %d", in.Delta)
+			}
+			if in.Id != bookID.String() {
+				t.Errorf("expected book id %s, got %s", bookID, in.Id)
+			}
+			decrementCalled = true
+			return &catalogv1.UpdateAvailabilityResponse{AvailableCopies: 2}, nil
 		},
 	}
 
@@ -133,6 +145,9 @@ func TestCreateReservation_Success(t *testing.T) {
 	res, err := svc.CreateReservation(userCtx(userID), bookID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if !decrementCalled {
+		t.Error("expected UpdateAvailability(-1) to be called")
 	}
 	if res.Status != model.StatusActive {
 		t.Errorf("expected status active, got %s", res.Status)
@@ -171,12 +186,17 @@ func TestCreateReservation_NoAvailableCopies(t *testing.T) {
 	userID := uuid.New()
 	pub := &mockPublisher{}
 
+	var createCalled bool
 	repo := &mockRepo{
 		countActiveFn: func(_ context.Context, _ uuid.UUID) (int64, error) { return 0, nil },
+		createFn: func(_ context.Context, r *model.Reservation) (*model.Reservation, error) {
+			createCalled = true
+			return r, nil
+		},
 	}
 	catalog := &mockCatalog{
-		getBookFn: func(_ context.Context, _ *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
-			return &catalogv1.Book{AvailableCopies: 0}, nil
+		updateAvailabilityFn: func(_ context.Context, _ *catalogv1.UpdateAvailabilityRequest, _ ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+			return nil, status.Error(codes.FailedPrecondition, "no available copies")
 		},
 	}
 
@@ -185,7 +205,59 @@ func TestCreateReservation_NoAvailableCopies(t *testing.T) {
 	if err != model.ErrNoAvailableCopies {
 		t.Errorf("expected ErrNoAvailableCopies, got %v", err)
 	}
+	if createCalled {
+		t.Error("reservation row must not be created when availability decrement fails")
+	}
+	if len(pub.events) != 0 {
+		t.Errorf("expected no events on failed reservation, got %d", len(pub.events))
+	}
 }
+
+func TestCreateReservation_CompensatesOnCreateFailure(t *testing.T) {
+	userID := uuid.New()
+	bookID := uuid.New()
+	pub := &mockPublisher{}
+
+	var deltas []int32
+	repo := &mockRepo{
+		countActiveFn: func(_ context.Context, _ uuid.UUID) (int64, error) { return 0, nil },
+		createFn: func(_ context.Context, _ *model.Reservation) (*model.Reservation, error) {
+			return nil, errAssert("db write failed")
+		},
+	}
+	catalog := &mockCatalog{
+		updateAvailabilityFn: func(_ context.Context, in *catalogv1.UpdateAvailabilityRequest, _ ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+			deltas = append(deltas, in.Delta)
+			return &catalogv1.UpdateAvailabilityResponse{}, nil
+		},
+	}
+
+	svc := service.NewReservationService(repo, catalog, nil, pub, 5)
+	_, err := svc.CreateReservation(userCtx(userID), bookID)
+	if err == nil {
+		t.Fatal("expected reservation create to fail")
+	}
+
+	// Must decrement then compensate with an increment.
+	if len(deltas) != 2 {
+		t.Fatalf("expected 2 availability calls (decrement + compensate), got %d: %v", len(deltas), deltas)
+	}
+	if deltas[0] != -1 {
+		t.Errorf("expected first call delta=-1, got %d", deltas[0])
+	}
+	if deltas[1] != 1 {
+		t.Errorf("expected compensating call delta=+1, got %d", deltas[1])
+	}
+	if len(pub.events) != 0 {
+		t.Errorf("expected no events on failed reservation, got %d", len(pub.events))
+	}
+}
+
+// errAssert is a tiny local error type used by the compensation test. We
+// don't care about the value — just that it surfaces from repo.Create.
+type errAssert string
+
+func (e errAssert) Error() string { return string(e) }
 
 func TestReturnBook_Success(t *testing.T) {
 	userID := uuid.New()

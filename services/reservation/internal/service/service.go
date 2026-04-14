@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
@@ -93,6 +95,18 @@ func (s *ReservationService) ListAllReservations(ctx context.Context) ([]Reserva
 	return details, nil
 }
 
+// CreateReservation reserves a copy of bookID for the caller. The flow is
+// decrement-then-reserve: we ask catalog to atomically drop available_copies
+// by 1, and only if that succeeds do we create the reservation row. This is
+// what closes the TOCTOU gap that an older "check availability, then create"
+// flow had — two concurrent requests for the last copy would both have seen
+// available_copies > 0 and both would have succeeded. With the database as
+// the gate (via the guarded UPDATE in catalog), exactly one wins.
+//
+// If the reservation row fails to persist after the decrement, we compensate
+// with an increment so catalog's counter does not drift. The compensation is
+// best-effort and logged — the expiration reaper (see RunExpirationReaper)
+// provides the backstop for any drift that escapes here.
 func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.UUID) (*model.Reservation, error) {
 	userID, err := pkgauth.UserIDFromContext(ctx)
 	if err != nil {
@@ -107,12 +121,22 @@ func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.
 		return nil, model.ErrMaxReservations
 	}
 
-	book, err := s.catalog.GetBook(ctx, &catalogv1.GetBookRequest{Id: bookID.String()})
-	if err != nil {
-		return nil, fmt.Errorf("check book availability: %w", err)
-	}
-	if book.AvailableCopies <= 0 {
-		return nil, model.ErrNoAvailableCopies
+	// Decrement availability first. Catalog returns FailedPrecondition when
+	// the book exists but has no copies left; anything else is an infra
+	// error we surface as-is.
+	if _, err := s.catalog.UpdateAvailability(ctx, &catalogv1.UpdateAvailabilityRequest{
+		Id:    bookID.String(),
+		Delta: -1,
+	}); err != nil {
+		if st, ok := status.FromError(err); ok {
+			switch st.Code() {
+			case codes.FailedPrecondition:
+				return nil, model.ErrNoAvailableCopies
+			case codes.NotFound:
+				return nil, fmt.Errorf("book not found: %w", err)
+			}
+		}
+		return nil, fmt.Errorf("reserve availability: %w", err)
 	}
 
 	now := time.Now()
@@ -125,6 +149,16 @@ func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.
 	}
 	created, err := s.repo.Create(ctx, res)
 	if err != nil {
+		// Compensate: the catalog counter was already decremented, so we
+		// must put the copy back or the book becomes permanently less
+		// available than it really is.
+		if _, rollbackErr := s.catalog.UpdateAvailability(ctx, &catalogv1.UpdateAvailabilityRequest{
+			Id:    bookID.String(),
+			Delta: 1,
+		}); rollbackErr != nil {
+			slog.ErrorContext(ctx, "failed to compensate availability after reservation create failure",
+				"book_id", bookID, "create_error", err, "rollback_error", rollbackErr)
+		}
 		return nil, fmt.Errorf("create reservation: %w", err)
 	}
 
