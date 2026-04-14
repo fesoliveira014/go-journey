@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	pgmigrate "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -76,6 +77,15 @@ func main() {
 	if maxActiveStr != "" {
 		if v, err := strconv.Atoi(maxActiveStr); err == nil {
 			maxActive = v
+		}
+	}
+	// How often the background reaper scans for overdue reservations.
+	// Default 5 minutes — granular enough that catalog availability
+	// reconciles quickly, infrequent enough that the scan is cheap.
+	reaperInterval := 5 * time.Minute
+	if v := os.Getenv("REAPER_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			reaperInterval = d
 		}
 	}
 
@@ -151,6 +161,9 @@ func main() {
 	healthServer := health.NewServer()
 	healthpb.RegisterHealthServer(grpcServer, healthServer)
 	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+
+	// Start the expiration reaper. It stops when ctx is cancelled (SIGINT/SIGTERM).
+	go reservationSvc.RunExpirationReaper(ctx, reaperInterval)
 
 	go func() {
 		<-ctx.Done()

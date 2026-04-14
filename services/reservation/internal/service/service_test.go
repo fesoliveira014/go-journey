@@ -20,12 +20,13 @@ import (
 // --- Mocks ---
 
 type mockRepo struct {
-	createFn      func(ctx context.Context, r *model.Reservation) (*model.Reservation, error)
-	getByIDFn     func(ctx context.Context, id uuid.UUID) (*model.Reservation, error)
-	countActiveFn func(ctx context.Context, userID uuid.UUID) (int64, error)
-	listByUserFn  func(ctx context.Context, userID uuid.UUID) ([]*model.Reservation, error)
-	listAllFn     func(ctx context.Context) ([]*model.Reservation, error)
-	updateFn      func(ctx context.Context, r *model.Reservation) (*model.Reservation, error)
+	createFn               func(ctx context.Context, r *model.Reservation) (*model.Reservation, error)
+	getByIDFn              func(ctx context.Context, id uuid.UUID) (*model.Reservation, error)
+	countActiveFn          func(ctx context.Context, userID uuid.UUID) (int64, error)
+	listByUserFn           func(ctx context.Context, userID uuid.UUID) ([]*model.Reservation, error)
+	listAllFn              func(ctx context.Context) ([]*model.Reservation, error)
+	updateFn               func(ctx context.Context, r *model.Reservation) (*model.Reservation, error)
+	listDueForExpirationFn func(ctx context.Context, now time.Time) ([]*model.Reservation, error)
 }
 
 func (m *mockRepo) Create(ctx context.Context, r *model.Reservation) (*model.Reservation, error) {
@@ -45,6 +46,9 @@ func (m *mockRepo) ListAll(ctx context.Context) ([]*model.Reservation, error) {
 }
 func (m *mockRepo) Update(ctx context.Context, r *model.Reservation) (*model.Reservation, error) {
 	return m.updateFn(ctx, r)
+}
+func (m *mockRepo) ListDueForExpiration(ctx context.Context, now time.Time) ([]*model.Reservation, error) {
+	return m.listDueForExpirationFn(ctx, now)
 }
 
 type mockCatalog struct {
@@ -376,6 +380,45 @@ func TestListUserReservations_ExpiresOnRead(t *testing.T) {
 	}
 	if len(pub.events) != 1 || pub.events[0].Type != "reservation.expired" {
 		t.Errorf("expected one reservation.expired event, got %v", pub.events)
+	}
+}
+
+func TestReapExpired_FlipsOverdueRowsAndPublishes(t *testing.T) {
+	userID := uuid.New()
+	overdue := &model.Reservation{
+		ID: uuid.New(), UserID: userID, BookID: uuid.New(),
+		Status: model.StatusActive,
+		DueAt:  time.Now().Add(-1 * time.Hour),
+	}
+	pub := &mockPublisher{}
+	var listCalledWith time.Time
+
+	repo := &mockRepo{
+		listDueForExpirationFn: func(_ context.Context, now time.Time) ([]*model.Reservation, error) {
+			listCalledWith = now
+			return []*model.Reservation{overdue}, nil
+		},
+		updateFn: func(_ context.Context, r *model.Reservation) (*model.Reservation, error) {
+			return r, nil
+		},
+	}
+
+	svc := service.NewReservationService(repo, nil, nil, pub, 5)
+	svc.ReapExpired(context.Background())
+
+	if listCalledWith.IsZero() {
+		t.Error("expected ListDueForExpiration to be called with a non-zero time")
+	}
+	if overdue.Status != model.StatusExpired {
+		t.Errorf("expected status expired, got %s", overdue.Status)
+	}
+	if len(pub.events) != 1 || pub.events[0].Type != "reservation.expired" {
+		t.Errorf("expected one reservation.expired event, got %v", pub.events)
+	}
+	// The reaper runs without a user-attached context, so the event must
+	// fall back to the reservation's own UserID.
+	if pub.events[0].UserID != userID.String() {
+		t.Errorf("expected event UserID %s, got %s", userID, pub.events[0].UserID)
 	}
 }
 

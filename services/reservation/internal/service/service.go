@@ -25,6 +25,7 @@ type ReservationRepository interface {
 	ListByUser(ctx context.Context, userID uuid.UUID) ([]*model.Reservation, error)
 	ListAll(ctx context.Context) ([]*model.Reservation, error)
 	Update(ctx context.Context, r *model.Reservation) (*model.Reservation, error)
+	ListDueForExpiration(ctx context.Context, now time.Time) ([]*model.Reservation, error)
 }
 
 type ReservationEvent struct {
@@ -253,26 +254,86 @@ func (s *ReservationService) ListUserReservations(ctx context.Context) ([]*model
 	return list, nil
 }
 
+// expireIfDue is the read-path trigger: whenever a user reads their own
+// reservations, any overdue ones flip to 'expired' as a side effect. It
+// intentionally does not guarantee timeliness — a reservation nobody reads
+// for a week stays 'active' until the reaper (RunExpirationReaper) sweeps it.
 func (s *ReservationService) expireIfDue(ctx context.Context, r *model.Reservation) {
 	if r.Status != model.StatusActive || time.Now().Before(r.DueAt) {
 		return
 	}
+	s.expireReservation(ctx, r)
+}
 
+// expireReservation flips the row to 'expired', persists it, and publishes
+// the event. Caller must have already decided expiration is appropriate.
+// On DB failure the in-memory status is reverted so the caller does not
+// show stale data to the user.
+func (s *ReservationService) expireReservation(ctx context.Context, r *model.Reservation) {
+	previousStatus := r.Status
 	r.Status = model.StatusExpired
 	if _, err := s.repo.Update(ctx, r); err != nil {
 		slog.ErrorContext(ctx, "failed to expire reservation", "reservation_id", r.ID, "error", err)
-		r.Status = model.StatusActive // revert in-memory change
+		r.Status = previousStatus // revert in-memory change
 		return
 	}
 
-	userID, _ := pkgauth.UserIDFromContext(ctx)
+	// The reaper runs with a background context that has no user attached,
+	// so UserIDFromContext may fail — fall back to the reservation's own
+	// UserID so consumers downstream (e.g. catalog) can still route the
+	// availability increment correctly.
+	var userIDStr string
+	if uid, err := pkgauth.UserIDFromContext(ctx); err == nil {
+		userIDStr = uid.String()
+	} else {
+		userIDStr = r.UserID.String()
+	}
+
 	if err := s.publisher.Publish(ctx, ReservationEvent{
 		Type:          "reservation.expired",
 		ReservationID: r.ID.String(),
-		UserID:        userID.String(),
+		UserID:        userIDStr,
 		BookID:        r.BookID.String(),
 		Timestamp:     time.Now(),
 	}); err != nil {
 		slog.ErrorContext(ctx, "failed to publish event", "event", "reservation.expired", "reservation_id", r.ID, "error", err)
+	}
+}
+
+// RunExpirationReaper periodically scans for active reservations whose
+// due_at has passed and flips them to 'expired'. This closes the gap left
+// by expire-on-read: without it, a book remains unavailable forever if the
+// holder never logs in again. Blocks until ctx is cancelled; intended to
+// be started in its own goroutine during service startup.
+//
+// Each tick is a full sweep (one query, N updates). For a library-sized
+// workload this is fine; if the active set ever grows into the millions,
+// this would want batching and a cursor-style index.
+func (s *ReservationService) RunExpirationReaper(ctx context.Context, interval time.Duration) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	slog.InfoContext(ctx, "reservation expiration reaper started", "interval", interval)
+	for {
+		select {
+		case <-ctx.Done():
+			slog.InfoContext(ctx, "reservation expiration reaper stopping")
+			return
+		case <-ticker.C:
+			s.ReapExpired(ctx)
+		}
+	}
+}
+
+// ReapExpired runs a single pass of the expiration sweep. Exported so it
+// can be invoked deterministically from tests without waiting for the
+// ticker.
+func (s *ReservationService) ReapExpired(ctx context.Context) {
+	due, err := s.repo.ListDueForExpiration(ctx, time.Now())
+	if err != nil {
+		slog.ErrorContext(ctx, "reaper: list due reservations failed", "error", err)
+		return
+	}
+	for _, r := range due {
+		s.expireReservation(ctx, r)
 	}
 }

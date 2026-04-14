@@ -2,7 +2,7 @@
 
 The reservation service is the second microservice we build from scratch. If you followed Chapter 2 (the catalog service), this one will feel familiar -- same layered architecture, same patterns. That repetition is deliberate. The goal is to show that the patterns are general, not specific to any one domain. Once you internalize the model/repository/service/handler stack, you can stand up a new service quickly.
 
-The interesting differences are in the domain logic: state machines, cross-service reads, event publishing, and a "lazy expiration" pattern that avoids background workers entirely.
+The interesting differences are in the domain logic: state machines, cross-service reads, event publishing, and a two-pronged expiration strategy — lazy expire-on-read for responsiveness plus a background reaper for timeliness.
 
 ---
 
@@ -276,44 +276,64 @@ func (s *ReservationService) ReturnBook(ctx context.Context, reservationID uuid.
 
 The ownership check (`res.UserID != userID`) is critical. Without it, any authenticated user could return anyone's reservation. This is a common security concern in multi-tenant systems -- always verify that the requesting user owns the resource they are acting on.
 
-### Expiration on Read
+### Expiring Reservations: Read Path vs. Background Reaper
 
-The expiration logic is interesting because there is no background worker:
+A reservation becomes *logically* expired the moment `time.Now()` passes `DueAt`, but the database row still says `status = 'active'` until something updates it. Two code paths do that work, and they exist for different reasons.
+
+**Path 1: expire-on-read.** `GetReservation` and `ListUserReservations` call `expireIfDue` on every row they return, which flips any overdue row to `expired` before handing it back:
 
 ```go
 func (s *ReservationService) expireIfDue(ctx context.Context, r *model.Reservation) {
     if r.Status != model.StatusActive || time.Now().Before(r.DueAt) {
         return
     }
+    s.expireReservation(ctx, r)
+}
+```
 
-    r.Status = model.StatusExpired
-    if _, err := s.repo.Update(ctx, r); err != nil {
-        slog.ErrorContext(ctx, "failed to expire reservation", ...)
-        r.Status = model.StatusActive // revert in-memory change
+This is **lazy evaluation**. It keeps what the user sees consistent with what the clock says: users never observe their own overdue reservations still listed as active, because the act of reading fixes the row on the way out.
+
+**Path 2: the reaper.** The problem with _only_ doing expire-on-read is that if nobody reads a reservation — the user stopped logging in, the account was deleted, the request never happens — the row stays `active` forever. Worse, the catalog's `available_copies` never gets incremented back, so the book is permanently marked as held. To close this gap the reservation service runs a background goroutine that periodically finds and expires overdue rows:
+
+```go
+func (s *ReservationService) RunExpirationReaper(ctx context.Context, interval time.Duration) {
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            s.ReapExpired(ctx)
+        }
+    }
+}
+
+func (s *ReservationService) ReapExpired(ctx context.Context) {
+    due, err := s.repo.ListDueForExpiration(ctx, time.Now())
+    if err != nil {
+        slog.ErrorContext(ctx, "reaper: list due reservations failed", "error", err)
         return
     }
-
-    // Publish reservation.expired event
-    if err := s.publisher.Publish(ctx, ReservationEvent{
-        Type:          "reservation.expired",
-        // ...
-    }); err != nil {
-        slog.ErrorContext(ctx, "failed to publish event", ...)
+    for _, r := range due {
+        s.expireReservation(ctx, r)
     }
 }
 ```
 
-This method is called during reads -- `GetReservation` and `ListUserReservations` both call it. When you fetch a reservation, the service checks whether its due date has passed. If so, it transitions the status to `expired` and publishes the event.
+Both paths route through the same `expireReservation` helper, which flips the row, saves it, and publishes the `reservation.expired` event that the catalog's consumer picks up to increment availability. Keeping the write logic in one place means the two paths cannot disagree about what "expired" means or forget to publish.
 
-This is sometimes called **lazy evaluation** or **expiration on read**. The advantages are:
+The reaper is wired into `cmd/main.go` as a goroutine that shares the service's signal-aware context, so it stops cleanly on `SIGTERM`:
 
-- No background goroutine or cron job to manage
-- No race conditions between a background worker and request handlers
-- Expiration only happens when someone actually looks at the data
+```go
+go reservationSvc.RunExpirationReaper(ctx, reaperInterval)
+```
 
-The disadvantage is that a reservation might be logically expired but still show as `active` in the database until someone reads it. For a library system, this is fine -- the worst case is that the availability count is off by one for a brief period. For a financial system, you would need a background process.
+`REAPER_INTERVAL` defaults to 5 minutes. That is a deliberate tradeoff: the window during which a book can be stale on the catalog is roughly (`DueAt` to `DueAt + 5 minutes`), which is plenty for a library but would not suffice for, say, seat inventory on a flight. Tune it via the env var if you need tighter bounds — the cost is one full-table scan for active rows per tick.
 
-Note the defensive programming: if the database update fails, the method reverts the in-memory status change (`r.Status = model.StatusActive`) so the caller does not see stale data.
+**Why both, not just the reaper?** The reaper fires on a timer, so between ticks a user could reload their reservations page and briefly see an overdue row still listed as active. That is a small but visible inconsistency that expire-on-read eliminates without needing a ≤ 1-second timer. The two mechanisms are complementary: read-triggered for user-facing freshness, time-triggered for catalog reconciliation and unread rows.
+
+Note the defensive programming in `expireReservation`: if the database update fails, the method reverts the in-memory status change so the caller does not see stale data. And because the reaper runs with a background context that has no user attached, the helper falls back to the reservation's own `UserID` when publishing the event.
 
 ---
 
@@ -452,7 +472,7 @@ This consistency is the payoff of a well-chosen architecture. Once you understan
 
 4. **Alternatives to decrement-then-reserve.** The main text explains why we decrement availability first and compensate on failure. What other approaches could close the same TOCTOU gap? Sketch the pros and cons of (a) a full two-phase commit across catalog and reservation, (b) a Saga pattern with explicit compensating transactions, (c) optimistic concurrency with a version column on `books`, and (d) a single cross-service transactional outbox. For each, identify a scenario where it would outperform the current design.
 
-5. **Background expiration.** Rewrite the expiration logic as a background goroutine that runs every minute and expires overdue reservations. What are the tradeoffs compared to the expiration-on-read approach?
+5. **Reaper durability.** The reaper in `RunExpirationReaper` runs in-process: if the only reservation replica crashes between ticks, overdue rows linger until it restarts. Sketch two ways to make expiration durable against crashes — (a) moving the reaper into a dedicated cron pod / Kubernetes `CronJob`, and (b) pushing expiration into PostgreSQL itself via a scheduled `UPDATE` in `pg_cron`. What are the operational tradeoffs? Consider visibility, retries, and who owns the compensation logic when the expire event fails to publish.
 
 ---
 
