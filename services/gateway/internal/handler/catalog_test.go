@@ -394,15 +394,8 @@ func TestAdminBookCreate_Success(t *testing.T) {
 	if loc := rec.Header().Get("Location"); loc != "/books" {
 		t.Errorf("expected redirect to /books, got %q", loc)
 	}
-	// Flash cookie must be set.
-	cookies := rec.Result().Cookies()
-	var flash string
-	for _, c := range cookies {
-		if c.Name == "flash" {
-			flash = c.Value
-		}
-	}
-	if flash != "Book created" {
+	// Flash cookie must be set and decode to the expected message.
+	if flash := srv.DecodeFlashFromResponse(rec.Result().Cookies()); flash != "Book created" {
 		t.Errorf("expected flash 'Book created', got %q", flash)
 	}
 	if captured == nil {
@@ -482,14 +475,7 @@ func TestAdminBookUpdate_Success(t *testing.T) {
 	if capturedID != "42" {
 		t.Errorf("expected UpdateBook called with id '42', got %q", capturedID)
 	}
-	cookies := rec.Result().Cookies()
-	var flash string
-	for _, c := range cookies {
-		if c.Name == "flash" {
-			flash = c.Value
-		}
-	}
-	if flash != "Book updated" {
+	if flash := srv.DecodeFlashFromResponse(rec.Result().Cookies()); flash != "Book updated" {
 		t.Errorf("expected flash 'Book updated', got %q", flash)
 	}
 }
@@ -521,14 +507,7 @@ func TestAdminBookDelete_Success(t *testing.T) {
 	if deletedID != "42" {
 		t.Errorf("expected DeleteBook called with id '42', got %q", deletedID)
 	}
-	cookies := rec.Result().Cookies()
-	var flash string
-	for _, c := range cookies {
-		if c.Name == "flash" {
-			flash = c.Value
-		}
-	}
-	if flash != "Book deleted" {
+	if flash := srv.DecodeFlashFromResponse(rec.Result().Cookies()); flash != "Book deleted" {
 		t.Errorf("expected flash 'Book deleted', got %q", flash)
 	}
 }

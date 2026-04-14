@@ -25,7 +25,7 @@ func (s *Server) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setSessionCookie(w, resp.Token)
-	setFlash(w, "Welcome back!")
+	s.setFlash(w, "Welcome back!")
 	http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
 
@@ -61,7 +61,7 @@ func (s *Server) RegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setSessionCookie(w, resp.Token)
-	setFlash(w, "Welcome! Your account has been created.")
+	s.setFlash(w, "Welcome! Your account has been created.")
 	http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
 
@@ -94,7 +94,7 @@ func (s *Server) OAuth2Callback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	setSessionCookie(w, resp.Token)
-	setFlash(w, "Welcome!")
+	s.setFlash(w, "Welcome!")
 	http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
 

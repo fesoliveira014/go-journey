@@ -20,7 +20,7 @@ func (s *Server) ReserveBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setFlash(w, "Book reserved successfully")
+	s.setFlash(w, "Book reserved successfully")
 	http.Redirect(w, r, "/reservations", http.StatusSeeOther)
 }
 
@@ -38,7 +38,7 @@ func (s *Server) ReturnBook(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setFlash(w, "Book returned successfully")
+	s.setFlash(w, "Book returned successfully")
 	http.Redirect(w, r, "/reservations", http.StatusSeeOther)
 }
 

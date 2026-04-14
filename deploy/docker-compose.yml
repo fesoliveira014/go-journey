@@ -195,6 +195,7 @@ services:
       RESERVATION_GRPC_ADDR: ${RESERVATION_GRPC_ADDR:-reservation:50053}
       SEARCH_GRPC_ADDR: ${SEARCH_GRPC_ADDR:-search:50054}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      FLASH_COOKIE_KEY: ${FLASH_COOKIE_KEY:?FLASH_COOKIE_KEY must be set in .env (32+ hex bytes, e.g. openssl rand -hex 32)}
       OTEL_COLLECTOR_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT:-otel-collector:4317}
     ports:
       - "${GATEWAY_PORT:-8080}:8080"

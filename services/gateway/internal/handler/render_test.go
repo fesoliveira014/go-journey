@@ -69,36 +69,82 @@ func TestRenderError_SetsStatusCode(t *testing.T) {
 	}
 }
 
-func TestConsumeFlash_ReadsAndClearsFlashCookie(t *testing.T) {
+func TestFlash_RoundTrip(t *testing.T) {
+	srv := handler.New(nil, nil, nil, nil, testTemplates(t))
+
+	// Set a flash on the first response.
+	setRec := httptest.NewRecorder()
+	srv.ExportedSetFlash(setRec, "saved!")
+
+	// Replay the set cookie on the next request.
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
-	req.AddCookie(&http.Cookie{Name: "flash", Value: "saved!"})
+	for _, c := range setRec.Result().Cookies() {
+		if c.Name == "flash" {
+			req.AddCookie(c)
+		}
+	}
 	rec := httptest.NewRecorder()
 
-	msg := handler.ExportedConsumeFlash(rec, req)
-
+	msg := srv.ExportedConsumeFlash(rec, req)
 	if msg != "saved!" {
 		t.Errorf("expected flash %q, got %q", "saved!", msg)
 	}
 
-	// The response should set a clearing cookie (MaxAge: -1)
-	cookies := rec.Result().Cookies()
-	var found bool
-	for _, c := range cookies {
+	// The response should set a clearing cookie (MaxAge: -1).
+	var cleared bool
+	for _, c := range rec.Result().Cookies() {
 		if c.Name == "flash" && c.MaxAge == -1 {
-			found = true
+			cleared = true
 			break
 		}
 	}
-	if !found {
+	if !cleared {
 		t.Error("expected a flash cookie with MaxAge=-1 to clear the cookie")
 	}
 }
 
+func TestConsumeFlash_RejectsTamperedCookie(t *testing.T) {
+	srv := handler.New(nil, nil, nil, nil, testTemplates(t))
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	req.AddCookie(&http.Cookie{Name: "flash", Value: "not-a-signed-value"})
+	rec := httptest.NewRecorder()
+
+	msg := srv.ExportedConsumeFlash(rec, req)
+	if msg != "" {
+		t.Errorf("expected empty flash for tampered cookie, got %q", msg)
+	}
+}
+
+func TestConsumeFlash_RejectsCrossServerCookie(t *testing.T) {
+	// A cookie minted by one server must not decode under another — this is
+	// the HMAC guarantee we rely on.
+	srvA := handler.New(nil, nil, nil, nil, testTemplates(t))
+	srvB := handler.New(nil, nil, nil, nil, testTemplates(t))
+
+	mint := httptest.NewRecorder()
+	srvA.ExportedSetFlash(mint, "secret from A")
+
+	req := httptest.NewRequest(http.MethodGet, "/", nil)
+	for _, c := range mint.Result().Cookies() {
+		if c.Name == "flash" {
+			req.AddCookie(c)
+		}
+	}
+	rec := httptest.NewRecorder()
+
+	msg := srvB.ExportedConsumeFlash(rec, req)
+	if msg != "" {
+		t.Errorf("expected cookie signed by srvA to be rejected by srvB, got %q", msg)
+	}
+}
+
 func TestConsumeFlash_ReturnsEmptyWhenNoCookie(t *testing.T) {
+	srv := handler.New(nil, nil, nil, nil, testTemplates(t))
 	req := httptest.NewRequest(http.MethodGet, "/", nil)
 	rec := httptest.NewRecorder()
 
-	msg := handler.ExportedConsumeFlash(rec, req)
+	msg := srv.ExportedConsumeFlash(rec, req)
 	if msg != "" {
 		t.Errorf("expected empty flash, got %q", msg)
 	}

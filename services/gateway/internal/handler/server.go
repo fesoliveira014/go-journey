@@ -5,6 +5,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/gorilla/securecookie"
+
 	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
@@ -18,16 +20,38 @@ type Server struct {
 	search      searchv1.SearchServiceClient
 	tmpl        map[string]*template.Template
 	baseTmpl    *template.Template // base set for rendering partials
+	flash       *securecookie.SecureCookie
 }
 
-func New(auth authv1.AuthServiceClient, catalog catalogv1.CatalogServiceClient, reservation reservationv1.ReservationServiceClient, search searchv1.SearchServiceClient, tmpl map[string]*template.Template) *Server {
+// Option configures optional fields on the Server. Used with New.
+type Option func(*Server)
+
+// WithFlashKey configures the HMAC key used to sign the flash cookie. In
+// production this should be read from the FLASH_COOKIE_KEY environment
+// variable and be at least 32 random bytes. When no key is supplied, New
+// generates a random per-process key — fine for tests, but it means flashes
+// do not survive a restart.
+func WithFlashKey(hashKey []byte) Option {
+	return func(s *Server) {
+		s.flash = securecookie.New(hashKey, nil)
+	}
+}
+
+func New(auth authv1.AuthServiceClient, catalog catalogv1.CatalogServiceClient, reservation reservationv1.ReservationServiceClient, search searchv1.SearchServiceClient, tmpl map[string]*template.Template, opts ...Option) *Server {
 	// Pick any entry for partial rendering — all share the same partial definitions.
 	var base *template.Template
 	for _, t := range tmpl {
 		base = t
 		break
 	}
-	return &Server{auth: auth, catalog: catalog, reservation: reservation, search: search, tmpl: tmpl, baseTmpl: base}
+	s := &Server{auth: auth, catalog: catalog, reservation: reservation, search: search, tmpl: tmpl, baseTmpl: base}
+	for _, opt := range opts {
+		opt(s)
+	}
+	if s.flash == nil {
+		s.flash = securecookie.New(securecookie.GenerateRandomKey(32), nil)
+	}
+	return s
 }
 
 // ParseTemplates builds a map of page name → cloned template set.
