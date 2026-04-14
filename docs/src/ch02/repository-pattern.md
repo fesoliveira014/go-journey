@@ -134,17 +134,18 @@ func (r *BookRepository) Create(ctx context.Context, book *model.Book) (*model.B
 
 `Create(book)` issues `INSERT INTO books (...) VALUES (...)`. GORM populates `book.ID`, `book.CreatedAt`, and `book.UpdatedAt` in-place — the same pointer you passed in comes back enriched.
 
-The error handling translates a raw PostgreSQL error into a domain error. `isDuplicateKeyError` checks the error message for the PostgreSQL-specific strings `"duplicate key"` or `"SQLSTATE 23505"` (the standard SQL state for unique violation):
+The error handling translates a raw PostgreSQL error into a domain error. `isDuplicateKeyError` checks the SQLSTATE on the typed `*pgconn.PgError` that the `pgx` driver returns. `23505` is the standard SQL state for a unique violation:
 
 ```go
+import "github.com/jackc/pgx/v5/pgconn"
+
 func isDuplicateKeyError(err error) bool {
-    if err == nil {
-        return false
-    }
-    msg := err.Error()
-    return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "SQLSTATE 23505")
+    var pgErr *pgconn.PgError
+    return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 ```
+
+`errors.As` walks the wrapped error chain, so it keeps working even when GORM wraps the driver error. Using the typed error — not the error message — is the correct pattern. Error messages are not a stable API: a driver upgrade, a locale change, or switching from `pgx` to `lib/pq` can silently break string matching. The Go blog's [Error handling and Go](https://go.dev/blog/error-handling-and-go) and Dave Cheney's [Don't just check errors, handle them gracefully](https://dave.cheney.net/2016/04/27/dont-just-check-errors-handle-them-gracefully) both call this out explicitly.
 
 This lets callers check `errors.Is(err, model.ErrDuplicateISBN)` rather than parsing PostgreSQL error codes themselves. Domain errors are part of the public API; PostgreSQL error codes are an implementation detail that shouldn't leak upward.
 
