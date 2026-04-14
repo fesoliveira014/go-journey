@@ -66,6 +66,30 @@ db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
 
 `gorm.Open` returns a `*gorm.DB`. This isn't a single connection — it wraps Go's `database/sql` connection pool under the hood. The pool is safe for concurrent use across goroutines. In the Catalog service's `main.go`, this handle is created once at startup and passed into the repository constructor.
 
+### Configuring the Connection Pool
+
+The default `database/sql` pool has no upper bound on open connections. In a long-running service with multiple Kubernetes replicas, that will eventually collide with PostgreSQL's `max_connections` (default 100) — once it's exhausted, new connection attempts fail and healthy traffic degrades. Always set limits explicitly:
+
+```go
+db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+if err != nil {
+    return nil, err
+}
+sqlDB, err := db.DB()
+if err != nil {
+    return nil, err
+}
+sqlDB.SetMaxOpenConns(25)
+sqlDB.SetMaxIdleConns(5)
+sqlDB.SetConnMaxLifetime(5 * time.Minute)
+```
+
+- `SetMaxOpenConns` caps in-flight queries. Pick a number such that `replicas × MaxOpenConns < postgres.max_connections − headroom`.
+- `SetMaxIdleConns` keeps a small pool of warm connections for burst traffic. Setting it above `SetMaxOpenConns` is pointless.
+- `SetConnMaxLifetime` forces the pool to recycle connections. Managed PostgreSQL services (AWS RDS, Cloud SQL) silently close idle connections after ~30 minutes; a bounded lifetime avoids handing stale connections to the app.
+
+In this project the three services share a small `pkg/db.Open` helper that applies these defaults. Any of them can be overridden via `DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS`, and `DB_CONN_MAX_LIFETIME` environment variables. The [GORM documentation on connection pools](https://gorm.io/docs/connecting_to_the_database.html#Connection-Pool) explains the tuning knobs in more detail.
+
 ---
 
 ## The Repository Pattern

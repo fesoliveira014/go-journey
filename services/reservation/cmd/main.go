@@ -21,7 +21,6 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/plugin/opentelemetry/tracing"
 
@@ -29,6 +28,7 @@ import (
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
+	pkgdb "github.com/fesoliveira014/library-system/pkg/db"
 	pkgotel "github.com/fesoliveira014/library-system/pkg/otel"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/handler"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/kafka"
@@ -79,7 +79,7 @@ func main() {
 		}
 	}
 
-	db, err := gorm.Open(postgres.Open(dbDSN), &gorm.Config{})
+	db, err := pkgdb.Open(dbDSN, pkgdb.Config{})
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)

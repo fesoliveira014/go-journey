@@ -6,6 +6,7 @@ require (
 	github.com/IBM/sarama v1.47.0
 	github.com/fesoliveira014/library-system/gen v0.0.0
 	github.com/fesoliveira014/library-system/pkg/auth v0.0.0-00010101000000-000000000000
+	github.com/fesoliveira014/library-system/pkg/db v0.0.0-00010101000000-000000000000
 	github.com/fesoliveira014/library-system/pkg/otel v0.0.0-00010101000000-000000000000
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
@@ -120,5 +121,7 @@ require (
 replace github.com/fesoliveira014/library-system/gen => ../../gen
 
 replace github.com/fesoliveira014/library-system/pkg/auth => ../../pkg/auth
+
+replace github.com/fesoliveira014/library-system/pkg/db => ../../pkg/db
 
 replace github.com/fesoliveira014/library-system/pkg/otel => ../../pkg/otel

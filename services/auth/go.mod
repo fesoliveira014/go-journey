@@ -5,6 +5,7 @@ go 1.26.1
 require (
 	github.com/fesoliveira014/library-system/gen v0.0.0
 	github.com/fesoliveira014/library-system/pkg/auth v0.0.0-00010101000000-000000000000
+	github.com/fesoliveira014/library-system/pkg/db v0.0.0-00010101000000-000000000000
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
 	github.com/jackc/pgx/v5 v5.6.0
@@ -87,4 +88,5 @@ require (
 replace (
 	github.com/fesoliveira014/library-system/gen => ../../gen
 	github.com/fesoliveira014/library-system/pkg/auth => ../../pkg/auth
+	github.com/fesoliveira014/library-system/pkg/db => ../../pkg/db
 )

@@ -19,12 +19,12 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/plugin/opentelemetry/tracing"
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
+	pkgdb "github.com/fesoliveira014/library-system/pkg/db"
 	pkgotel "github.com/fesoliveira014/library-system/pkg/otel"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/consumer"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/handler"
@@ -63,7 +63,7 @@ func main() {
 	}
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
-	db, err := gorm.Open(postgres.Open(dbDSN), &gorm.Config{})
+	db, err := pkgdb.Open(dbDSN, pkgdb.Config{})
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)

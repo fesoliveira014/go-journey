@@ -17,11 +17,11 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 
 	authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
+	pkgdb "github.com/fesoliveira014/library-system/pkg/db"
 	"github.com/fesoliveira014/library-system/services/auth/internal/handler"
 	"github.com/fesoliveira014/library-system/services/auth/internal/repository"
 	"github.com/fesoliveira014/library-system/services/auth/internal/service"
@@ -50,8 +50,8 @@ func main() {
 	googleClientSecret := os.Getenv("GOOGLE_CLIENT_SECRET")
 	googleRedirectURL := os.Getenv("GOOGLE_REDIRECT_URL")
 
-	// Connect to PostgreSQL via GORM
-	db, err := gorm.Open(postgres.Open(dbDSN), &gorm.Config{})
+	// Connect to PostgreSQL via GORM with bounded pool.
+	db, err := pkgdb.Open(dbDSN, pkgdb.Config{})
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}
