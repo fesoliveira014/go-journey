@@ -113,13 +113,19 @@ Historically, Kafka required Apache ZooKeeper for cluster metadata management. S
 
 ## The Sarama Client Library
 
-Go has several Kafka client libraries. We use **Sarama** (`github.com/IBM/sarama`), the most established pure-Go implementation. It supports both producing and consuming, consumer groups, and all the Kafka protocol features we need.
+Go has several Kafka client libraries. We use **Sarama** (`github.com/IBM/sarama`), the oldest and best-known pure-Go implementation. It supports both producing and consuming, consumer groups, and all the Kafka protocol features we need.
 
 The alternatives are:
 
-- **confluent-kafka-go** -- a CGo wrapper around librdkafka. Better performance, but requires C toolchain for building.
-- **franz-go** -- a newer pure-Go client with a more modern API. Worth considering for new projects, but Sarama has the larger ecosystem and more community examples.
+- **confluent-kafka-go** -- a CGo wrapper around librdkafka. Better performance, but requires a C toolchain for building.
+- **franz-go** (`github.com/twmb/franz-go`) -- a newer pure-Go client with a more modern API, first-class support for transactions, and generally cleaner ergonomics. See its [comparison page][franz-comparison] for specifics.
 - **segmentio/kafka-go** -- another pure-Go option, simpler API but fewer features.
+
+> **A note on picking a client in 2026.** Sarama is in maintenance mode. IBM still takes security patches and critical fixes, but active Go Kafka development has largely moved to franz-go — it is what most new Go-on-Kafka projects use today and is the client you will see in recent Kafka-related OSS code. We use Sarama in this book because (a) its API is closer to the raw Kafka protocol concepts most readers already know from other languages, so the code stays didactic, and (b) every Sarama idiom you learn here translates directly to "how would I do this in franz-go?" — the [migration notes][franz-comparison] are short. If you are starting a greenfield Go service against Kafka today, evaluate franz-go first and only fall back to Sarama if you hit a specific gap.
+>
+> Everything below is correct for Sarama. The patterns (consumer groups, offset commits, backpressure) are library-independent.
+
+[franz-comparison]: https://github.com/twmb/franz-go#comparisons
 
 Sarama's API is lower-level than Spring Kafka's `@KafkaListener` annotation. In Spring, you annotate a method and the framework handles consumer group setup, deserialization, and offset management. In Sarama, you implement an interface and manage the consume loop yourself. This is more code, but the control flow is explicit and there is no annotation magic to debug.
 
