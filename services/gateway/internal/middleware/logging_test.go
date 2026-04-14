@@ -9,6 +9,7 @@ import (
 )
 
 func TestLogging_CapturesStatus(t *testing.T) {
+	t.Parallel()
 	const wantStatus = http.StatusTeapot
 
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -28,6 +29,7 @@ func TestLogging_CapturesStatus(t *testing.T) {
 }
 
 func TestLogging_DefaultStatus200(t *testing.T) {
+	t.Parallel()
 	inner := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Write body without calling WriteHeader explicitly.
 		w.Write([]byte("hello")) //nolint:errcheck

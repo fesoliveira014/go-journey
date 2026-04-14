@@ -42,7 +42,9 @@ Here is `base.html`:
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>{{block "title" .}}Library System{{end}}</title>
-    <script src="https://unpkg.com/htmx.org@2.0.4"></script>
+    <script src="https://unpkg.com/htmx.org@2.0.4"
+            integrity="sha384-HGfztofotfshcF7+8n44JQL2oJmowVChPTg48S+jvZoztPfvwD79OC/LTtG6dMp+"
+            crossorigin="anonymous"></script>
     <link rel="stylesheet" href="/static/style.css">
 </head>
 <body>
@@ -54,6 +56,8 @@ Here is `base.html`:
 </body>
 </html>
 ```
+
+> **Why the `integrity` and `crossorigin` attributes?** Loading JavaScript from a third-party CDN without a [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) (SRI) hash means a CDN compromise can inject malicious code into every page you serve. The browser downloads the script, hashes it, and refuses to execute if the hash doesn't match the one in `integrity`. `crossorigin="anonymous"` is required for SRI to work against cross-origin resources. The [HTMX install page](https://htmx.org/docs/#installing) publishes the SRI hash for every release — copy it in verbatim when you pin a version. In production you'd typically self-host HTMX from your own static assets and skip the CDN entirely.
 
 The `{{block "title" .}}Library System{{end}}` action defines a block named `"title"` with a default value of "Library System". A page template can override this:
 

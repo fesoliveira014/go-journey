@@ -10,6 +10,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/golang-migrate/migrate/v4"
 	pgmigrate "github.com/golang-migrate/migrate/v4/database/postgres"
@@ -21,7 +22,6 @@ import (
 	"google.golang.org/grpc/health"
 	healthpb "google.golang.org/grpc/health/grpc_health_v1"
 	"google.golang.org/grpc/reflection"
-	"gorm.io/driver/postgres"
 	"gorm.io/gorm"
 	"gorm.io/plugin/opentelemetry/tracing"
 
@@ -29,6 +29,7 @@ import (
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
+	pkgdb "github.com/fesoliveira014/library-system/pkg/db"
 	pkgotel "github.com/fesoliveira014/library-system/pkg/otel"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/handler"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/kafka"
@@ -56,7 +57,8 @@ func main() {
 	}
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
-		jwtSecret = "dev-secret-change-in-production"
+		slog.Error("JWT_SECRET environment variable is required")
+		os.Exit(1)
 	}
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	if kafkaBrokers == "" {
@@ -77,8 +79,17 @@ func main() {
 			maxActive = v
 		}
 	}
+	// How often the background reaper scans for overdue reservations.
+	// Default 5 minutes — granular enough that catalog availability
+	// reconciles quickly, infrequent enough that the scan is cheap.
+	reaperInterval := 5 * time.Minute
+	if v := os.Getenv("REAPER_INTERVAL"); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			reaperInterval = d
+		}
+	}
 
-	db, err := gorm.Open(postgres.Open(dbDSN), &gorm.Config{})
+	db, err := pkgdb.Open(dbDSN, pkgdb.Config{})
 	if err != nil {
 		slog.Error("failed to connect to database", "error", err)
 		os.Exit(1)
@@ -150,6 +161,9 @@ func main() {
 	healthServer := health.NewServer()
 	healthpb.RegisterHealthServer(grpcServer, healthServer)
 	healthServer.SetServingStatus("", healthpb.HealthCheckResponse_SERVING)
+
+	// Start the expiration reaper. It stops when ctx is cancelled (SIGINT/SIGTERM).
+	go reservationSvc.RunExpirationReaper(ctx, reaperInterval)
 
 	go func() {
 		<-ctx.Done()

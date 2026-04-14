@@ -20,12 +20,13 @@ import (
 // --- Mocks ---
 
 type mockRepo struct {
-	createFn      func(ctx context.Context, r *model.Reservation) (*model.Reservation, error)
-	getByIDFn     func(ctx context.Context, id uuid.UUID) (*model.Reservation, error)
-	countActiveFn func(ctx context.Context, userID uuid.UUID) (int64, error)
-	listByUserFn  func(ctx context.Context, userID uuid.UUID) ([]*model.Reservation, error)
-	listAllFn     func(ctx context.Context) ([]*model.Reservation, error)
-	updateFn      func(ctx context.Context, r *model.Reservation) (*model.Reservation, error)
+	createFn               func(ctx context.Context, r *model.Reservation) (*model.Reservation, error)
+	getByIDFn              func(ctx context.Context, id uuid.UUID) (*model.Reservation, error)
+	countActiveFn          func(ctx context.Context, userID uuid.UUID) (int64, error)
+	listByUserFn           func(ctx context.Context, userID uuid.UUID) ([]*model.Reservation, error)
+	listAllFn              func(ctx context.Context) ([]*model.Reservation, error)
+	updateFn               func(ctx context.Context, r *model.Reservation) (*model.Reservation, error)
+	listDueForExpirationFn func(ctx context.Context, now time.Time) ([]*model.Reservation, error)
 }
 
 func (m *mockRepo) Create(ctx context.Context, r *model.Reservation) (*model.Reservation, error) {
@@ -46,9 +47,13 @@ func (m *mockRepo) ListAll(ctx context.Context) ([]*model.Reservation, error) {
 func (m *mockRepo) Update(ctx context.Context, r *model.Reservation) (*model.Reservation, error) {
 	return m.updateFn(ctx, r)
 }
+func (m *mockRepo) ListDueForExpiration(ctx context.Context, now time.Time) ([]*model.Reservation, error) {
+	return m.listDueForExpirationFn(ctx, now)
+}
 
 type mockCatalog struct {
-	getBookFn func(ctx context.Context, in *catalogv1.GetBookRequest, opts ...grpc.CallOption) (*catalogv1.Book, error)
+	getBookFn            func(ctx context.Context, in *catalogv1.GetBookRequest, opts ...grpc.CallOption) (*catalogv1.Book, error)
+	updateAvailabilityFn func(ctx context.Context, in *catalogv1.UpdateAvailabilityRequest, opts ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error)
 }
 
 func (m *mockCatalog) ListBooks(context.Context, *catalogv1.ListBooksRequest, ...grpc.CallOption) (*catalogv1.ListBooksResponse, error) {
@@ -66,8 +71,11 @@ func (m *mockCatalog) UpdateBook(context.Context, *catalogv1.UpdateBookRequest, 
 func (m *mockCatalog) DeleteBook(context.Context, *catalogv1.DeleteBookRequest, ...grpc.CallOption) (*catalogv1.DeleteBookResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "not implemented")
 }
-func (m *mockCatalog) UpdateAvailability(context.Context, *catalogv1.UpdateAvailabilityRequest, ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
-	return nil, status.Error(codes.Unimplemented, "not implemented")
+func (m *mockCatalog) UpdateAvailability(ctx context.Context, in *catalogv1.UpdateAvailabilityRequest, opts ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+	if m.updateAvailabilityFn == nil {
+		return &catalogv1.UpdateAvailabilityResponse{}, nil
+	}
+	return m.updateAvailabilityFn(ctx, in, opts...)
 }
 
 type mockPublisher struct {
@@ -112,10 +120,12 @@ func userCtx(userID uuid.UUID) context.Context {
 }
 
 func TestCreateReservation_Success(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	bookID := uuid.New()
 	pub := &mockPublisher{}
 
+	var decrementCalled bool
 	repo := &mockRepo{
 		countActiveFn: func(_ context.Context, _ uuid.UUID) (int64, error) { return 0, nil },
 		createFn: func(_ context.Context, r *model.Reservation) (*model.Reservation, error) {
@@ -124,8 +134,15 @@ func TestCreateReservation_Success(t *testing.T) {
 		},
 	}
 	catalog := &mockCatalog{
-		getBookFn: func(_ context.Context, in *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
-			return &catalogv1.Book{Id: in.Id, AvailableCopies: 3}, nil
+		updateAvailabilityFn: func(_ context.Context, in *catalogv1.UpdateAvailabilityRequest, _ ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+			if in.Delta != -1 {
+				t.Errorf("expected decrement of -1, got %d", in.Delta)
+			}
+			if in.Id != bookID.String() {
+				t.Errorf("expected book id %s, got %s", bookID, in.Id)
+			}
+			decrementCalled = true
+			return &catalogv1.UpdateAvailabilityResponse{AvailableCopies: 2}, nil
 		},
 	}
 
@@ -133,6 +150,9 @@ func TestCreateReservation_Success(t *testing.T) {
 	res, err := svc.CreateReservation(userCtx(userID), bookID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
+	}
+	if !decrementCalled {
+		t.Error("expected UpdateAvailability(-1) to be called")
 	}
 	if res.Status != model.StatusActive {
 		t.Errorf("expected status active, got %s", res.Status)
@@ -149,6 +169,7 @@ func TestCreateReservation_Success(t *testing.T) {
 }
 
 func TestCreateReservation_MaxReservations(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	pub := &mockPublisher{}
 
@@ -168,15 +189,21 @@ func TestCreateReservation_MaxReservations(t *testing.T) {
 }
 
 func TestCreateReservation_NoAvailableCopies(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	pub := &mockPublisher{}
 
+	var createCalled bool
 	repo := &mockRepo{
 		countActiveFn: func(_ context.Context, _ uuid.UUID) (int64, error) { return 0, nil },
+		createFn: func(_ context.Context, r *model.Reservation) (*model.Reservation, error) {
+			createCalled = true
+			return r, nil
+		},
 	}
 	catalog := &mockCatalog{
-		getBookFn: func(_ context.Context, _ *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
-			return &catalogv1.Book{AvailableCopies: 0}, nil
+		updateAvailabilityFn: func(_ context.Context, _ *catalogv1.UpdateAvailabilityRequest, _ ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+			return nil, status.Error(codes.FailedPrecondition, "no available copies")
 		},
 	}
 
@@ -185,9 +212,63 @@ func TestCreateReservation_NoAvailableCopies(t *testing.T) {
 	if err != model.ErrNoAvailableCopies {
 		t.Errorf("expected ErrNoAvailableCopies, got %v", err)
 	}
+	if createCalled {
+		t.Error("reservation row must not be created when availability decrement fails")
+	}
+	if len(pub.events) != 0 {
+		t.Errorf("expected no events on failed reservation, got %d", len(pub.events))
+	}
 }
 
+func TestCreateReservation_CompensatesOnCreateFailure(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	bookID := uuid.New()
+	pub := &mockPublisher{}
+
+	var deltas []int32
+	repo := &mockRepo{
+		countActiveFn: func(_ context.Context, _ uuid.UUID) (int64, error) { return 0, nil },
+		createFn: func(_ context.Context, _ *model.Reservation) (*model.Reservation, error) {
+			return nil, errAssert("db write failed")
+		},
+	}
+	catalog := &mockCatalog{
+		updateAvailabilityFn: func(_ context.Context, in *catalogv1.UpdateAvailabilityRequest, _ ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+			deltas = append(deltas, in.Delta)
+			return &catalogv1.UpdateAvailabilityResponse{}, nil
+		},
+	}
+
+	svc := service.NewReservationService(repo, catalog, nil, pub, 5)
+	_, err := svc.CreateReservation(userCtx(userID), bookID)
+	if err == nil {
+		t.Fatal("expected reservation create to fail")
+	}
+
+	// Must decrement then compensate with an increment.
+	if len(deltas) != 2 {
+		t.Fatalf("expected 2 availability calls (decrement + compensate), got %d: %v", len(deltas), deltas)
+	}
+	if deltas[0] != -1 {
+		t.Errorf("expected first call delta=-1, got %d", deltas[0])
+	}
+	if deltas[1] != 1 {
+		t.Errorf("expected compensating call delta=+1, got %d", deltas[1])
+	}
+	if len(pub.events) != 0 {
+		t.Errorf("expected no events on failed reservation, got %d", len(pub.events))
+	}
+}
+
+// errAssert is a tiny local error type used by the compensation test. We
+// don't care about the value — just that it surfaces from repo.Create.
+type errAssert string
+
+func (e errAssert) Error() string { return string(e) }
+
 func TestReturnBook_Success(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	resID := uuid.New()
 	pub := &mockPublisher{}
@@ -226,6 +307,7 @@ func TestReturnBook_Success(t *testing.T) {
 }
 
 func TestReturnBook_WrongUser(t *testing.T) {
+	t.Parallel()
 	ownerID := uuid.New()
 	otherID := uuid.New()
 	resID := uuid.New()
@@ -246,6 +328,7 @@ func TestReturnBook_WrongUser(t *testing.T) {
 }
 
 func TestReturnBook_AlreadyReturned(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	resID := uuid.New()
 
@@ -265,6 +348,7 @@ func TestReturnBook_AlreadyReturned(t *testing.T) {
 }
 
 func TestListUserReservations_ExpiresOnRead(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	pub := &mockPublisher{}
 
@@ -307,7 +391,48 @@ func TestListUserReservations_ExpiresOnRead(t *testing.T) {
 	}
 }
 
+func TestReapExpired_FlipsOverdueRowsAndPublishes(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	overdue := &model.Reservation{
+		ID: uuid.New(), UserID: userID, BookID: uuid.New(),
+		Status: model.StatusActive,
+		DueAt:  time.Now().Add(-1 * time.Hour),
+	}
+	pub := &mockPublisher{}
+	var listCalledWith time.Time
+
+	repo := &mockRepo{
+		listDueForExpirationFn: func(_ context.Context, now time.Time) ([]*model.Reservation, error) {
+			listCalledWith = now
+			return []*model.Reservation{overdue}, nil
+		},
+		updateFn: func(_ context.Context, r *model.Reservation) (*model.Reservation, error) {
+			return r, nil
+		},
+	}
+
+	svc := service.NewReservationService(repo, nil, nil, pub, 5)
+	svc.ReapExpired(context.Background())
+
+	if listCalledWith.IsZero() {
+		t.Error("expected ListDueForExpiration to be called with a non-zero time")
+	}
+	if overdue.Status != model.StatusExpired {
+		t.Errorf("expected status expired, got %s", overdue.Status)
+	}
+	if len(pub.events) != 1 || pub.events[0].Type != "reservation.expired" {
+		t.Errorf("expected one reservation.expired event, got %v", pub.events)
+	}
+	// The reaper runs without a user-attached context, so the event must
+	// fall back to the reservation's own UserID.
+	if pub.events[0].UserID != userID.String() {
+		t.Errorf("expected event UserID %s, got %s", userID, pub.events[0].UserID)
+	}
+}
+
 func TestReservationService_ListAllReservations(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	bookID := uuid.New()
 	now := time.Now()

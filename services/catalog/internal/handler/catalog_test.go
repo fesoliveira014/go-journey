@@ -84,6 +84,7 @@ type noopPublisher struct{}
 func (n *noopPublisher) Publish(_ context.Context, _ service.BookEvent) error { return nil }
 
 func TestCatalogHandler_CreateBook_Success(t *testing.T) {
+	t.Parallel()
 	svc := service.NewCatalogService(newInMemoryRepo(), &noopPublisher{})
 	h := handler.NewCatalogHandler(svc)
 
@@ -104,6 +105,7 @@ func TestCatalogHandler_CreateBook_Success(t *testing.T) {
 }
 
 func TestCatalogHandler_CreateBook_MissingTitle(t *testing.T) {
+	t.Parallel()
 	svc := service.NewCatalogService(newInMemoryRepo(), &noopPublisher{})
 	h := handler.NewCatalogHandler(svc)
 
@@ -123,6 +125,7 @@ func TestCatalogHandler_CreateBook_MissingTitle(t *testing.T) {
 }
 
 func TestCatalogHandler_GetBook_NotFound(t *testing.T) {
+	t.Parallel()
 	svc := service.NewCatalogService(newInMemoryRepo(), &noopPublisher{})
 	h := handler.NewCatalogHandler(svc)
 
@@ -142,6 +145,7 @@ func TestCatalogHandler_GetBook_NotFound(t *testing.T) {
 }
 
 func TestCatalogHandler_GetBook_InvalidID(t *testing.T) {
+	t.Parallel()
 	svc := service.NewCatalogService(newInMemoryRepo(), &noopPublisher{})
 	h := handler.NewCatalogHandler(svc)
 

@@ -29,6 +29,7 @@ func (m *mockService) Suggest(_ context.Context, _ string, _ int) ([]model.Sugge
 }
 
 func TestSearchHandler_Search_Success(t *testing.T) {
+	t.Parallel()
 	svc := &mockService{
 		searchDocs:  []model.BookDocument{{ID: "1", Title: "Go Book", Author: "Author"}},
 		totalHits:   1,
@@ -56,6 +57,7 @@ func TestSearchHandler_Search_Success(t *testing.T) {
 }
 
 func TestSearchHandler_Search_EmptyQuery(t *testing.T) {
+	t.Parallel()
 	h := handler.NewSearchHandler(&mockService{})
 
 	_, err := h.Search(context.Background(), &searchv1.SearchRequest{Query: ""})
@@ -69,6 +71,7 @@ func TestSearchHandler_Search_EmptyQuery(t *testing.T) {
 }
 
 func TestSearchHandler_Suggest_Success(t *testing.T) {
+	t.Parallel()
 	svc := &mockService{
 		suggestions: []model.Suggestion{{BookID: "1", Title: "Go in Action", Author: "Kennedy"}},
 	}
@@ -90,6 +93,7 @@ func TestSearchHandler_Suggest_Success(t *testing.T) {
 }
 
 func TestSearchHandler_Suggest_EmptyPrefix(t *testing.T) {
+	t.Parallel()
 	h := handler.NewSearchHandler(&mockService{})
 
 	_, err := h.Suggest(context.Background(), &searchv1.SuggestRequest{Prefix: ""})

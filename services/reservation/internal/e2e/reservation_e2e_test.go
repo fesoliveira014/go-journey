@@ -35,7 +35,9 @@ import (
 )
 
 // mockCatalogClient satisfies catalogv1.CatalogServiceClient, always returning
-// a book with 10 available copies.
+// a book with 10 available copies. UpdateAvailability is a no-op that echoes
+// the requested delta — the TOCTOU-safe reservation flow calls it to reserve
+// a copy before creating the reservation row.
 type mockCatalogClient struct {
 	catalogv1.CatalogServiceClient
 }
@@ -44,6 +46,12 @@ func (m *mockCatalogClient) GetBook(ctx context.Context, req *catalogv1.GetBookR
 	return &catalogv1.Book{
 		Id:              req.GetId(),
 		AvailableCopies: 10,
+	}, nil
+}
+
+func (m *mockCatalogClient) UpdateAvailability(ctx context.Context, req *catalogv1.UpdateAvailabilityRequest, opts ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+	return &catalogv1.UpdateAvailabilityResponse{
+		AvailableCopies: 10 + req.GetDelta(),
 	}, nil
 }
 

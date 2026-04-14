@@ -29,6 +29,7 @@ func (m *mockCatalogService) UpdateAvailability(_ context.Context, id uuid.UUID,
 }
 
 func TestHandleEvent_Created(t *testing.T) {
+	t.Parallel()
 	svc := &mockCatalogService{}
 	bookID := uuid.New()
 
@@ -51,6 +52,7 @@ func TestHandleEvent_Created(t *testing.T) {
 }
 
 func TestHandleEvent_Returned(t *testing.T) {
+	t.Parallel()
 	svc := &mockCatalogService{}
 	bookID := uuid.New()
 
@@ -67,6 +69,7 @@ func TestHandleEvent_Returned(t *testing.T) {
 }
 
 func TestHandleEvent_Expired(t *testing.T) {
+	t.Parallel()
 	svc := &mockCatalogService{}
 	bookID := uuid.New()
 
@@ -83,6 +86,7 @@ func TestHandleEvent_Expired(t *testing.T) {
 }
 
 func TestHandleEvent_UnknownType(t *testing.T) {
+	t.Parallel()
 	svc := &mockCatalogService{}
 
 	err := handleEvent(context.Background(), svc, []byte(`{

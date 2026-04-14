@@ -13,6 +13,7 @@ import (
 )
 
 func TestTraceLogHandler_WithActiveSpan(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewTraceLogHandler(&buf)
 
@@ -41,6 +42,7 @@ func TestTraceLogHandler_WithActiveSpan(t *testing.T) {
 }
 
 func TestTraceLogHandler_WithoutSpan(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewTraceLogHandler(&buf)
 
@@ -61,6 +63,7 @@ func TestTraceLogHandler_WithoutSpan(t *testing.T) {
 }
 
 func TestTraceLogHandler_InvalidSpanContext(t *testing.T) {
+	t.Parallel()
 	var buf bytes.Buffer
 	handler := NewTraceLogHandler(&buf)
 

@@ -6,9 +6,11 @@ require (
 	github.com/IBM/sarama v1.47.0
 	github.com/fesoliveira014/library-system/gen v0.0.0
 	github.com/fesoliveira014/library-system/pkg/auth v0.0.0-00010101000000-000000000000
+	github.com/fesoliveira014/library-system/pkg/db v0.0.0-00010101000000-000000000000
 	github.com/fesoliveira014/library-system/pkg/otel v0.0.0-00010101000000-000000000000
 	github.com/golang-migrate/migrate/v4 v4.19.1
 	github.com/google/uuid v1.6.0
+	github.com/jackc/pgx/v5 v5.6.0
 	github.com/testcontainers/testcontainers-go v0.41.0
 	github.com/testcontainers/testcontainers-go/modules/kafka v0.41.0
 	github.com/testcontainers/testcontainers-go/modules/postgres v0.41.0
@@ -58,7 +60,6 @@ require (
 	github.com/hashicorp/go-version v1.6.0 // indirect
 	github.com/jackc/pgpassfile v1.0.0 // indirect
 	github.com/jackc/pgservicefile v0.0.0-20240606120523-5a60cdf6a761 // indirect
-	github.com/jackc/pgx/v5 v5.6.0 // indirect
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/jcmturner/aescts/v2 v2.0.0 // indirect
 	github.com/jcmturner/dnsutils/v2 v2.0.0 // indirect
@@ -120,5 +121,7 @@ require (
 replace github.com/fesoliveira014/library-system/gen => ../../gen
 
 replace github.com/fesoliveira014/library-system/pkg/auth => ../../pkg/auth
+
+replace github.com/fesoliveira014/library-system/pkg/db => ../../pkg/db
 
 replace github.com/fesoliveira014/library-system/pkg/otel => ../../pkg/otel

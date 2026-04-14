@@ -84,7 +84,7 @@ services:
     environment:
       DATABASE_URL: "host=postgres-auth port=5432 user=${POSTGRES_AUTH_USER:-postgres} password=${POSTGRES_AUTH_PASSWORD:-postgres} dbname=${POSTGRES_AUTH_DB:-auth} sslmode=disable"
       GRPC_PORT: "50051"
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       JWT_EXPIRY: ${JWT_EXPIRY:-24h}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
@@ -105,7 +105,7 @@ services:
     environment:
       DATABASE_URL: "host=postgres-catalog port=5432 user=${POSTGRES_CATALOG_USER:-postgres} password=${POSTGRES_CATALOG_PASSWORD:-postgres} dbname=${POSTGRES_CATALOG_DB:-catalog} sslmode=disable"
       GRPC_PORT: "50052"
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
       OTEL_COLLECTOR_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT:-otel-collector:4317}
     ports:
@@ -126,7 +126,7 @@ services:
     environment:
       DATABASE_URL: "host=postgres-reservation port=5432 user=${POSTGRES_RESERVATION_USER:-postgres} password=${POSTGRES_RESERVATION_PASSWORD:-postgres} dbname=${POSTGRES_RESERVATION_DB:-reservation} sslmode=disable"
       GRPC_PORT: "50053"
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
       CATALOG_GRPC_ADDR: ${CATALOG_GRPC_ADDR:-catalog:50052}
       AUTH_GRPC_ADDR: ${AUTH_GRPC_ADDR:-auth:50051}
@@ -194,7 +194,8 @@ services:
       CATALOG_GRPC_ADDR: ${CATALOG_GRPC_ADDR:-catalog:50052}
       RESERVATION_GRPC_ADDR: ${RESERVATION_GRPC_ADDR:-reservation:50053}
       SEARCH_GRPC_ADDR: ${SEARCH_GRPC_ADDR:-search:50054}
-      JWT_SECRET: ${JWT_SECRET:-dev-secret-change-in-production}
+      JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      FLASH_COOKIE_KEY: ${FLASH_COOKIE_KEY:?FLASH_COOKIE_KEY must be set in .env (32+ hex bytes, e.g. openssl rand -hex 32)}
       OTEL_COLLECTOR_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT:-otel-collector:4317}
     ports:
       - "${GATEWAY_PORT:-8080}:8080"

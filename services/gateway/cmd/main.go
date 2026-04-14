@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -43,6 +44,25 @@ func main() {
 	jwtSecret := os.Getenv("JWT_SECRET")
 	if jwtSecret == "" {
 		slog.Error("JWT_SECRET is required")
+		os.Exit(1)
+	}
+
+	// FLASH_COOKIE_KEY signs the flash cookie so a client cannot tamper with
+	// its contents. Use at least 32 random bytes; generate with
+	//   openssl rand -hex 32
+	// and store it alongside JWT_SECRET in the environment / secrets manager.
+	flashKeyHex := os.Getenv("FLASH_COOKIE_KEY")
+	if flashKeyHex == "" {
+		slog.Error("FLASH_COOKIE_KEY is required")
+		os.Exit(1)
+	}
+	flashKey, err := hex.DecodeString(flashKeyHex)
+	if err != nil {
+		slog.Error("FLASH_COOKIE_KEY must be hex-encoded", "error", err)
+		os.Exit(1)
+	}
+	if len(flashKey) < 32 {
+		slog.Error("FLASH_COOKIE_KEY must be at least 32 bytes", "got", len(flashKey))
 		os.Exit(1)
 	}
 
@@ -116,7 +136,7 @@ func main() {
 	catalogClient := catalogv1.NewCatalogServiceClient(catalogConn)
 	reservationClient := reservationv1.NewReservationServiceClient(reservationConn)
 	searchClient := searchv1.NewSearchServiceClient(searchConn)
-	srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl)
+	srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl, handler.WithFlashKey(flashKey))
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))

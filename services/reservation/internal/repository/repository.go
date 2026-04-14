@@ -3,6 +3,7 @@ package repository
 import (
 	"context"
 	"errors"
+	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
@@ -66,4 +67,15 @@ func (r *ReservationRepository) Update(ctx context.Context, res *model.Reservati
 		return nil, err
 	}
 	return res, nil
+}
+
+// ListDueForExpiration returns active reservations whose due_at has passed
+// the given cutoff. Used by the expiration reaper to find rows that need to
+// flip to 'expired' even when no user has looked at them recently.
+func (r *ReservationRepository) ListDueForExpiration(ctx context.Context, now time.Time) ([]*model.Reservation, error) {
+	var reservations []*model.Reservation
+	err := r.db.WithContext(ctx).
+		Where("status = ? AND due_at < ?", model.StatusActive, now).
+		Find(&reservations).Error
+	return reservations, err
 }

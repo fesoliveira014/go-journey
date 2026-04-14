@@ -3,9 +3,9 @@ package repository
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 
 	"github.com/fesoliveira014/library-system/services/catalog/internal/model"
@@ -118,6 +118,12 @@ func (r *BookRepository) List(ctx context.Context, filter model.BookFilter, page
 	return books, total, nil
 }
 
+// UpdateAvailability atomically adjusts available_copies by delta. The WHERE
+// guard prevents the counter from going negative: a decrement that would
+// underflow matches zero rows and is reported back as ErrNoAvailableCopies.
+// This is the gate the reservation service relies on to avoid a TOCTOU race
+// when two users race for the last copy of a book — the database enforces
+// single-winner semantics, not an in-application check.
 func (r *BookRepository) UpdateAvailability(ctx context.Context, id uuid.UUID, delta int) error {
 	result := r.db.WithContext(ctx).
 		Model(&model.Book{}).
@@ -126,20 +132,35 @@ func (r *BookRepository) UpdateAvailability(ctx context.Context, id uuid.UUID, d
 	if result.Error != nil {
 		return result.Error
 	}
-	// If delta < 0 and RowsAffected == 0, either the book doesn't exist or
-	// the guard prevented a negative value. For positive deltas, 0 rows means
-	// not found. This distinction is a simplification — see spec for details.
-	if delta >= 0 && result.RowsAffected == 0 {
+	if result.RowsAffected == 0 {
+		// Disambiguate "book missing" from "book exists but no copies" so
+		// the reservation service can surface a meaningful error.
+		var exists bool
+		if err := r.db.WithContext(ctx).
+			Model(&model.Book{}).
+			Select("count(*) > 0").
+			Where("id = ?", id).
+			Find(&exists).Error; err != nil {
+			return err
+		}
+		if !exists {
+			return model.ErrBookNotFound
+		}
+		if delta < 0 {
+			return model.ErrNoAvailableCopies
+		}
+		// Positive delta against an existing row but zero rows affected
+		// shouldn't happen (the guard is only active for negative deltas),
+		// but fall through defensively.
 		return model.ErrBookNotFound
 	}
 	return nil
 }
 
-// isDuplicateKeyError checks if a PostgreSQL error is a unique constraint violation.
+// isDuplicateKeyError reports whether err wraps a PostgreSQL unique-violation
+// (SQLSTATE 23505). It checks the typed *pgconn.PgError code rather than
+// matching the error message, which is not a stable API.
 func isDuplicateKeyError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "SQLSTATE 23505")
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

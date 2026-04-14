@@ -7,9 +7,8 @@ import (
 	"os"
 
 	"golang.org/x/crypto/bcrypt"
-	"gorm.io/driver/postgres"
-	"gorm.io/gorm"
 
+	pkgdb "github.com/fesoliveira014/library-system/pkg/db"
 	"github.com/fesoliveira014/library-system/services/auth/internal/model"
 )
 
@@ -30,7 +29,7 @@ func main() {
 		log.Fatal("DATABASE_URL environment variable is required")
 	}
 
-	db, err := gorm.Open(postgres.Open(dsn), &gorm.Config{})
+	db, err := pkgdb.Open(dsn, pkgdb.Config{})
 	if err != nil {
 		log.Fatalf("failed to connect to database: %v", err)
 	}

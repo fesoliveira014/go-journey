@@ -24,7 +24,7 @@ type PageData struct {
 func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, data any) {
 	pd := PageData{
 		User:  userFromContext(r.Context()),
-		Flash: consumeFlash(w, r),
+		Flash: s.consumeFlash(w, r),
 		Data:  data,
 	}
 	tmpl, ok := s.tmpl[name]
@@ -53,7 +53,7 @@ func (s *Server) renderPartial(w http.ResponseWriter, name string, data any) {
 func (s *Server) renderError(w http.ResponseWriter, r *http.Request, code int, message string) {
 	pd := PageData{
 		User:  userFromContext(r.Context()),
-		Flash: consumeFlash(w, r),
+		Flash: s.consumeFlash(w, r),
 		Data: map[string]any{
 			"Status":  code,
 			"Message": message,
@@ -83,10 +83,20 @@ func userFromContext(ctx context.Context) *UserInfo {
 	return &UserInfo{ID: uid.String(), Role: role}
 }
 
-func setFlash(w http.ResponseWriter, message string) {
+// setFlash writes a short-lived flash cookie with the given message. The
+// message is HMAC-signed via gorilla/securecookie so that a client cannot
+// tamper with it: consumeFlash verifies the signature on read and discards
+// the cookie if it is invalid. html/template already escapes the value on
+// render, so signing is defence in depth, not the only guard.
+func (s *Server) setFlash(w http.ResponseWriter, message string) {
+	encoded, err := s.flash.Encode("flash", message)
+	if err != nil {
+		slog.Error("failed to encode flash cookie", "error", err)
+		return
+	}
 	http.SetCookie(w, &http.Cookie{
 		Name:     "flash",
-		Value:    message,
+		Value:    encoded,
 		Path:     "/",
 		MaxAge:   10,
 		HttpOnly: true,
@@ -119,7 +129,11 @@ func (s *Server) handleGRPCError(w http.ResponseWriter, r *http.Request, err err
 	}
 }
 
-func consumeFlash(w http.ResponseWriter, r *http.Request) string {
+// consumeFlash reads and clears the flash cookie. A cookie whose signature
+// fails to verify (tampered, signed with a rotated key, or truncated) is
+// treated as absent — the caller gets the empty string and the cookie is
+// still cleared, so a poisoned cookie cannot wedge a user session.
+func (s *Server) consumeFlash(w http.ResponseWriter, r *http.Request) string {
 	c, err := r.Cookie("flash")
 	if err != nil {
 		return ""
@@ -129,5 +143,9 @@ func consumeFlash(w http.ResponseWriter, r *http.Request) string {
 		Path:   "/",
 		MaxAge: -1,
 	})
-	return c.Value
+	var message string
+	if err := s.flash.Decode("flash", c.Value, &message); err != nil {
+		return ""
+	}
+	return message
 }

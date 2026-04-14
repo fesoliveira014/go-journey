@@ -3,9 +3,9 @@ package repository
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"gorm.io/gorm"
 
 	"github.com/fesoliveira014/library-system/services/auth/internal/model"
@@ -82,10 +82,10 @@ func (r *UserRepository) List(ctx context.Context) ([]*model.User, error) {
 	return users, nil
 }
 
+// isDuplicateKeyError reports whether err wraps a PostgreSQL unique-violation
+// (SQLSTATE 23505). It checks the typed *pgconn.PgError code rather than
+// matching the error message, which is not a stable API.
 func isDuplicateKeyError(err error) bool {
-	if err == nil {
-		return false
-	}
-	msg := err.Error()
-	return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "SQLSTATE 23505")
+	var pgErr *pgconn.PgError
+	return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }

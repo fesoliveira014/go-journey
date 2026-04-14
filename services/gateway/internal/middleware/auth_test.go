@@ -27,6 +27,7 @@ func (h *captureCtxHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 func TestAuth_ValidCookie(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	token, err := pkgauth.GenerateToken(userID, "member", testSecret, time.Hour)
 	if err != nil {
@@ -54,6 +55,7 @@ func TestAuth_ValidCookie(t *testing.T) {
 }
 
 func TestAuth_NoCookie(t *testing.T) {
+	t.Parallel()
 	downstream := &captureCtxHandler{}
 	handler := middleware.Auth(downstream, testSecret)
 
@@ -71,6 +73,7 @@ func TestAuth_NoCookie(t *testing.T) {
 }
 
 func TestAuth_InvalidToken(t *testing.T) {
+	t.Parallel()
 	downstream := &captureCtxHandler{}
 	handler := middleware.Auth(downstream, testSecret)
 
@@ -89,6 +92,7 @@ func TestAuth_InvalidToken(t *testing.T) {
 }
 
 func TestAuth_ExpiredToken(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	// Negative duration puts ExpiresAt in the past.
 	token, err := pkgauth.GenerateToken(userID, "member", testSecret, -time.Hour)

@@ -86,7 +86,7 @@ func (s *Server) LoginSubmit(w http.ResponseWriter, r *http.Request) {
         return
     }
     setSessionCookie(w, resp.Token)
-    setFlash(w, "Welcome back!")
+    s.setFlash(w, "Welcome back!")
     http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
 ```
@@ -180,7 +180,7 @@ func (s *Server) OAuth2Callback(w http.ResponseWriter, r *http.Request) {
         return
     }
     setSessionCookie(w, resp.Token)
-    setFlash(w, "Welcome!")
+    s.setFlash(w, "Welcome!")
     http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
 ```
@@ -191,22 +191,27 @@ func (s *Server) OAuth2Callback(w http.ResponseWriter, r *http.Request) {
 
 ## Flash Messages
 
-Flash messages are one-time notifications displayed after a redirect -- "Book created", "Welcome back!", etc. In Spring, you would use `RedirectAttributes.addFlashAttribute()` backed by the session store. We use a simpler approach: a short-lived cookie.
+Flash messages are one-time notifications displayed after a redirect -- "Book created", "Welcome back!", etc. In Spring, you would use `RedirectAttributes.addFlashAttribute()` backed by the session store. We use a simpler approach: a short-lived cookie, HMAC-signed so the client cannot tamper with it.
 
 ```go
 // services/gateway/internal/handler/render.go
 
-func setFlash(w http.ResponseWriter, message string) {
+func (s *Server) setFlash(w http.ResponseWriter, message string) {
+    encoded, err := s.flash.Encode("flash", message)
+    if err != nil {
+        slog.Error("failed to encode flash cookie", "error", err)
+        return
+    }
     http.SetCookie(w, &http.Cookie{
         Name:     "flash",
-        Value:    message,
+        Value:    encoded,
         Path:     "/",
         MaxAge:   10,
         HttpOnly: true,
     })
 }
 
-func consumeFlash(w http.ResponseWriter, r *http.Request) string {
+func (s *Server) consumeFlash(w http.ResponseWriter, r *http.Request) string {
     c, err := r.Cookie("flash")
     if err != nil {
         return ""
@@ -216,17 +221,46 @@ func consumeFlash(w http.ResponseWriter, r *http.Request) string {
         Path:   "/",
         MaxAge: -1,
     })
-    return c.Value
+    var message string
+    if err := s.flash.Decode("flash", c.Value, &message); err != nil {
+        return ""
+    }
+    return message
 }
 ```
 
 The pattern:
 
-1. Before a redirect, `setFlash` writes a cookie with `MaxAge: 10` (10 seconds -- enough time for the redirect to complete).
-2. The `render` function calls `consumeFlash`, which reads the cookie value and immediately deletes it by setting `MaxAge: -1`.
+1. Before a redirect, `setFlash` writes an HMAC-signed cookie with `MaxAge: 10` (10 seconds -- enough time for the redirect to complete).
+2. The `render` function calls `consumeFlash`, which reads the cookie, verifies the signature, and immediately deletes the cookie by setting `MaxAge: -1`.
 3. The template displays the flash message if it exists.
 
-This is stateless -- no server-side session store needed. The tradeoff is that flash messages are limited to what fits in a cookie (about 4KB) and are not encrypted. For user-facing messages like "Book created", this is fine.
+This is stateless -- no server-side session store needed.
+
+### Why sign the cookie?
+
+An early version of this handler wrote the message to the cookie as plaintext. Nothing seemed wrong with that at first: `html/template` auto-escapes, so even a tampered `<script>` payload would render as harmless text. But treating "it would be escaped at render time" as your only defence is fragile:
+
+- Any future code path that puts the flash value into a URL, a `Location` header, or a log message bypasses HTML escaping.
+- An attacker who can set cookies on your domain (XSS elsewhere, a poisoned CDN, a sloppy third-party script) can silently hand-craft flash messages that look like they came from the server. Trust in UI messaging erodes.
+- The cookie is HTTP-visible in logs and proxies, so injecting hostile content there has downstream effects you do not control.
+
+Signing with [`gorilla/securecookie`][securecookie] closes all of that off with one line of server-side crypto. The server writes `HMAC(key, message) || message`, reads it back with the same key, and discards anything that does not verify. A tampered value decodes to an empty string; the user sees no flash, which is the correct failure mode.
+
+The key must be at least 32 random bytes, read from the `FLASH_COOKIE_KEY` environment variable at startup (the gateway fails fast if it is unset -- same 12-Factor philosophy as `JWT_SECRET`). Generate one with:
+
+```bash
+openssl rand -hex 32
+```
+
+The codec is wired into the `Server` via a functional option so tests can spin up a server with a random per-process key without touching the 30+ constructor call sites:
+
+```go
+srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl,
+    handler.WithFlashKey(flashKey))
+```
+
+[securecookie]: https://pkg.go.dev/github.com/gorilla/securecookie
 
 ---
 

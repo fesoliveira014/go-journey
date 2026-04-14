@@ -129,7 +129,7 @@ func (s *Server) AdminBookCreate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setFlash(w, "Book created")
+	s.setFlash(w, "Book created")
 	http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
 
@@ -207,7 +207,7 @@ func (s *Server) AdminBookUpdate(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	setFlash(w, "Book updated")
+	s.setFlash(w, "Book updated")
 	http.Redirect(w, r, "/books/"+id, http.StatusSeeOther)
 }
 
@@ -221,6 +221,6 @@ func (s *Server) AdminBookDelete(w http.ResponseWriter, r *http.Request) {
 		s.handleGRPCError(w, r, err, "Failed to delete book")
 		return
 	}
-	setFlash(w, "Book deleted")
+	s.setFlash(w, "Book deleted")
 	http.Redirect(w, r, "/books", http.StatusSeeOther)
 }

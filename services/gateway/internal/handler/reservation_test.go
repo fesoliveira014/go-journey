@@ -87,6 +87,7 @@ func reservationTestTemplates(t *testing.T) map[string]*template.Template {
 }
 
 func TestReserveBook_RequiresAuth(t *testing.T) {
+	t.Parallel()
 	tmpl := reservationTestTemplates(t)
 	srv := handler.New(nil, nil, nil, nil, tmpl)
 
@@ -105,6 +106,7 @@ func TestReserveBook_RequiresAuth(t *testing.T) {
 }
 
 func TestReserveBook_Success(t *testing.T) {
+	t.Parallel()
 	mock := &mockReservationClient{
 		createFn: func(_ context.Context, in *reservationv1.CreateReservationRequest, _ ...grpc.CallOption) (*reservationv1.CreateReservationResponse, error) {
 			return &reservationv1.CreateReservationResponse{
@@ -131,6 +133,7 @@ func TestReserveBook_Success(t *testing.T) {
 }
 
 func TestReserveBook_ResourceExhausted(t *testing.T) {
+	t.Parallel()
 	mock := &mockReservationClient{
 		createFn: func(_ context.Context, _ *reservationv1.CreateReservationRequest, _ ...grpc.CallOption) (*reservationv1.CreateReservationResponse, error) {
 			return nil, status.Error(codes.ResourceExhausted, "max reservations reached")
@@ -152,6 +155,7 @@ func TestReserveBook_ResourceExhausted(t *testing.T) {
 }
 
 func TestReserveBook_FailedPrecondition(t *testing.T) {
+	t.Parallel()
 	mock := &mockReservationClient{
 		createFn: func(_ context.Context, _ *reservationv1.CreateReservationRequest, _ ...grpc.CallOption) (*reservationv1.CreateReservationResponse, error) {
 			return nil, status.Error(codes.FailedPrecondition, "no copies available")
@@ -173,6 +177,7 @@ func TestReserveBook_FailedPrecondition(t *testing.T) {
 }
 
 func TestMyReservations_Success(t *testing.T) {
+	t.Parallel()
 	mock := &mockReservationClient{
 		listFn: func(_ context.Context, _ *reservationv1.ListUserReservationsRequest, _ ...grpc.CallOption) (*reservationv1.ListUserReservationsResponse, error) {
 			return &reservationv1.ListUserReservationsResponse{
@@ -202,6 +207,7 @@ func TestMyReservations_Success(t *testing.T) {
 }
 
 func TestReturnBook_Success(t *testing.T) {
+	t.Parallel()
 	mock := &mockReservationClient{
 		returnFn: func(_ context.Context, in *reservationv1.ReturnBookRequest, _ ...grpc.CallOption) (*reservationv1.ReturnBookResponse, error) {
 			return &reservationv1.ReturnBookResponse{

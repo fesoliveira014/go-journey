@@ -2,7 +2,7 @@
 
 The reservation service is the second microservice we build from scratch. If you followed Chapter 2 (the catalog service), this one will feel familiar -- same layered architecture, same patterns. That repetition is deliberate. The goal is to show that the patterns are general, not specific to any one domain. Once you internalize the model/repository/service/handler stack, you can stand up a new service quickly.
 
-The interesting differences are in the domain logic: state machines, cross-service reads, event publishing, and a "lazy expiration" pattern that avoids background workers entirely.
+The interesting differences are in the domain logic: state machines, cross-service reads, event publishing, and a two-pronged expiration strategy — lazy expire-on-read for responsiveness plus a background reaper for timeliness.
 
 ---
 
@@ -142,7 +142,7 @@ Three things to call out:
 
 ### Creating a Reservation
 
-The `CreateReservation` method enforces all the business rules:
+The `CreateReservation` method enforces all the business rules. The interesting part is the order of operations — we decrement availability **before** creating the reservation row, not after. The next section (_The TOCTOU trap_) explains why.
 
 ```go
 func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.UUID) (*model.Reservation, error) {
@@ -160,37 +160,38 @@ func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.
         return nil, model.ErrMaxReservations
     }
 
-    // Rule 2: check book availability via the catalog service (sync gRPC call)
-    book, err := s.catalog.GetBook(ctx, &catalogv1.GetBookRequest{Id: bookID.String()})
-    if err != nil {
-        return nil, fmt.Errorf("check book availability: %w", err)
-    }
-    if book.AvailableCopies <= 0 {
-        return nil, model.ErrNoAvailableCopies
+    // Rule 2: ask catalog to atomically decrement available_copies. Catalog's
+    // guarded UPDATE (WHERE available_copies + ? >= 0) is the single source
+    // of truth for "is a copy available?" — no in-service pre-check.
+    if _, err := s.catalog.UpdateAvailability(ctx, &catalogv1.UpdateAvailabilityRequest{
+        Id:    bookID.String(),
+        Delta: -1,
+    }); err != nil {
+        if st, ok := status.FromError(err); ok && st.Code() == codes.FailedPrecondition {
+            return nil, model.ErrNoAvailableCopies
+        }
+        return nil, fmt.Errorf("reserve availability: %w", err)
     }
 
-    // Create the reservation
+    // Create the reservation row. If this fails we must put the copy back
+    // or catalog's counter drifts permanently below the real availability.
     now := time.Now()
     res := &model.Reservation{
-        UserID:     userID,
-        BookID:     bookID,
-        Status:     model.StatusActive,
-        ReservedAt: now,
-        DueAt:      now.Add(loanDuration), // 14 days
+        UserID: userID, BookID: bookID, Status: model.StatusActive,
+        ReservedAt: now, DueAt: now.Add(loanDuration), // 14 days
     }
     created, err := s.repo.Create(ctx, res)
     if err != nil {
+        if _, rollbackErr := s.catalog.UpdateAvailability(ctx, &catalogv1.UpdateAvailabilityRequest{
+            Id: bookID.String(), Delta: 1,
+        }); rollbackErr != nil {
+            slog.ErrorContext(ctx, "failed to compensate availability", ...)
+        }
         return nil, fmt.Errorf("create reservation: %w", err)
     }
 
     // Publish event (fire and log on failure)
-    if err := s.publisher.Publish(ctx, ReservationEvent{
-        Type:          "reservation.created",
-        ReservationID: created.ID.String(),
-        UserID:        userID.String(),
-        BookID:        bookID.String(),
-        Timestamp:     now,
-    }); err != nil {
+    if err := s.publisher.Publish(ctx, ReservationEvent{ ... }); err != nil {
         slog.ErrorContext(ctx, "failed to publish event", ...)
     }
 
@@ -201,6 +202,30 @@ func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.
 The user ID comes from the context via `pkgauth.UserIDFromContext`. The auth middleware (a gRPC interceptor in this case) validates the JWT token and injects the user ID into the context before the handler runs. This is the same pattern the gateway uses -- extract auth info from the context, not from function parameters.
 
 The loan duration is a package-level constant: `const loanDuration = 14 * 24 * time.Hour`. This is idiomatic Go -- constants for configuration that does not change at runtime. If this needed to be configurable per environment, it would move to a constructor parameter (like `maxActive`).
+
+### The TOCTOU trap (and why we decrement first)
+
+An earlier version of `CreateReservation` looked natural:
+
+```go
+book, _ := s.catalog.GetBook(ctx, ...)
+if book.AvailableCopies <= 0 {
+    return nil, model.ErrNoAvailableCopies
+}
+// ...create reservation, then later somebody decrements availability...
+```
+
+It is also **wrong** under concurrency. This is a textbook [Time-Of-Check-to-Time-Of-Use][toctou] bug: two requests for the last copy of a book call `GetBook` in parallel, both see `AvailableCopies == 1`, both pass the guard, both create reservations. The catalog ends up with `available_copies = -1` or, worse, two users hold the same physical copy.
+
+The fix flips the flow so that the **database** is the gate, not the service:
+
+1. `catalog.UpdateAvailability(book, -1)` runs a guarded `UPDATE` that refuses to go below zero (`WHERE available_copies + ? >= 0`). PostgreSQL's row-level locking during `UPDATE` serialises the two racing decrements — one wins, the other gets zero rows affected and returns `FailedPrecondition`.
+2. Only after the decrement succeeds do we create the reservation row.
+3. If the reservation insert then fails (DB down, constraint violation, context cancelled), we compensate with `UpdateAvailability(+1)` so catalog's counter does not drift. The compensation is best-effort — if it also fails, the expiration reaper (see _Expiring reservations_) provides a backstop, since an unpaired decrement will eventually be reconciled when other reservations expire and the numbers converge.
+
+This pattern is sometimes called "optimistic decrement with compensation" and is the pragmatic middle ground between a full two-phase commit (overkill here) and a distributed saga (useful when the workflow has more than two steps). The underlying principle — *let the database be the arbiter, not the application* — applies to any scarce-resource allocation: seat booking, inventory reservation, rate-limit token issuance.
+
+[toctou]: https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use
 
 ### Returning a Book
 
@@ -251,44 +276,64 @@ func (s *ReservationService) ReturnBook(ctx context.Context, reservationID uuid.
 
 The ownership check (`res.UserID != userID`) is critical. Without it, any authenticated user could return anyone's reservation. This is a common security concern in multi-tenant systems -- always verify that the requesting user owns the resource they are acting on.
 
-### Expiration on Read
+### Expiring Reservations: Read Path vs. Background Reaper
 
-The expiration logic is interesting because there is no background worker:
+A reservation becomes *logically* expired the moment `time.Now()` passes `DueAt`, but the database row still says `status = 'active'` until something updates it. Two code paths do that work, and they exist for different reasons.
+
+**Path 1: expire-on-read.** `GetReservation` and `ListUserReservations` call `expireIfDue` on every row they return, which flips any overdue row to `expired` before handing it back:
 
 ```go
 func (s *ReservationService) expireIfDue(ctx context.Context, r *model.Reservation) {
     if r.Status != model.StatusActive || time.Now().Before(r.DueAt) {
         return
     }
+    s.expireReservation(ctx, r)
+}
+```
 
-    r.Status = model.StatusExpired
-    if _, err := s.repo.Update(ctx, r); err != nil {
-        slog.ErrorContext(ctx, "failed to expire reservation", ...)
-        r.Status = model.StatusActive // revert in-memory change
+This is **lazy evaluation**. It keeps what the user sees consistent with what the clock says: users never observe their own overdue reservations still listed as active, because the act of reading fixes the row on the way out.
+
+**Path 2: the reaper.** The problem with _only_ doing expire-on-read is that if nobody reads a reservation — the user stopped logging in, the account was deleted, the request never happens — the row stays `active` forever. Worse, the catalog's `available_copies` never gets incremented back, so the book is permanently marked as held. To close this gap the reservation service runs a background goroutine that periodically finds and expires overdue rows:
+
+```go
+func (s *ReservationService) RunExpirationReaper(ctx context.Context, interval time.Duration) {
+    ticker := time.NewTicker(interval)
+    defer ticker.Stop()
+    for {
+        select {
+        case <-ctx.Done():
+            return
+        case <-ticker.C:
+            s.ReapExpired(ctx)
+        }
+    }
+}
+
+func (s *ReservationService) ReapExpired(ctx context.Context) {
+    due, err := s.repo.ListDueForExpiration(ctx, time.Now())
+    if err != nil {
+        slog.ErrorContext(ctx, "reaper: list due reservations failed", "error", err)
         return
     }
-
-    // Publish reservation.expired event
-    if err := s.publisher.Publish(ctx, ReservationEvent{
-        Type:          "reservation.expired",
-        // ...
-    }); err != nil {
-        slog.ErrorContext(ctx, "failed to publish event", ...)
+    for _, r := range due {
+        s.expireReservation(ctx, r)
     }
 }
 ```
 
-This method is called during reads -- `GetReservation` and `ListUserReservations` both call it. When you fetch a reservation, the service checks whether its due date has passed. If so, it transitions the status to `expired` and publishes the event.
+Both paths route through the same `expireReservation` helper, which flips the row, saves it, and publishes the `reservation.expired` event that the catalog's consumer picks up to increment availability. Keeping the write logic in one place means the two paths cannot disagree about what "expired" means or forget to publish.
 
-This is sometimes called **lazy evaluation** or **expiration on read**. The advantages are:
+The reaper is wired into `cmd/main.go` as a goroutine that shares the service's signal-aware context, so it stops cleanly on `SIGTERM`:
 
-- No background goroutine or cron job to manage
-- No race conditions between a background worker and request handlers
-- Expiration only happens when someone actually looks at the data
+```go
+go reservationSvc.RunExpirationReaper(ctx, reaperInterval)
+```
 
-The disadvantage is that a reservation might be logically expired but still show as `active` in the database until someone reads it. For a library system, this is fine -- the worst case is that the availability count is off by one for a brief period. For a financial system, you would need a background process.
+`REAPER_INTERVAL` defaults to 5 minutes. That is a deliberate tradeoff: the window during which a book can be stale on the catalog is roughly (`DueAt` to `DueAt + 5 minutes`), which is plenty for a library but would not suffice for, say, seat inventory on a flight. Tune it via the env var if you need tighter bounds — the cost is one full-table scan for active rows per tick.
 
-Note the defensive programming: if the database update fails, the method reverts the in-memory status change (`r.Status = model.StatusActive`) so the caller does not see stale data.
+**Why both, not just the reaper?** The reaper fires on a timer, so between ticks a user could reload their reservations page and briefly see an overdue row still listed as active. That is a small but visible inconsistency that expire-on-read eliminates without needing a ≤ 1-second timer. The two mechanisms are complementary: read-triggered for user-facing freshness, time-triggered for catalog reconciliation and unread rows.
+
+Note the defensive programming in `expireReservation`: if the database update fails, the method reverts the in-memory status change so the caller does not see stale data. And because the reaper runs with a background context that has no user attached, the helper falls back to the reservation's own `UserID` when publishing the event.
 
 ---
 
@@ -425,9 +470,9 @@ This consistency is the payoff of a well-chosen architecture. Once you understan
 
 3. **State machine diagram.** Draw a state machine diagram for the reservation lifecycle. Include all three states and the transitions between them. What triggers each transition?
 
-4. **Race condition analysis.** Two users try to reserve the last copy of a book simultaneously. Both pass the availability check (`book.AvailableCopies > 0`). Both create reservations. The catalog ends up with `available_copies = -1`. How would you prevent this? Consider database-level locking, optimistic concurrency, or the Saga pattern.
+4. **Alternatives to decrement-then-reserve.** The main text explains why we decrement availability first and compensate on failure. What other approaches could close the same TOCTOU gap? Sketch the pros and cons of (a) a full two-phase commit across catalog and reservation, (b) a Saga pattern with explicit compensating transactions, (c) optimistic concurrency with a version column on `books`, and (d) a single cross-service transactional outbox. For each, identify a scenario where it would outperform the current design.
 
-5. **Background expiration.** Rewrite the expiration logic as a background goroutine that runs every minute and expires overdue reservations. What are the tradeoffs compared to the expiration-on-read approach?
+5. **Reaper durability.** The reaper in `RunExpirationReaper` runs in-process: if the only reservation replica crashes between ticks, overdue rows linger until it restarts. Sketch two ways to make expiration durable against crashes — (a) moving the reaper into a dedicated cron pod / Kubernetes `CronJob`, and (b) pushing expiration into PostgreSQL itself via a scheduled `UPDATE` in `pg_cron`. What are the operational tradeoffs? Consider visibility, retries, and who owns the compensation logic when the expire event fails to publish.
 
 ---
 

@@ -24,6 +24,7 @@ func fakeHandler(ctx context.Context, req interface{}) (interface{}, error) {
 }
 
 func TestInterceptor_ValidToken(t *testing.T) {
+	t.Parallel()
 	secret := "test-secret"
 	userID := uuid.New()
 	token, _ := auth.GenerateToken(userID, "user", secret, time.Hour)
@@ -43,6 +44,7 @@ func TestInterceptor_ValidToken(t *testing.T) {
 }
 
 func TestInterceptor_MissingToken(t *testing.T) {
+	t.Parallel()
 	interceptor := auth.UnaryAuthInterceptor("secret", nil)
 
 	_, err := interceptor(context.Background(), nil, &grpc.UnaryServerInfo{FullMethod: "/test.Service/Method"}, fakeHandler)
@@ -53,6 +55,7 @@ func TestInterceptor_MissingToken(t *testing.T) {
 }
 
 func TestInterceptor_InvalidToken(t *testing.T) {
+	t.Parallel()
 	interceptor := auth.UnaryAuthInterceptor("secret", nil)
 
 	md := metadata.Pairs("authorization", "Bearer invalid-token")
@@ -66,6 +69,7 @@ func TestInterceptor_InvalidToken(t *testing.T) {
 }
 
 func TestInterceptor_SkippedMethod(t *testing.T) {
+	t.Parallel()
 	skip := []string{"/test.Service/Public"}
 	interceptor := auth.UnaryAuthInterceptor("secret", skip)
 

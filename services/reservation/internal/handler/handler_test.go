@@ -45,6 +45,7 @@ func userCtx(userID uuid.UUID) context.Context {
 }
 
 func TestCreateReservation_InvalidBookID(t *testing.T) {
+	t.Parallel()
 	h := handler.NewReservationHandler(&mockService{})
 
 	_, err := h.CreateReservation(userCtx(uuid.New()), &reservationv1.CreateReservationRequest{
@@ -57,6 +58,7 @@ func TestCreateReservation_InvalidBookID(t *testing.T) {
 }
 
 func TestCreateReservation_Success(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	bookID := uuid.New()
 	resID := uuid.New()
@@ -85,6 +87,7 @@ func TestCreateReservation_Success(t *testing.T) {
 }
 
 func TestReturnBook_NotFound(t *testing.T) {
+	t.Parallel()
 	svc := &mockService{
 		returnFn: func(_ context.Context, _ uuid.UUID) (*model.Reservation, error) {
 			return nil, model.ErrReservationNotFound
@@ -102,6 +105,7 @@ func TestReturnBook_NotFound(t *testing.T) {
 }
 
 func TestListUserReservations_Success(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	now := time.Now()
 
@@ -130,6 +134,7 @@ func adminCtx(userID uuid.UUID) context.Context {
 }
 
 func TestReservationHandler_ListAllReservations_Success(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	bookID := uuid.New()
 	now := time.Now()
@@ -174,6 +179,7 @@ func TestReservationHandler_ListAllReservations_Success(t *testing.T) {
 }
 
 func TestReservationHandler_ListAllReservations_NonAdmin(t *testing.T) {
+	t.Parallel()
 	h := handler.NewReservationHandler(&mockService{})
 
 	_, err := h.ListAllReservations(userCtx(uuid.New()), &reservationv1.ListAllReservationsRequest{})

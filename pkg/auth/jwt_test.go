@@ -10,6 +10,7 @@ import (
 )
 
 func TestGenerateAndValidateToken(t *testing.T) {
+	t.Parallel()
 	secret := "test-secret-key"
 	userID := uuid.New()
 	role := "user"
@@ -35,6 +36,7 @@ func TestGenerateAndValidateToken(t *testing.T) {
 }
 
 func TestValidateToken_InvalidSecret(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	token, _ := auth.GenerateToken(userID, "user", "secret-1", time.Hour)
 
@@ -45,6 +47,7 @@ func TestValidateToken_InvalidSecret(t *testing.T) {
 }
 
 func TestValidateToken_Expired(t *testing.T) {
+	t.Parallel()
 	userID := uuid.New()
 	token, _ := auth.GenerateToken(userID, "user", "secret", -time.Hour)
 
@@ -55,6 +58,7 @@ func TestValidateToken_Expired(t *testing.T) {
 }
 
 func TestValidateToken_Malformed(t *testing.T) {
+	t.Parallel()
 	_, err := auth.ValidateToken("not.a.jwt", "secret")
 	if err == nil {
 		t.Fatal("expected error for malformed token")
