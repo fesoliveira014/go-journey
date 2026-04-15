@@ -115,16 +115,16 @@ func (r *UserRepository) GetByOAuthID(ctx context.Context, provider, oauthID str
 The `isDuplicateKeyError` helper detects PostgreSQL unique constraint violations:
 
 ```go
+// isDuplicateKeyError reports whether err wraps a PostgreSQL unique-violation
+// (SQLSTATE 23505). It checks the typed *pgconn.PgError code rather than
+// matching the error message, which is not a stable API.
 func isDuplicateKeyError(err error) bool {
-    if err == nil {
-        return false
-    }
-    msg := err.Error()
-    return strings.Contains(msg, "duplicate key") || strings.Contains(msg, "SQLSTATE 23505")
+    var pgErr *pgconn.PgError
+    return errors.As(err, &pgErr) && pgErr.Code == "23505"
 }
 ```
 
-This is the same string-matching pattern from Chapter 2. GORM does not expose structured database errors, so we check the error message for PostgreSQL's unique violation code (23505). In the `Create` method, this maps to `model.ErrDuplicateEmail`, which the handler translates to gRPC `AlreadyExists`.
+This is the same typed-error pattern we introduced in Chapter 2: GORM returns the raw `pgx` driver error, so we use `errors.As` to unwrap a `*pgconn.PgError` and check `Code == "23505"` directly. That sidesteps the fragility of string-matching the message (the wording is locale-dependent and not part of any stable API). In the `Create` method this maps to `model.ErrDuplicateEmail`, which the handler translates to gRPC `AlreadyExists`.
 
 ---
 
