@@ -2,7 +2,7 @@
 
 This section is the payoff for everything in Chapter 13. The Terraform modules are written, the production Kustomize overlay is configured, and the ECR repositories, RDS cluster, and MSK broker are defined in code. Now you actually run it.
 
-**This costs real money.** The infrastructure spun up here — an EKS cluster with managed node groups, RDS instances, an MSK broker, a NAT Gateway, and an Application Load Balancer — runs roughly $8–15 per day. Tear everything down with `terraform destroy` when you are finished. The teardown section at the end of this chapter shows the exact steps.
+**This costs real money.** The infrastructure spun up here—an EKS cluster with managed node groups, RDS instances, an MSK broker, a NAT Gateway, and an Application Load Balancer—runs roughly $8–15 per day. Tear everything down with `terraform destroy` when you are finished. The teardown section at the end of this chapter shows the exact steps.
 
 If you prefer not to deploy, the verification and troubleshooting sections describe the expected outputs at each step so you can follow along without incurring costs.
 
@@ -30,7 +30,7 @@ Terraform has been successfully initialized!
 terraform plan -out=tfplan
 ```
 
-Terraform will print a summary of every resource it intends to create. On first apply, this is a long list — VPC, subnets, security groups, IAM roles, EKS cluster, node group, RDS cluster, MSK cluster, ECR repositories, and the ALB controller Helm release. Review the summary. If anything looks unexpected, stop here.
+Terraform will print a summary of every resource it intends to create. On first apply, this is a long list—VPC, subnets, security groups, IAM roles, EKS cluster, node group, RDS cluster, MSK cluster, ECR repositories, and the ALB controller Helm release. Review the summary. If anything looks unexpected, stop here.
 
 **Apply:**
 
@@ -53,13 +53,13 @@ ecr_repository_urls = {
 cluster_name             = "library-system"
 msk_bootstrap_brokers    = "b-1.xxxxx.kafka.us-east-1.amazonaws.com:9092,..."
 rds_endpoints            = {
-  "auth"        = "library-system-auth.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
-  "catalog"     = "library-system-catalog.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
-  "reservation" = "library-system-reservation.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
+  "auth"        = "library-auth.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
+  "catalog"     = "library-catalog.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
+  "reservation" = "library-reservation.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
 }
 ```
 
-Save these output values — you will need them in the next steps. You can always retrieve them later with `terraform output`.
+Save these output values—you will need them in the next steps. You can always retrieve them later with `terraform output`.
 
 ---
 
@@ -106,11 +106,11 @@ You should see entries for `library/gateway`, `library/auth`, `library/catalog`,
 
 ```bash
 aws rds describe-db-instances \
-  --query 'DBInstances[?starts_with(DBInstanceIdentifier,`library-system`)].{Identifier:DBInstanceIdentifier,Status:DBInstanceStatus,Endpoint:Endpoint.Address}' \
+  --query 'DBInstances[?starts_with(DBInstanceIdentifier,`library-`)].{Identifier:DBInstanceIdentifier,Status:DBInstanceStatus,Endpoint:Endpoint.Address}' \
   --output table
 ```
 
-You should see three rows — one per service database — with `Status` reading `available`.
+You should see three rows—one per service database—with `Status` reading `available`.
 
 **MSK cluster:**
 
@@ -126,11 +126,36 @@ The `State` column should read `ACTIVE`.
 
 ## Retrieve RDS Credentials
 
-Terraform stores the RDS credentials in Secrets Manager automatically (covered in section 13.4). Retrieve it now — you will need it to create the per-service database users and to populate the Kubernetes secrets in the production overlay.
+Because section 13.4 sets `manage_master_user_password = true` on each `aws_db_instance`, Terraform does not manage the passwords itself—RDS generates them and stores them in AWS Secrets Manager. You get one secret per database (three in total), each named by AWS using the pattern `rds!db-<db-instance-identifier>-<random-suffix>`. The random suffix is part of the ARN and prevents enumeration; the Terraform output `rds_secret_arns` from section 13.4 gives you the exact ARNs.
+
+List the RDS-managed secrets in the account:
+
+```bash
+aws secretsmanager list-secrets \
+  --filters Key=name,Values=rds!db \
+  --query 'SecretList[*].{Name:Name,ARN:ARN}' \
+  --output table
+```
+
+Expected output (one row per database):
+
+```
+------------------------------------------------------------------------------------------
+|                                      ListSecrets                                       |
++-----------------------------------------------+----------------------------------------+
+|  ARN                                          |  Name                                  |
++-----------------------------------------------+----------------------------------------+
+|  arn:aws:secretsmanager:...:secret:rds!db-... |  rds!db-library-auth-AbCdEf            |
+|  arn:aws:secretsmanager:...:secret:rds!db-... |  rds!db-library-catalog-GhIjKl         |
+|  arn:aws:secretsmanager:...:secret:rds!db-... |  rds!db-library-reservation-MnOpQr     |
++-----------------------------------------------+----------------------------------------+
+```
+
+Retrieve a specific password—for example, the catalog database—by secret name:
 
 ```bash
 aws secretsmanager get-secret-value \
-  --secret-id library/rds/master \
+  --secret-id "rds!db-library-catalog-GhIjKl" \
   --query SecretString \
   --output text | jq .
 ```
@@ -139,16 +164,12 @@ Expected output:
 
 ```json
 {
-  "username": "library_master",
-  "password": "GENERATED_PASSWORD",
-  "engine": "postgres",
-  "host": "library-cluster.cluster-xxxxxxxxxxxx.us-east-1.rds.amazonaws.com",
-  "port": 5432,
-  "dbname": "library"
+  "username": "postgres",
+  "password": "GENERATED_PASSWORD"
 }
 ```
 
-Use these values to update `deploy/k8s/overlays/production/secrets.env` before pushing to ECR and deploying. Do not commit the password to git — the overlay reads it from a local file that is listed in `.gitignore`.
+This manual retrieval is only for verifying connectivity or for one-off debugging. Chapter 14 removes it entirely: the External Secrets Operator watches these ARNs and creates the corresponding Kubernetes Secrets automatically, so the production overlay's `secretGenerator` placeholder values are replaced by live credentials fetched at reconciliation time (section 14.3). For now—to apply the Kustomize overlay before Chapter 14 is in place—populate the production overlay's `secretGenerator` block in `deploy/k8s/overlays/production/kustomization.yaml` with the retrieved values, then apply. Do not commit real passwords to git; the placeholder approach is a temporary measure until ESO takes over.
 
 ---
 
@@ -185,7 +206,7 @@ for svc in "${SERVICES[@]}"; do
 done
 ```
 
-Each push uploads the image layers to the corresponding ECR repository. Layers are deduplicated across pushes — common base layers (the distroless runtime, the Go standard library) are only uploaded once. On a fast connection this completes in under two minutes.
+Each push uploads the image layers to the corresponding ECR repository. Layers are deduplicated across pushes—common base layers (the distroless runtime, the Go standard library) are only uploaded once. On a fast connection this completes in under two minutes.
 
 ---
 
@@ -222,7 +243,7 @@ service/gateway created
 ingress.networking.k8s.io/gateway created
 ```
 
-Note that the production overlay does not deploy Kafka or PostgreSQL as in-cluster workloads — those are replaced by MSK and RDS. The `infra` namespace is created for consistency but remains empty in production.
+Note that the production overlay does not deploy Kafka or PostgreSQL as in-cluster workloads—those are replaced by MSK and RDS. The `infra` namespace is created for consistency but remains empty in production.
 
 **Watch the pods come up:**
 
@@ -230,7 +251,7 @@ Note that the production overlay does not deploy Kafka or PostgreSQL as in-clust
 kubectl get pods -n library --watch
 ```
 
-The ALB controller provisions the load balancer asynchronously after the Ingress resource is created — this can take 2–3 minutes. The pods themselves should reach `Running` within 60 seconds.
+The ALB controller provisions the load balancer asynchronously after the Ingress resource is created—this can take 2–3 minutes. The pods themselves should reach `Running` within 60 seconds.
 
 ---
 
@@ -299,7 +320,7 @@ curl -s -X POST "http://${ALB}/api/catalog/books" \
   | jq .
 ```
 
-The response includes the assigned `id`. Then verify it is indexed in search — this exercises the full MSK event path:
+The response includes the assigned `id`. Then verify it is indexed in search—this exercises the full MSK event path:
 
 ```bash
 sleep 3  # allow the Kafka consumer to process the event
@@ -332,7 +353,7 @@ kubectl describe pod <pod-name> -n library
 kubectl describe svc <service-name> -n library
 ```
 
-If a Service shows no `Endpoints` in `kubectl describe svc`, no pod is matching its label selector — a common source of 502 errors from the ALB[^1].
+If a Service shows no `Endpoints` in `kubectl describe svc`, no pod is matching its label selector—a common source of 502 errors from the ALB[^1].
 
 ---
 
@@ -401,7 +422,7 @@ Delete any listed volumes manually:
 aws ec2 delete-volume --volume-id <volume-id>
 ```
 
-An orphaned volume costs roughly $0.08 per GB per month.[^2] It is small but it accumulates silently — always check.
+An orphaned volume costs roughly $0.08 per GB per month.[^2] It is small but it accumulates silently—always check.
 
 ---
 
@@ -424,7 +445,7 @@ If you are following along without running the infrastructure, here is a summary
 
 ## What's next
 
-The library system is running on AWS with managed database, message broker, and load balancer infrastructure. Chapter 14 hardens the deployment for production: configuring DNS with Route 53 and TLS with ACM, managing secrets with External Secrets Operator, and encrypting Kafka traffic. None of these changes touch application code — everything lives in Terraform and the production Kustomize overlay.
+The library system is running on AWS with managed database, message broker, and load balancer infrastructure. Chapter 14 hardens the deployment for production: configuring DNS with Route 53 and TLS with ACM, managing secrets with External Secrets Operator, and encrypting Kafka traffic. None of these changes touch application code—everything lives in Terraform and the production Kustomize overlay.
 
 ---
 

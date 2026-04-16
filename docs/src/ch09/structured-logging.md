@@ -156,7 +156,7 @@ In Spring with Sleuth/Micrometer Tracing, the pattern is:
 2. The Logback pattern includes `%X{traceId} %X{spanId}`
 3. Every log call on that thread automatically includes the fields
 
-Go does not have thread-locals---goroutines are not threads, and context is explicit. Instead:
+Go does not have thread-locals—goroutines are not threads, and context is explicit. Instead:
 
 1. The `otelhttp`/`otelgrpc` middleware stores the span in `context.Context`
 2. The context is passed explicitly through the call chain: `handler(ctx) → service(ctx) → repo(ctx)`

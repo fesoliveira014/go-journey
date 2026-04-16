@@ -1,10 +1,10 @@
 # 12.5 Kustomize Environments
 
-At the end of sections 12.3 and 12.4, the project has roughly thirty manifest files — Deployments, Services, ConfigMaps, StatefulSets, PersistentVolumeClaims, Ingress rules — organized across three namespaces. They work correctly in kind. The problem appears the moment you think about EKS.
+At the end of sections 12.3 and 12.4, the project has roughly thirty manifest files—Deployments, Services, ConfigMaps, StatefulSets, PersistentVolumeClaims, Ingress rules—organized across three namespaces. They work correctly in kind. The problem appears the moment you think about EKS.
 
 In a real AWS cluster, secrets must come from AWS Secrets Manager or Kubernetes Secrets populated by the External Secrets Operator, not from literal values in YAML files. Resource limits should be larger to reflect actual capacity. Critical services should run as at least two replicas. Image references should carry explicit tags and always pull from ECR. None of those changes apply to your local kind cluster, where lightweight single-replica pods and embedded credentials are exactly right.
 
-The naive solution is to copy the entire `deploy/k8s` directory into a second `deploy/k8s-production` tree and edit the differences. That works until both directories contain the same change — a new environment variable, a renamed label, a resource limit adjustment — and you have to apply it in two places. With five services across three namespaces and two environments, divergence becomes inevitable.
+The naive solution is to copy the entire `deploy/k8s` directory into a second `deploy/k8s-production` tree and edit the differences. That works until both directories contain the same change—a new environment variable, a renamed label, a resource limit adjustment—and you have to apply it in two places. With five services across three namespaces and two environments, divergence becomes inevitable.
 
 Kustomize solves this by separating what is shared from what varies.
 
@@ -16,11 +16,11 @@ Kustomize is a configuration management tool built directly into `kubectl` since
 
 The core model is simple:
 
-- A **base** contains the canonical manifest files — Deployments, Services, StatefulSets, and so on. These describe the application without any environment-specific details.
+- A **base** contains the canonical manifest files—Deployments, Services, StatefulSets, and so on. These describe the application without any environment-specific details.
 - An **overlay** references the base and applies patches, replacements, and generators on top of it. Each environment gets its own overlay directory.
 - `kubectl apply -k <overlay>` renders the base plus the overlay's patches into a single manifest stream and applies it.
 
-Every overlay produces complete, valid Kubernetes YAML—no intermediate format, no partial files. Kustomize is not a templating engine — there are no `{{ }}` placeholders and no values files. Instead, it uses structured JSON patch operations and strategic merge patches, both of which understand the shape of Kubernetes objects. A strategic merge patch for a Deployment, for example, knows to merge containers by name rather than replace the entire list.
+Every overlay produces complete, valid Kubernetes YAML—no intermediate format, no partial files. Kustomize is not a templating engine—there are no `{{ }}` placeholders and no values files. Instead, it uses structured JSON patch operations and strategic merge patches, both of which understand the shape of Kubernetes objects. A strategic merge patch for a Deployment, for example, knows to merge containers by name rather than replace the entire list.
 
 ---
 
@@ -79,7 +79,7 @@ deploy/k8s/
         └── kustomization.yaml
 ```
 
-The manifest files in `base/` are the ones you wrote in sections 12.3 and 12.4, moved into this structure. They contain no environment-specific values — no credentials, no replica counts, no resource limits that differ between environments. Those are the overlay's responsibility.
+The manifest files in `base/` are the ones you wrote in sections 12.3 and 12.4, moved into this structure. They contain no environment-specific values—no credentials, no replica counts, no resource limits that differ between environments. Those are the overlay's responsibility.
 
 ---
 
@@ -164,13 +164,13 @@ generatorOptions:
 
 ### `secretGenerator`
 
-`secretGenerator` instructs Kustomize to create Secret objects from the provided literals. Each entry in `literals` becomes a key-value pair in the Secret's `data` field. The values are base64-encoded by Kustomize automatically — you write the plaintext, the rendered YAML contains the encoded form.
+`secretGenerator` instructs Kustomize to create Secret objects from the provided literals. Each entry in `literals` becomes a key-value pair in the Secret's `data` field. The values are base64-encoded by Kustomize automatically—you write the plaintext, the rendered YAML contains the encoded form.
 
-The key names — `JWT_SECRET`, `POSTGRES_PASSWORD`, `MEILI_MASTER_KEY` — must match exactly what the Deployment manifests reference in their `secretKeyRef.key` fields.
+The key names—`JWT_SECRET`, `POSTGRES_PASSWORD`, `MEILI_MASTER_KEY`—must match exactly what the Deployment manifests reference in their `secretKeyRef.key` fields.
 
-Several secrets appear twice in the generator: once for the `library` namespace and once for the `data` namespace. This is required because Kubernetes Secrets are namespace-scoped — a Secret in `data` is invisible to a Pod in `library` and vice versa. The application service Deployments (in `library`) read passwords at runtime via `secretKeyRef`, while the PostgreSQL StatefulSets (in `data`) need the same values to initialize the database. Both copies must exist.
+Several secrets appear twice in the generator: once for the `library` namespace and once for the `data` namespace. This is required because Kubernetes Secrets are namespace-scoped—a Secret in `data` is invisible to a Pod in `library` and vice versa. The application service Deployments (in `library`) read passwords at runtime via `secretKeyRef`, while the PostgreSQL StatefulSets (in `data`) need the same values to initialize the database. Both copies must exist.
 
-By default, Kustomize appends a content hash to each generated Secret's name — `postgres-catalog-secret-8m6fk2t` instead of `postgres-catalog-secret`. This is intentional and useful: when the secret content changes, the hash changes, and any Deployment that references the secret by name (which now includes the new hash) triggers an automatic pod rollout. Without the hash, updating a Secret's value does not restart pods, so running pods continue using the old value until they are manually restarted.
+By default, Kustomize appends a content hash to each generated Secret's name—`postgres-catalog-secret-8m6fk2t` instead of `postgres-catalog-secret`. This is intentional and useful: when the secret content changes, the hash changes, and any Deployment that references the secret by name (which now includes the new hash) triggers an automatic pod rollout. Without the hash, updating a Secret's value does not restart pods, so running pods continue using the old value until they are manually restarted.
 
 ### `disableNameSuffixHash: true`
 
@@ -185,7 +185,7 @@ env:
         key: POSTGRES_PASSWORD
 ```
 
-If the name changes every time the secret content changes, `kubectl get secret postgres-catalog-secret` stops working; you must remember the hashed name. Kustomize does rewrite `secretKeyRef.name` references automatically in pods it manages, but ad-hoc debugging becomes harder. During active development — where you change a secret value frequently — this friction is counterproductive.
+If the name changes every time the secret content changes, `kubectl get secret postgres-catalog-secret` stops working; you must remember the hashed name. Kustomize does rewrite `secretKeyRef.name` references automatically in pods it manages, but ad-hoc debugging becomes harder. During active development—where you change a secret value frequently—this friction is counterproductive.
 
 `disableNameSuffixHash: true` keeps the name predictable. For production, consider leaving the hash enabled and using `replacements` to propagate the generated name into the Deployment specs automatically. That is a Chapter 13 topic.
 
@@ -199,7 +199,7 @@ To preview what Kustomize will render without applying it, use `kubectl kustomiz
 kubectl kustomize deploy/k8s/overlays/local
 ```
 
-This prints the full rendered YAML to stdout — every resource from the base plus the generated Secrets. Review it to confirm the secrets are present and the manifests look correct before touching the cluster.
+This prints the full rendered YAML to stdout—every resource from the base plus the generated Secrets. Review it to confirm the secrets are present and the manifests look correct before touching the cluster.
 
 To apply everything in one command:
 
@@ -270,12 +270,12 @@ resources:
 
 Each commented section maps to a concrete problem:
 
-- **External secrets** — credentials must not live in Git. The External Secrets Operator (ESO) reads from AWS Secrets Manager and creates native Kubernetes Secrets. Chapter 14 sets this up.
-- **Resource patches** — production pods need real CPU and memory limits. A strategic merge patch on a Deployment's `resources` block adds these without duplicating the whole manifest.
-- **Replica patches** — a JSON patch on `spec.replicas` sets each service's replica count independently.
-- **imagePullPolicy** — `IfNotPresent` is correct for kind (which loads images locally); `Always` is correct for ECR (which holds canonical tagged releases).
-- **RDS endpoint** — managed PostgreSQL replaces the in-cluster StatefulSet in production. A patch replaces the Service with an ExternalName Service pointing to the RDS endpoint.
-- **Image references** — the `images` block rewrites image names and tags without touching the base manifests. All Deployments referencing `library/catalog` will use the ECR URI and the release tag.
+- **External secrets**—credentials must not live in Git. The External Secrets Operator (ESO) reads from AWS Secrets Manager and creates native Kubernetes Secrets. Chapter 14 sets this up.
+- **Resource patches**—production pods need real CPU and memory limits. A strategic merge patch on a Deployment's `resources` block adds these without duplicating the whole manifest.
+- **Replica patches**—a JSON patch on `spec.replicas` sets each service's replica count independently.
+- **imagePullPolicy**—`IfNotPresent` is correct for kind (which loads images locally); `Always` is correct for ECR (which holds canonical tagged releases).
+- **RDS endpoint**—managed PostgreSQL replaces the in-cluster StatefulSet in production. A patch replaces the Service with an ExternalName Service pointing to the RDS endpoint.
+- **Image references**—the `images` block rewrites image names and tags without touching the base manifests. All Deployments referencing `library/catalog` will use the ECR URI and the release tag.
 
 ---
 
@@ -287,7 +287,7 @@ The overlay model introduces four Kustomize primitives worth knowing explicitly.
 
 **Strategic merge patches** apply a partial YAML document on top of an existing resource, using the Kubernetes API schema to decide how to merge fields. A patch for a Deployment that specifies only `spec.replicas: 3` leaves all other fields unchanged. A patch that specifies a container by name merges into that container without affecting others. This is the most readable patching mechanism for simple changes.
 
-**JSON Patch (RFC 6902) operations** use `add`, `remove`, `replace`, `move`, and `copy` verbs to modify resources. They address fields by JSON pointer path (`/spec/template/spec/containers/0/imagePullPolicy`). Use these when a strategic merge patch cannot express what you need — for example, changing a single element in a list identified by index.
+**JSON Patch (RFC 6902) operations** use `add`, `remove`, `replace`, `move`, and `copy` verbs to modify resources. They address fields by JSON pointer path (`/spec/template/spec/containers/0/imagePullPolicy`). Use these when a strategic merge patch cannot express what you need—for example, changing a single element in a list identified by index.
 
 **`secretGenerator` and `configMapGenerator`** create Kubernetes Secrets and ConfigMaps from literal values, files, or environment files. They keep credential values out of base manifests and provide the hash-suffix rollout mechanism described earlier.
 
@@ -303,7 +303,7 @@ Two additional primitives worth knowing, though not shown in either overlay:
 
 The manifests written in sections 12.3 and 12.4 live unchanged in `deploy/k8s/base/`. The local overlay adds generated Secrets and applies via `kubectl apply -k deploy/k8s/overlays/local`. The production overlay is a documented stub that Chapter 13 fills in with real patches, external secrets, and ECR image references.
 
-The important property is that environment differences are **explicit and isolated**. Looking at `overlays/local/kustomization.yaml` tells you exactly how local differs from the base. Looking at `overlays/production/kustomization.yaml` tells you exactly how production differs. The base contains no environment-specific assumptions. Adding a third environment — staging, or a CI-specific overlay — means adding one directory and one file without touching anything that already exists.
+The important property is that environment differences are **explicit and isolated**. Looking at `overlays/local/kustomization.yaml` tells you exactly how local differs from the base. Looking at `overlays/production/kustomization.yaml` tells you exactly how production differs. The base contains no environment-specific assumptions. Adding a third environment—staging, or a CI-specific overlay—means adding one directory and one file without touching anything that already exists.
 
 ---
 

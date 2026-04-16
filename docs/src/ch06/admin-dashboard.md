@@ -53,7 +53,7 @@ func (r *UserRepository) List(ctx context.Context) ([]*model.User, error) {
 }
 ```
 
-Nothing surprising here — `Find` without a `Where` clause returns all records. We order by `created_at DESC` so the most recently registered users appear first.
+Nothing surprising here—`Find` without a `Where` clause returns all records. We order by `created_at DESC` so the most recently registered users appear first.
 
 ### Service: `ListUsers()`
 
@@ -232,7 +232,7 @@ func (s *ReservationService) ListAllReservations(ctx context.Context) ([]Reserva
 }
 ```
 
-This code iterates over every reservation and makes two gRPC calls per reservation: one to the Catalog Service for the book title, one to the Auth Service for the user email. This is an **N+1 problem** — if there are 100 reservations, this makes 200 gRPC calls.
+This code iterates over every reservation and makes two gRPC calls per reservation: one to the Catalog Service for the book title, one to the Auth Service for the user email. This is an **N+1 problem**—if there are 100 reservations, this makes 200 gRPC calls.
 
 **Why is this acceptable here?**
 
@@ -347,7 +347,7 @@ mux.HandleFunc("GET /admin/reservations", srv.AdminReservationList)
 
 ### Templates
 
-The dashboard landing page (`admin_dashboard.html`) provides card-style navigation to the three admin sections — users, reservations, and book management:
+The dashboard landing page (`admin_dashboard.html`) provides card-style navigation to the three admin sections—users, reservations, and book management:
 
 ```html
 {{define "content"}}
@@ -363,7 +363,7 @@ The dashboard landing page (`admin_dashboard.html`) provides card-style navigati
 {{end}}
 ```
 
-The users template (`admin_users.html`) renders a table with email, name, role, and join date. The reservations template (`admin_reservations.html`) shows user email, book title, status, reserved date, and returned date — using the denormalized fields from `ReservationDetail`.
+The users template (`admin_users.html`) renders a table with email, name, role, and join date. The reservations template (`admin_reservations.html`) shows user email, book title, status, reserved date, and returned date—using the denormalized fields from `ReservationDetail`.
 
 ### Navigation Update
 

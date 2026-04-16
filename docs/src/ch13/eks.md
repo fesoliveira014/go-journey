@@ -2,7 +2,7 @@
 
 The Terraform foundation from the previous section gave you a VPC with public and private subnets, an Internet Gateway, a NAT Gateway, and route tables. That is the network. What runs on top of it is a Kubernetes cluster, specifically Amazon EKS.
 
-EKS is AWS's managed Kubernetes service. "Managed" means AWS owns and operates the control plane: the API server, etcd, the scheduler, and the controller manager. You do not provision those machines, you do not patch them, and you do not pay for them individually — the EKS cluster fee covers all of it. What you do provide are the **worker nodes** where your workloads run. You also configure how the cluster integrates with the rest of AWS: IAM roles for service accounts, VPC networking, add-ons for storage and DNS, and the load balancer controller that turns Kubernetes Ingress resources into real AWS Application Load Balancers.
+EKS is AWS's managed Kubernetes service. "Managed" means AWS owns and operates the control plane: the API server, etcd, the scheduler, and the controller manager. You do not provision those machines, you do not patch them, and you do not pay for them individually—the EKS cluster fee covers all of it. What you do provide are the **worker nodes** where your workloads run. You also configure how the cluster integrates with the rest of AWS: IAM roles for service accounts, VPC networking, add-ons for storage and DNS, and the load balancer controller that turns Kubernetes Ingress resources into real AWS Application Load Balancers.
 
 This section builds all of that.
 
@@ -45,7 +45,7 @@ graph TD
     PODS -.->|assume via IRSA| ROLE2
 ```
 
-The control plane sits entirely inside AWS infrastructure — you never SSH into an API server. Your VPC hosts a **managed node group**: EC2 instances that EKS provisions, registers with the control plane, and patches on your behalf. The OIDC provider is the bridge between Kubernetes service accounts and IAM roles; this mechanism, called IRSA (IAM Roles for Service Accounts), lets individual pods carry scoped AWS permissions without granting broad access to the entire node.
+The control plane sits entirely inside AWS infrastructure—you never SSH into an API server. Your VPC hosts a **managed node group**: EC2 instances that EKS provisions, registers with the control plane, and patches on your behalf. The OIDC provider is the bridge between Kubernetes service accounts and IAM roles; this mechanism, called IRSA (IAM Roles for Service Accounts), lets individual pods carry scoped AWS permissions without granting broad access to the entire node.
 
 ---
 
@@ -120,15 +120,15 @@ module "eks" {
 
 **`subnet_ids = module.vpc.private_subnets`** places worker nodes in private subnets. They cannot be reached directly from the internet. Inbound traffic always flows through the load balancer; outbound traffic uses the NAT Gateway. This is the correct production posture.
 
-**`cluster_endpoint_public_access = true`** means you can run `kubectl` from your laptop without a VPN. The endpoint is protected by IAM authentication — no unauthenticated request reaches it — but if your security policy requires the API server to be entirely private, set this to `false` and access the cluster through a bastion host or VPN.
+**`cluster_endpoint_public_access = true`** means you can run `kubectl` from your laptop without a VPN. The endpoint is protected by IAM authentication—no unauthenticated request reaches it—but if your security policy requires the API server to be entirely private, set this to `false` and access the cluster through a bastion host or VPN.
 
 **`enable_cluster_creator_admin_permissions = true`** is a convenience flag. EKS access entries (the modern replacement for the `aws-auth` ConfigMap) map IAM identities to Kubernetes RBAC roles. This flag automatically creates an entry granting `cluster-admin` to whichever IAM identity ran `terraform apply`. In a team, you would add explicit entries for each developer or CI role instead.
 
 **Managed node group IAM policies.** The module automatically attaches three AWS-managed policies to the node group IAM role:
 
-- `AmazonEKSWorkerNodePolicy` — allows nodes to register with the cluster and describe EC2 metadata.
-- `AmazonEKS_CNI_Policy` — allows the VPC CNI plugin to allocate and attach ENIs for pod networking.
-- `AmazonEC2ContainerRegistryReadOnly` — allows nodes to pull images from ECR.
+- `AmazonEKSWorkerNodePolicy`—allows nodes to register with the cluster and describe EC2 metadata.
+- `AmazonEKS_CNI_Policy`—allows the VPC CNI plugin to allocate and attach ENIs for pod networking.
+- `AmazonEC2ContainerRegistryReadOnly`—allows nodes to pull images from ECR.
 
 You do not need to write these policy attachments yourself. They are part of the module's defaults for managed node groups.
 
@@ -136,7 +136,7 @@ You do not need to write these policy attachments yourself. They are part of the
 
 ## IRSA roles
 
-IRSA — IAM Roles for Service Accounts — is how individual Kubernetes workloads assume AWS permissions without sharing credentials with the entire node. The mechanism works through the OIDC provider that the EKS module creates: Kubernetes issues a signed JWT to a pod's service account, the pod presents that token to the AWS STS `AssumeRoleWithWebIdentity` API, and STS returns temporary credentials scoped to a specific IAM role. The node's instance profile plays no part in this exchange.
+IRSA—IAM Roles for Service Accounts—is how individual Kubernetes workloads assume AWS permissions without sharing credentials with the entire node. The mechanism works through the OIDC provider that the EKS module creates: Kubernetes issues a signed JWT to a pod's service account, the pod presents that token to the AWS STS `AssumeRoleWithWebIdentity` API, and STS returns temporary credentials scoped to a specific IAM role. The node's instance profile plays no part in this exchange.
 
 The result is least-privilege by default: a pod running the EBS CSI driver can create and attach EBS volumes, but cannot access S3, Parameter Store, or anything else. If the pod is compromised, the blast radius is limited to the permissions on that one role.
 
@@ -186,9 +186,9 @@ module "lb_controller_irsa_role" {
 }
 ```
 
-The `namespace_service_accounts` field is the binding. It tells STS: only a token issued to the service account named `aws-load-balancer-controller` in the `kube-system` namespace may assume this role. If any other pod presents a token — even from the same cluster — the assumption is denied. The Kubernetes service account and the IAM role are linked by convention: the service account carries an annotation `eks.amazonaws.com/role-arn` with the role ARN, and the EKS Pod Identity webhook injects the signed token into the pod's environment at startup.
+The `namespace_service_accounts` field is the binding. It tells STS: only a token issued to the service account named `aws-load-balancer-controller` in the `kube-system` namespace may assume this role. If any other pod presents a token—even from the same cluster—the assumption is denied. The Kubernetes service account and the IAM role are linked by convention: the service account carries an annotation `eks.amazonaws.com/role-arn` with the role ARN, and the EKS Pod Identity webhook injects the signed token into the pod's environment at startup.
 
-One ordering note: `ebs_csi_irsa_role` is referenced inside the `cluster_addons` block of `module.eks`. Terraform resolves this correctly because both modules are in the same configuration — it sees the dependency and creates the IRSA role before finalizing the add-on configuration. If you split these into separate Terraform layers (a pattern used in larger teams), you would need to pass the role ARN explicitly.
+One ordering note: `ebs_csi_irsa_role` is referenced inside the `cluster_addons` block of `module.eks`. Terraform resolves this correctly because both modules are in the same configuration—it sees the dependency and creates the IRSA role before finalizing the add-on configuration. If you split these into separate Terraform layers (a pattern used in larger teams), you would need to pass the role ARN explicitly.
 
 ---
 
@@ -196,7 +196,7 @@ One ordering note: `ebs_csi_irsa_role` is referenced inside the `cluster_addons`
 
 A stock Kubernetes cluster has no built-in integration with AWS load balancers. When you create a Service of type `LoadBalancer` or an Ingress resource, nothing happens unless a controller is watching for those events. The **AWS Load Balancer Controller** is that controller. It runs as a Deployment inside the cluster, watches for Ingress and Service resources, and translates them into AWS API calls that provision Application Load Balancers (for Ingress) and Network Load Balancers (for `LoadBalancer` Services).
 
-From a user perspective, you write a standard Kubernetes Ingress manifest, annotate it with `kubernetes.io/ingress.class: alb`, and the controller creates an ALB, registers target groups pointing at your pods, and configures routing rules. The ALB's DNS name becomes your service's external entry point — no manual load balancer setup required.
+From a user perspective, you write a standard Kubernetes Ingress manifest, annotate it with `kubernetes.io/ingress.class: alb`, and the controller creates an ALB, registers target groups pointing at your pods, and configures routing rules. The ALB's DNS name becomes your service's external entry point—no manual load balancer setup required.
 
 Install it with Helm:
 
@@ -253,7 +253,7 @@ resource "helm_release" "aws_load_balancer_controller" {
 
 The `depends_on = [module.eks]` is necessary because Terraform's dependency graph does not automatically know that a `helm_release` requires a working cluster endpoint. Without it, Terraform might attempt to install the chart before the cluster API server is reachable and fail with a connection error.
 
-**How IRSA wires to the pod.** When the controller's pod starts, the EKS Pod Identity webhook — an admission controller running inside the API server — inspects the pod's service account, finds the `eks.amazonaws.com/role-arn` annotation, and injects two environment variables: `AWS_ROLE_ARN` and `AWS_WEB_IDENTITY_TOKEN_FILE`. The AWS SDK inside the pod automatically detects these and calls `AssumeRoleWithWebIdentity` on startup. No secrets, no manually rotated credentials, no instance profile involved — just a token the pod already holds, cryptographically signed and traceable to this specific service account.
+**How IRSA wires to the pod.** When the controller's pod starts, the EKS Pod Identity webhook—an admission controller running inside the API server—inspects the pod's service account, finds the `eks.amazonaws.com/role-arn` annotation, and injects two environment variables: `AWS_ROLE_ARN` and `AWS_WEB_IDENTITY_TOKEN_FILE`. The AWS SDK inside the pod automatically detects these and calls `AssumeRoleWithWebIdentity` on startup. No secrets, no manually rotated credentials, no instance profile involved—just a token the pod already holds, cryptographically signed and traceable to this specific service account.
 
 ---
 
@@ -285,7 +285,7 @@ provider "helm" {
 }
 ```
 
-The `exec` block tells the Helm provider to call `aws eks get-token` each time it needs to authenticate. This command returns a short-lived bearer token signed by your local AWS credentials. It is the same mechanism `kubectl` uses — both tools defer to the AWS CLI for the actual authentication exchange. The token expires after 15 minutes, so every fresh Helm or kubectl operation triggers a new `get-token` call transparently.
+The `exec` block tells the Helm provider to call `aws eks get-token` each time it needs to authenticate. This command returns a short-lived bearer token signed by your local AWS credentials. It is the same mechanism `kubectl` uses—both tools defer to the AWS CLI for the actual authentication exchange. The token expires after 15 minutes, so every fresh Helm or kubectl operation triggers a new `get-token` call transparently.
 
 ---
 
@@ -318,7 +318,7 @@ output "cluster_oidc_provider_arn" {
 }
 ```
 
-Mark `cluster_certificate_authority_data` as `sensitive`. Terraform still stores it in state — which should be in an encrypted S3 bucket with a KMS key — but it will not be printed in plan or apply output.
+Mark `cluster_certificate_authority_data` as `sensitive`. Terraform still stores it in state—which should be in an encrypted S3 bucket with a KMS key—but it will not be printed in plan or apply output.
 
 ---
 

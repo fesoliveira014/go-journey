@@ -2,7 +2,7 @@
 
 ## The Problem
 
-The Auth Service's `Register` RPC always creates users with the `"user"` role. This is the correct default — you do not want new sign-ups to be admins. But it means there is no way to create the first admin account through the application itself. You could run raw SQL:
+The Auth Service's `Register` RPC always creates users with the `"user"` role. This is the correct default—you do not want new sign-ups to be admins. But it means there is no way to create the first admin account through the application itself. You could run raw SQL:
 
 ```sql
 UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
@@ -86,7 +86,7 @@ If you are coming from Java/Kotlin, this is roughly equivalent to a bare-bones `
 
 The `DATABASE_URL` is a standard PostgreSQL connection string (e.g., `postgres://user:pass@host:port/dbname?sslmode=disable`). The `pkgdb.Open` helper sets the same connection-pool defaults the service uses (see [Chapter 2](../ch02/repository-pattern.md#configuring-the-connection-pool)).
 
-> **Why no `AutoMigrate`?** An early draft of this CLI called `db.AutoMigrate(&model.User{})` on startup so the tool would work against a fresh database. That turned out to be the wrong instinct — the `auth` service already runs versioned `golang-migrate` migrations on startup, so by the time anyone runs this CLI the `users` table definitely exists. Calling `AutoMigrate` on top of a database that was provisioned with raw SQL migrations is a recipe for schema drift: GORM happily adds columns it sees in the struct, but never drops ones it doesn't, and it writes nothing to `schema_migrations`. The CLI assumes the schema is in place.
+> **Why no `AutoMigrate`?** An early draft of this CLI called `db.AutoMigrate(&model.User{})` on startup so the tool would work against a fresh database. That turned out to be the wrong instinct—the `auth` service already runs versioned `golang-migrate` migrations on startup, so by the time anyone runs this CLI the `users` table definitely exists. Calling `AutoMigrate` on top of a database that was provisioned with raw SQL migrations is a recipe for schema drift: GORM happily adds columns it sees in the struct, but never drops ones it doesn't, and it writes nothing to `schema_migrations`. The CLI assumes the schema is in place.
 
 ### Password Hashing
 

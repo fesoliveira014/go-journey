@@ -8,7 +8,7 @@ When you have a microservices backend and need to serve a web frontend, there ar
 
 3. **Backend-for-Frontend (BFF).** A lightweight backend service built specifically for one client type. It speaks the client's language (HTTP + HTML for browsers, JSON for mobile apps) and translates requests into backend RPC calls. Each client type gets its own BFF, tailored to its needs.
 
-Our gateway is a BFF. It serves HTML to the browser, issues gRPC calls to the Auth and Catalog services, and owns the presentation layer. It contains no business logic — it does not validate ISBNs or hash passwords. It validates form input just enough to give the user good error messages, then delegates to the backend.
+Our gateway is a BFF. It serves HTML to the browser, issues gRPC calls to the Auth and Catalog services, and owns the presentation layer. It contains no business logic—it does not validate ISBNs or hash passwords. It validates form input just enough to give the user good error messages, then delegates to the backend.
 
 If you have worked with Spring MVC, the BFF is analogous to a `@Controller` layer that calls `@Service` beans—except the "services" live in separate processes and communicate over gRPC instead of local method calls.
 

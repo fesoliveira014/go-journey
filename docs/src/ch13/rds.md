@@ -2,7 +2,7 @@
 
 Chapter 12 ran three PostgreSQL instances as StatefulSets inside the cluster. That approach works and is reproducible, but it puts the operational burden of a database on you: you are responsible for backups, point-in-time recovery, engine patching, storage scaling, and high-availability failover. For a production workload, that is a significant ongoing commitment.
 
-Amazon Relational Database Service (RDS) shifts that burden to AWS. It manages backups automatically, applies minor version patches during configurable maintenance windows, handles failover to a standby replica in a different Availability Zone, and exposes CloudWatch metrics without additional instrumentation. Your cluster stops running databases entirely — it connects to RDS endpoints the same way any application connects to a remote database.
+Amazon Relational Database Service (RDS) shifts that burden to AWS. It manages backups automatically, applies minor version patches during configurable maintenance windows, handles failover to a standby replica in a different Availability Zone, and exposes CloudWatch metrics without additional instrumentation. Your cluster stops running databases entirely—it connects to RDS endpoints the same way any application connects to a remote database.
 
 This section replaces all three StatefulSets with RDS instances provisioned by Terraform. The application services do not change; only their `DATABASE_URL` environment variable changes.
 
@@ -10,7 +10,7 @@ This section replaces all three StatefulSets with RDS instances provisioned by T
 
 ## Why RDS over StatefulSets in production
 
-StatefulSets are the right tool for running databases in environments where managed services are not available — on-premises clusters, air-gapped environments, cost-constrained setups. For AWS, the trade-offs shift:
+StatefulSets are the right tool for running databases in environments where managed services are not available—on-premises clusters, air-gapped environments, cost-constrained setups. For AWS, the trade-offs shift:
 
 **Operational overhead.** A StatefulSet PostgreSQL instance requires you to manage `pg_basebackup` schedules, WAL archiving, backup retention policies, and restore procedures. RDS handles all of this with a few Terraform parameters.
 
@@ -26,7 +26,7 @@ The cost trade-off runs the other way: a `db.t3.micro` RDS instance costs more p
 
 ## Terraform Configuration
 
-All three databases are provisioned in a single file. A `for_each` on a locals map avoids repetition — adding a fourth database requires one line in `locals`, not another block of repeated HCL.
+All three databases are provisioned in a single file. A `for_each` on a locals map avoids repetition—adding a fourth database requires one line in `locals`, not another block of repeated HCL.
 
 ```hcl
 # terraform/rds.tf
@@ -80,7 +80,7 @@ resource "aws_db_instance" "main" {
 
 Walk through each parameter:
 
-**`for_each = local.databases`** iterates over the map. Each iteration binds `each.key` to the logical name (`catalog`, `auth`, `reservation`) and `each.value` to the database name — which happens to be the same string here, but they are kept separate in the locals map to make that distinction explicit.
+**`for_each = local.databases`** iterates over the map. Each iteration binds `each.key` to the logical name (`catalog`, `auth`, `reservation`) and `each.value` to the database name—which happens to be the same string here, but they are kept separate in the locals map to make that distinction explicit.
 
 **`identifier`** is the RDS instance identifier visible in the AWS console and in DNS hostnames. The convention `${project_name}-${each.key}` produces `library-catalog`, `library-auth`, `library-reservation`.
 
@@ -96,7 +96,7 @@ Walk through each parameter:
 
 > **Warning:** `skip_final_snapshot = true` and `backup_retention_period = 0` are appropriate for development and experimentation. In production, set `backup_retention_period` to 7 or more and remove `skip_final_snapshot` (or set it to `false`) so that destroying the instance requires a deliberate extra step. Accidentally destroying a production database with no snapshot and no automated backups means permanent data loss.
 
-**`db_subnet_group_name`** places the instances in the private subnets of the VPC created by the `vpc` module. RDS instances should never be in public subnets — they are only reachable from the EKS worker nodes in the same VPC.
+**`db_subnet_group_name`** places the instances in the private subnets of the VPC created by the `vpc` module. RDS instances should never be in public subnets—they are only reachable from the EKS worker nodes in the same VPC.
 
 **`vpc_security_group_ids`** restricts inbound connections to port 5432. The `rds` security group (defined in `vpc.tf`) allows inbound traffic on port 5432 from the EKS worker node security group and nothing else.
 
@@ -119,7 +119,7 @@ When `manage_master_user_password = true`, RDS does not accept a `password` argu
 
 Secrets Manager can automatically rotate this password on a schedule you define, regenerating it and updating the stored value without downtime. Rotation is handled by a Lambda function that RDS integrates with directly[^3].
 
-This is the modern approach to database credentials on AWS. The older pattern — writing a password into `terraform.tfvars` and passing it through `var.db_password` — embeds the credential in Terraform state, which is stored in S3. State is accessible to anyone with S3 read permissions on the bucket. Secrets Manager keeps the credential out of state entirely.
+This is the modern approach to database credentials on AWS. The older pattern—writing a password into `terraform.tfvars` and passing it through `var.db_password`—embeds the credential in Terraform state, which is stored in S3. State is accessible to anyone with S3 read permissions on the bucket. Secrets Manager keeps the credential out of state entirely.
 
 **Retrieving the password manually** (for initial testing or debugging):
 
@@ -152,7 +152,7 @@ Two things must change for RDS:
 
 1. **The hostname** is now the RDS endpoint, which looks like `library-catalog.xxxx.us-east-1.rds.amazonaws.com`. The exact value is a Terraform output, covered below.
 
-2. **`sslmode=disable` becomes `sslmode=require`.** RDS enforces TLS for all connections by default. Attempting to connect without TLS results in a connection error. The `sslmode=require` parameter instructs the PostgreSQL driver to use TLS but skip certificate verification — sufficient for RDS, which presents a valid certificate from an AWS CA.
+2. **`sslmode=disable` becomes `sslmode=require`.** RDS enforces TLS for all connections by default. Attempting to connect without TLS results in a connection error. The `sslmode=require` parameter instructs the PostgreSQL driver to use TLS but skip certificate verification—sufficient for RDS, which presents a valid certificate from an AWS CA.
 
 The production overlay in `deploy/k8s/overlays/production/` applies these changes using strategic merge patches on the relevant Deployments. A strategic merge patch for the Catalog Service looks like this:
 
@@ -173,7 +173,7 @@ spec:
               value: "postgresql://postgres:$(POSTGRES_PASSWORD)@library-catalog.xxxx.us-east-1.rds.amazonaws.com:5432/catalog?sslmode=require"
 ```
 
-The patch references the container by name (`name: catalog`). Kubernetes strategic merge patch semantics merge containers by name rather than replacing the entire list, so all other container fields — image, ports, resource limits, other environment variables — are preserved from the base[^4]. Only `DATABASE_URL` is overridden.
+The patch references the container by name (`name: catalog`). Kubernetes strategic merge patch semantics merge containers by name rather than replacing the entire list, so all other container fields—image, ports, resource limits, other environment variables—are preserved from the base[^4]. Only `DATABASE_URL` is overridden.
 
 In the production overlay's `kustomization.yaml`:
 
@@ -262,7 +262,7 @@ Note that `endpoint` in the Terraform `aws_db_instance` resource includes the po
 | Failover | Manual | RDS Multi-AZ (when `multi_az = true`) |
 | SSL | `sslmode=disable` | `sslmode=require` |
 
-The application code changes nothing. The Go database clients in each service — using `pgx` or `database/sql` — connect to a PostgreSQL endpoint. Whether that endpoint is a StatefulSet pod or an RDS instance is opaque to the application layer; only the connection string differs.
+The application code changes nothing. The Go database clients in each service—using `pgx` or `database/sql`—connect to a PostgreSQL endpoint. Whether that endpoint is a StatefulSet pod or an RDS instance is opaque to the application layer; only the connection string differs.
 
 ---
 

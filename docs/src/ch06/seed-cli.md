@@ -10,10 +10,10 @@ The solution is a **seed CLI**: a tool that loads a predefined set of books from
 
 ## Why gRPC Seeding (Not Direct DB Insert)?
 
-The admin CLI from Section 6.1 connects directly to the database. The seed CLI does not — it authenticates as an admin and calls `CreateBook` through gRPC. This is a deliberate design choice:
+The admin CLI from Section 6.1 connects directly to the database. The seed CLI does not—it authenticates as an admin and calls `CreateBook` through gRPC. This is a deliberate design choice:
 
 - **Exercises the full stack.** The seed process goes through authentication (login via Auth Service), authorization (the JWT interceptor checks the admin role), validation (the catalog handler rejects missing titles or duplicate ISBNs), and event publishing (if Kafka is configured, `book.created` events are emitted).
-- **Catches integration bugs.** If the Auth Service is misconfigured, or the catalog's JWT interceptor rejects the token, or a validation rule is wrong, the seed CLI will fail — giving you early feedback.
+- **Catches integration bugs.** If the Auth Service is misconfigured, or the catalog's JWT interceptor rejects the token, or a validation rule is wrong, the seed CLI will fail—giving you early feedback.
 - **Mirrors real usage.** An admin adding books through the UI follows the same code path. The seed CLI is an automated version of that workflow.
 
 The admin CLI bypasses gRPC because no gRPC endpoint exists for its operation. The seed CLI uses gRPC because `CreateBook` already exists and works correctly.
@@ -38,7 +38,7 @@ type seedBook struct {
 }
 ```
 
-The `seedBook` struct mirrors the `CreateBookRequest` proto fields. It uses `json` struct tags for deserialization from the fixture file. Note the `int32` types for year and copies — these match the protobuf field types, avoiding a conversion step.
+The `seedBook` struct mirrors the `CreateBookRequest` proto fields. It uses `json` struct tags for deserialization from the fixture file. Note the `int32` types for year and copies—these match the protobuf field types, avoiding a conversion step.
 
 ### Flag Parsing and JSON Loading
 
@@ -146,13 +146,13 @@ The fixture file (`services/catalog/cmd/seed/books.json`) contains sixteen books
 | Science | 3 | *A Brief History of Time*, *Cosmos*, *The Selfish Gene* |
 | History | 2 | *Sapiens*, *The Art of War* |
 
-The ISBNs are real ISBN-13 values for these books. This matters for testing — if you later add ISBN validation (checksum verification), the seed data will still work. Total copies range from two to five, giving you enough variation to test reservation limits and "no copies available" scenarios.
+The ISBNs are real ISBN-13 values for these books. This matters for testing—if you later add ISBN validation (checksum verification), the seed data will still work. Total copies range from two to five, giving you enough variation to test reservation limits and "no copies available" scenarios.
 
 ---
 
 ## How It Works With and Without Kafka
 
-The seed CLI does not interact with Kafka directly — it calls `CreateBook` via gRPC, and the Catalog Service handles event publishing internally. The Catalog Service's `main.go` uses a `noopPublisher` when `KAFKA_BROKERS` is not set:
+The seed CLI does not interact with Kafka directly—it calls `CreateBook` via gRPC, and the Catalog Service handles event publishing internally. The Catalog Service's `main.go` uses a `noopPublisher` when `KAFKA_BROKERS` is not set:
 
 ```go
 // services/catalog/cmd/main.go
@@ -168,7 +168,7 @@ This means:
 - **Without Kafka:** Books are created in the catalog database. No events are published. The Search Service will not be updated (it relies on Kafka events to index books). This is fine for basic development and testing.
 - **With Kafka:** Books are created and `book.created` events are published to the `catalog.books.changed` topic. The Search Service picks them up and indexes the books. This is the full production flow, covered in Chapter 8.
 
-The seed CLI works identically in both cases — it has no knowledge of whether Kafka is running.
+The seed CLI works identically in both cases—it has no knowledge of whether Kafka is running.
 
 ---
 
@@ -231,6 +231,6 @@ go run ./services/catalog/cmd/seed \
 
 ## Key Takeaways
 
-- **Seed through the API, not the database.** This validates the entire stack — auth, authorization, validation, and event publishing — with every run.
+- **Seed through the API, not the database.** This validates the entire stack—auth, authorization, validation, and event publishing—with every run.
 - **Idempotent seeding via `AlreadyExists`.** The CLI can be run repeatedly without side effects, which is essential for continuous integration (CI) pipelines and shared development databases.
 - **Fixture files are test infrastructure.** Treat `books.json` as you would a test fixture: diverse, realistic, and checked into version control. When you add new features (e.g., ISBN validation), the fixture data should still work.

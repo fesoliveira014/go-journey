@@ -1,6 +1,6 @@
 # 2.5 Wiring It All Together
 
-Every component you have built so far — the repository, the service, the handler — exists in isolation. The repository knows nothing about the service, and the service knows nothing about gRPC. That separation is the whole point, but something must eventually plug them together. That's `main.go`. This section walks through how the pieces connect, why the connection is explicit rather than magical, and how to drive the running service with `grpcurl`.
+Every component you have built so far—the repository, the service, the handler—exists in isolation. The repository knows nothing about the service, and the service knows nothing about gRPC. That separation is the whole point, but something must eventually plug them together. That's `main.go`. This section walks through how the pieces connect, why the connection is explicit rather than magical, and how to drive the running service with `grpcurl`.
 
 ---
 
@@ -29,7 +29,7 @@ catalogSvc  := service.NewCatalogService(bookRepo)
 catalogHandler := handler.NewCatalogHandler(catalogSvc)
 ```
 
-Three lines, three constructors, each returning a pointer to an initialized struct. The wiring is explicit, linear, and entirely visible. You can read it and immediately understand the dependency graph: `db → repo → svc → handler`. If a constructor requires a dependency you have not yet created, the compiler tells you — there is no runtime "bean not found" surprise.
+Three lines, three constructors, each returning a pointer to an initialized struct. The wiring is explicit, linear, and entirely visible. You can read it and immediately understand the dependency graph: `db → repo → svc → handler`. If a constructor requires a dependency you have not yet created, the compiler tells you—there is no runtime "bean not found" surprise.
 
 Each constructor follows the same pattern. It takes what it needs as arguments and returns a concrete type:
 
@@ -49,7 +49,7 @@ func NewCatalogHandler(svc *service.CatalogService) *CatalogHandler {
 
 The service constructor accepts a `BookRepository` **interface**, not a concrete type. This is the important detail: The service owns the interface definition and only knows that it has something to call `Create`, `GetByID`, and so on. In production, that turns out to be the GORM-backed struct. In tests it is the in-memory mock from the previous section. The service does not know or care which.
 
-This pattern is sometimes called **manual dependency injection**. For projects up to moderate complexity, it is the right approach — it scales well, is easy to debug, and produces zero "magic". Larger projects sometimes introduce a dependency injection framework (`google/wire` is the most common in Go), but that is code generation over the same pattern, not a fundamentally different approach.
+This pattern is sometimes called **manual dependency injection**. For projects up to moderate complexity, it is the right approach—it scales well, is easy to debug, and produces zero "magic". Larger projects sometimes introduce a dependency injection framework (`google/wire` is the most common in Go), but that is code generation over the same pattern, not a fundamentally different approach.
 
 ---
 
@@ -75,11 +75,11 @@ if err := grpcServer.Serve(lis); err != nil {
 
 Walk through each call:
 
-- **`net.Listen("tcp", ":50052")`** — opens a TCP socket. The `:50052` form means "listen on all interfaces, port 50052". The `net.Listener` is a standard library type; gRPC does not control how the socket is opened.
-- **`grpc.NewServer()`** — creates a gRPC server instance. At this point it has no services registered. Options for TLS, interceptors (middleware), and keepalives go here as variadic arguments — none are needed yet.
-- **`catalogv1.RegisterCatalogServiceServer(...)`** — this is generated code from the protobuf toolchain. It binds your handler to the server's internal service registry, mapping each RPC name to its method. Without this call, the server runs but has no services.
-- **`reflection.Register(grpcServer)`** — registers the gRPC server reflection protocol. This is what allows tools like `grpcurl` to query the server for its available services and method signatures at runtime, without needing the `.proto` files locally. You would disable this in production (it lets anyone introspect the schema without authentication), but it is invaluable during development.
-- **`grpcServer.Serve(lis)`** — blocks, accepting connections and dispatching calls. This never returns unless the server is stopped.
+- **`net.Listen("tcp", ":50052")`**—opens a TCP socket. The `:50052` form means "listen on all interfaces, port 50052". The `net.Listener` is a standard library type; gRPC does not control how the socket is opened.
+- **`grpc.NewServer()`**—creates a gRPC server instance. At this point it has no services registered. Options for TLS, interceptors (middleware), and keepalives go here as variadic arguments—none are needed yet.
+- **`catalogv1.RegisterCatalogServiceServer(...)`**—this is generated code from the protobuf toolchain. It binds your handler to the server's internal service registry, mapping each RPC name to its method. Without this call, the server runs but has no services.
+- **`reflection.Register(grpcServer)`**—registers the gRPC server reflection protocol. This is what allows tools like `grpcurl` to query the server for its available services and method signatures at runtime, without needing the `.proto` files locally. You would disable this in production (it lets anyone introspect the schema without authentication), but it is invaluable during development.
+- **`grpcServer.Serve(lis)`**—blocks, accepting connections and dispatching calls. This never returns unless the server is stopped.
 
 ---
 
@@ -89,7 +89,7 @@ The `CatalogHandler` is the boundary between the gRPC transport and the domain m
 
 ### Proto ↔ Domain Conversion
 
-Proto types and domain types are deliberately separate. The generated `catalogv1.Book` is a transport struct — it carries wire format metadata, has protobuf-specific field types (`int32`, `*timestamppb.Timestamp`), and is tied to the serialization contract with external callers. The domain `model.Book` is a persistence struct with GORM tags and Go-native types (`uuid.UUID`, `time.Time`, `int`).
+Proto types and domain types are deliberately separate. The generated `catalogv1.Book` is a transport struct—it carries wire format metadata, has protobuf-specific field types (`int32`, `*timestamppb.Timestamp`), and is tied to the serialization contract with external callers. The domain `model.Book` is a persistence struct with GORM tags and Go-native types (`uuid.UUID`, `time.Time`, `int`).
 
 Keeping them separate means a change to the proto schema does not cascade into the database layer, and a change to the domain model (adding a field, changing a type) does not automatically break the public API. The conversion functions are the explicit, auditable boundary between those two worlds.
 
@@ -136,9 +136,9 @@ func toGRPCError(err error) error {
 
 A few things worth noting here:
 
-- `errors.Is` handles wrapped errors — if the service returns `fmt.Errorf("%w: title is required", model.ErrInvalidBook)`, the `errors.Is(err, model.ErrInvalidBook)` branch still fires.
-- The `default` case returns `codes.Internal` with a **generic message** — not `err.Error()`. That is deliberate: Unexpected errors often contain internal implementation details (SQL query text, file paths, internal service names) that should not be sent to external callers. Logging the original error separately is the right pattern.
-- The `status.Error(code, message)` call produces a gRPC status error — a type that the gRPC runtime knows how to serialize and send as a proper gRPC error response, including the status code that the client can inspect.[^3]
+- `errors.Is` handles wrapped errors—if the service returns `fmt.Errorf("%w: title is required", model.ErrInvalidBook)`, the `errors.Is(err, model.ErrInvalidBook)` branch still fires.
+- The `default` case returns `codes.Internal` with a **generic message**—not `err.Error()`. That is deliberate: Unexpected errors often contain internal implementation details (SQL query text, file paths, internal service names) that should not be sent to external callers. Logging the original error separately is the right pattern.
+- The `status.Error(code, message)` call produces a gRPC status error—a type that the gRPC runtime knows how to serialize and send as a proper gRPC error response, including the status code that the client can inspect.[^3]
 
 ---
 
@@ -278,7 +278,7 @@ grpcurl -plaintext -d '{
 }' localhost:50052 catalog.v1.CatalogService.UpdateBook
 ```
 
-> **Note:** `UpdateBook` does not modify `available_copies` — that field is managed exclusively by the Reservation Service via the `UpdateAvailability` RPC.
+> **Note:** `UpdateBook` does not modify `available_copies`—that field is managed exclusively by the Reservation Service via the `UpdateAvailability` RPC.
 
 ### Delete a Book
 
@@ -301,15 +301,15 @@ The `UpdateBook` RPC has a subtle limitation: proto3 does not distinguish betwee
 {"id": "...", "total_copies": 0}
 ```
 
-The handler cannot tell whether you intentionally want to set `total_copies` to zero or whether you omitted the field. Both cases arrive as `req.GetTotalCopies() == 0`. The current implementation treats this as a full replacement — whatever fields you send overwrite the stored values, and zero-value fields overwrite with zero.
+The handler cannot tell whether you intentionally want to set `total_copies` to zero or whether you omitted the field. Both cases arrive as `req.GetTotalCopies() == 0`. The current implementation treats this as a full replacement—whatever fields you send overwrite the stored values, and zero-value fields overwrite with zero.
 
 The idiomatic proto3 solution is `google.protobuf.FieldMask` for partial updates, or using wrapper types (`google.protobuf.Int32Value`) which can represent explicit null. Both add complexity that is not warranted for this learning stage. For now, understand the limitation: `UpdateBook` requires you to resend all fields you want to retain, not just the ones you want to change.
 
 ### UpdateAvailability as a Forward Reference
 
-You may notice `UpdateAvailability` in the handler and service — it adjusts `available_copies` by a signed delta. This RPC is not driven by catalog management; it is driven by the Reservation Service. When a user checks out a book, the Reservation Service will call `UpdateAvailability(id, -1)` on the Catalog Service. When the book is returned, it calls `UpdateAvailability(id, +1)`.
+You may notice `UpdateAvailability` in the handler and service—it adjusts `available_copies` by a signed delta. This RPC is not driven by catalog management; it is driven by the Reservation Service. When a user checks out a book, the Reservation Service will call `UpdateAvailability(id, -1)` on the Catalog Service. When the book is returned, it calls `UpdateAvailability(id, +1)`.
 
-This is part of the inter-service communication pattern covered in Chapter 7. The RPC exists now because the Catalog Service needs to own the availability invariant — no other service should directly manipulate `available_copies`. For now, you can exercise it via `grpcurl`:
+This is part of the inter-service communication pattern covered in Chapter 7. The RPC exists now because the Catalog Service needs to own the availability invariant—no other service should directly manipulate `available_copies`. For now, you can exercise it via `grpcurl`:
 
 ```bash
 grpcurl -plaintext -d '{"id": "a1b2c3d4-...", "delta": -1}' \
@@ -336,12 +336,12 @@ Start the Catalog Service locally and work through the following scenario entire
 
 1. Create all 5 books using `CreateBook`. Record the IDs returned.
 2. List all books using `ListBooks` with `{}`. Verify all 5 appear in `total_count`.
-3. Filter by `genre: "programming"` — only Clean Code and The Pragmatic Programmer should appear.
-4. Filter by `available_only: true` — all 5 should appear since nothing is checked out yet.
-5. Update Clean Code to have `total_copies: 4` using `UpdateBook`. Check the returned `available_copies` — it should remain at 2 (the service only updates total, not available, on a manual update).
+3. Filter by `genre: "programming"`—only Clean Code and The Pragmatic Programmer should appear.
+4. Filter by `available_only: true`—all 5 should appear since nothing is checked out yet.
+5. Update Clean Code to have `total_copies: 4` using `UpdateBook`. Check the returned `available_copies`—it should remain at 2 (the service only updates total, not available, on a manual update).
 6. Call `UpdateAvailability` on Dune with `delta: -2`. Verify the returned `available_copies` is 2.
 7. Now filter `available_only: true` again. Dune should still appear (2 copies available). Call `UpdateAvailability` with `delta: -2` again. Dune should now have 0 available copies.
-8. Filter `available_only: true` one more time — Dune should no longer appear.
+8. Filter `available_only: true` one more time—Dune should no longer appear.
 9. Delete Foundation. Attempt to `GetBook` with its ID and confirm you receive a `NotFound` error.
 
 <details>
@@ -450,7 +450,7 @@ grpcurl -plaintext -d '{"id": "<foundation-id>"}' \
 
 ## What Comes Next
 
-The Catalog Service is complete — domain model, repository, service, gRPC handler, and server wiring. The next chapter introduces the Gateway Service, which sits between external HTTP clients and the internal gRPC services. It is where REST-to-gRPC translation, authentication middleware, and request validation will live.
+The Catalog Service is complete—domain model, repository, service, gRPC handler, and server wiring. The next chapter introduces the Gateway Service, which sits between external HTTP clients and the internal gRPC services. It is where REST-to-gRPC translation, authentication middleware, and request validation will live.
 
 ---
 

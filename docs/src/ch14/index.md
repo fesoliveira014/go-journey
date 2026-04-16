@@ -1,8 +1,8 @@
 # Chapter 14: Production Hardening
 
-Chapter 13 deployed the library system to real infrastructure: an EKS cluster running five services, three RDS instances holding persistent state, an MSK cluster brokering Kafka events, and a GitHub Actions pipeline shipping code on every push to `main`. That is a genuine production deployment — the application is reachable, the data survives pod restarts, and nobody has to run `kubectl apply` from a laptop.
+Chapter 13 deployed the library system to real infrastructure: an EKS cluster running five services, three RDS instances holding persistent state, an MSK cluster brokering Kafka events, and a GitHub Actions pipeline shipping code on every push to `main`. That is a genuine production deployment—the application is reachable, the data survives pod restarts, and nobody has to run `kubectl apply` from a laptop.
 
-But "reachable" and "production-ready" are not the same thing. Three gaps remained when Chapter 13 ended, each deferred to get the system running before addressing hardening. This chapter closes all three. None of them require changes to application code, Dockerfiles, or Earthfiles — everything that needs to change lives in Terraform and the production Kustomize overlay.
+But "reachable" and "production-ready" are not the same thing. Three gaps remained when Chapter 13 ended, each deferred to get the system running before addressing hardening. This chapter closes all three. None of them require changes to application code, Dockerfiles, or Earthfiles—everything that needs to change lives in Terraform and the production Kustomize overlay.
 
 ---
 
@@ -14,7 +14,7 @@ But "reachable" and "production-ready" are not the same thing. Three gaps remain
 | Secrets | Placeholder values in the production overlay's `secretGenerator` | External Secrets Operator syncing live values from AWS Secrets Manager |
 | Kafka encryption | Plaintext connections on port 9092 | TLS connections on port 9094 |
 
-Each row is a separate concern with its own tools and its own section in this chapter. They are also independent — apply them in any order, or apply just one. The sections below treat them sequentially because that matches the natural dependency order when you are also setting up DNS for the first time.
+Each row is a separate concern with its own tools and its own section in this chapter. They are also independent—apply them in any order, or apply just one. The sections below treat them sequentially because that matches the natural dependency order when you are also setting up DNS for the first time.
 
 ---
 
@@ -22,22 +22,22 @@ Each row is a separate concern with its own tools and its own section in this ch
 
 It is tempting to think of these as polish: things you would fix before a public launch but can ignore while learning. That framing undersells the risk. Each gap is an audit failure in any environment subject to compliance frameworks, and the risks are concrete even if you are running a personal project.
 
-Serving HTTP without TLS (Transport Layer Security) means every request between the browser and your ALB travels in plaintext. That includes session tokens, API responses, and any user data in query strings or response bodies. The ALB terminates TLS at the edge in Chapter 14's target state — traffic inside the VPC between the ALB and the pods can remain HTTP, which is a common and acceptable pattern — but the public-facing leg must be encrypted. Modern browsers actively warn users about non-HTTPS sites. More practically, OAuth2 providers — including Google — refuse to complete a login flow if the redirect URI is HTTP.
+Serving HTTP without TLS (Transport Layer Security) means every request between the browser and your ALB travels in plaintext. That includes session tokens, API responses, and any user data in query strings or response bodies. The ALB terminates TLS at the edge in Chapter 14's target state—traffic inside the VPC between the ALB and the pods can remain HTTP, which is a common and acceptable pattern—but the public-facing leg must be encrypted. Modern browsers actively warn users about non-HTTPS sites. More practically, OAuth2 providers—including Google—refuse to complete a login flow if the redirect URI is HTTP.
 
-Pasting database passwords into a Kustomize `secretGenerator` creates several problems. The secrets are almost certainly committed to git at some point — either accidentally or because someone thinks "I'll fix it later." Even if you avoid git, the values exist in someone's terminal history, in CI logs if you print them for debugging, and in every Kubernetes Secret object that was ever created with the wrong value and then deleted. Proper secrets management means the application retrieves credentials from a single authoritative source — AWS Secrets Manager in this case — and the Kubernetes Secret is populated automatically and rotated without human intervention.
+Pasting database passwords into a Kustomize `secretGenerator` creates several problems. The secrets are almost certainly committed to git at some point—either accidentally or because someone thinks "I'll fix it later." Even if you avoid git, the values exist in someone's terminal history, in CI logs if you print them for debugging, and in every Kubernetes Secret object that was ever created with the wrong value and then deleted. Proper secrets management means the application retrieves credentials from a single authoritative source—AWS Secrets Manager in this case—and the Kubernetes Secret is populated automatically and rotated without human intervention.
 
-Kafka's plaintext listener (port 9092) transmits all broker traffic unencrypted inside the VPC. VPCs are not the internet, and an attacker who hasn't breached your network boundary cannot read it — but that is a weaker guarantee than it sounds. Lateral movement from a compromised pod, misconfigured security groups, or VPC peering arrangements can all expose plaintext traffic to unintended readers. MSK supports TLS-only listener configuration; enabling it costs nothing and closes the exposure entirely.
+Kafka's plaintext listener (port 9092) transmits all broker traffic unencrypted inside the VPC. VPCs are not the internet, and an attacker who hasn't breached your network boundary cannot read it—but that is a weaker guarantee than it sounds. Lateral movement from a compromised pod, misconfigured security groups, or VPC peering arrangements can all expose plaintext traffic to unintended readers. MSK supports TLS-only listener configuration; enabling it costs nothing and closes the exposure entirely.
 
 ---
 
 ## What stays the same
 
-The Kustomize layering from Chapter 12 and the CI/CD pipeline from Chapter 13 are untouched. The base manifests under `k8s/base/` remain unchanged — a deliberate constraint that demonstrates the value of the overlay pattern. Application services do not need to know anything about where TLS terminates, how secrets reach the pod's environment, or what port the Kafka broker is listening on. They connect to hostnames and read environment variables; the infrastructure layer handles everything else.
+The Kustomize layering from Chapter 12 and the CI/CD pipeline from Chapter 13 are untouched. The base manifests under `k8s/base/` remain unchanged—a deliberate constraint that demonstrates the value of the overlay pattern. Application services do not need to know anything about where TLS terminates, how secrets reach the pod's environment, or what port the Kafka broker is listening on. They connect to hostnames and read environment variables; the infrastructure layer handles everything else.
 
-The Earthfile CI targets — `+lint`, `+test`, `+build`, `+integration-test` — run as they did in Chapter 13. The GitHub Actions pipeline that calls them is unchanged. The only files that change in this chapter are:
+The Earthfile CI targets—`+lint`, `+test`, `+build`, `+integration-test`—run as they did in Chapter 13. The GitHub Actions pipeline that calls them is unchanged. The only files that change in this chapter are:
 
-- Terraform files under `terraform/` — for the Route 53 hosted zone, ACM certificate, and MSK listener configuration
-- The production Kustomize overlay under `k8s/overlays/production/` — for the External Secrets Operator configuration and the updated Kafka broker address
+- Terraform files under `terraform/`—for the Route 53 hosted zone, ACM certificate, and MSK listener configuration
+- The production Kustomize overlay under `k8s/overlays/production/`—for the External Secrets Operator configuration and the updated Kafka broker address
 - A new Terraform module for the External Secrets Operator IAM role and its associated Kubernetes resources
 
 If you have been following the "what changes and what stays the same" framing from earlier chapters, the pattern holds here too.
@@ -55,9 +55,9 @@ All three changes are either free or negligible.
 | MSK TLS listener | No additional cost |
 | External Secrets Operator | No additional cost (open-source operator running on existing nodes) |
 
-The only new line item is the Route 53 hosted zone, which is billed at $0.50 per month, which includes standard query volumes typical of this project. ACM certificates for domains managed in Route 53 are issued and renewed automatically at no charge. MSK supports TLS as a configuration flag on the existing brokers — there is no separate TLS broker tier. External Secrets Operator runs as a Deployment in your EKS cluster, consuming a small amount of CPU and memory on nodes you are already paying for.
+The only new line item is the Route 53 hosted zone, which is billed at $0.50 per month, which includes standard query volumes typical of this project. ACM certificates for domains managed in Route 53 are issued and renewed automatically at no charge. MSK supports TLS as a configuration flag on the existing brokers—there is no separate TLS broker tier. External Secrets Operator runs as a Deployment in your EKS cluster, consuming a small amount of CPU and memory on nodes you are already paying for.
 
-If you already own a domain and it is managed elsewhere — GoDaddy, Namecheap, or Cloudflare — you have two options: transfer the domain to Route 53 (a one-time process that preserves your existing records) or keep the domain where it is and create a name server (NS) delegation for a subdomain. The sections below assume you are creating a new hosted zone; the delegation path is noted where it matters.
+If you already own a domain and it is managed elsewhere—GoDaddy, Namecheap, or Cloudflare—you have two options: transfer the domain to Route 53 (a one-time process that preserves your existing records) or keep the domain where it is and create a name server (NS) delegation for a subdomain. The sections below assume you are creating a new hosted zone; the delegation path is noted where it matters.
 
 ---
 
@@ -106,27 +106,27 @@ graph TD
     GHA[GitHub Actions\nOIDC] -.->|kubectl apply| EKS
 ```
 
-The changes touch three edges in this diagram: the public entry point gains TLS termination at the ALB, the secret values gain a managed sync path through External Secrets Operator, and the Kafka edges switch from port 9092 to port 9094. Everything else — the service topology, the RDS connections, the Meilisearch StatefulSet, the ECR image pulls, the OIDC-authenticated deployments — is carried forward from Chapter 13 without modification.
+The changes touch three edges in this diagram: the public entry point gains TLS termination at the ALB, the secret values gain a managed sync path through External Secrets Operator, and the Kafka edges switch from port 9092 to port 9094. Everything else—the service topology, the RDS connections, the Meilisearch StatefulSet, the ECR image pulls, the OIDC-authenticated deployments—is carried forward from Chapter 13 without modification.
 
 ---
 
 ## Chapter roadmap
 
-**14.1 — DNS with Route 53** creates a hosted zone for your domain and adds the A-record alias that points your domain's apex (or a subdomain) at the ALB. You will use Terraform's `aws_route53_zone` and `aws_route53_record` resources. By the end of this section, the application is reachable at a human-readable URL — still over HTTP, but at the right address.
+**14.1—DNS with Route 53** creates a hosted zone for your domain and adds the A-record alias that points your domain's apex (or a subdomain) at the ALB. You will use Terraform's `aws_route53_zone` and `aws_route53_record` resources. By the end of this section, the application is reachable at a human-readable URL—still over HTTP, but at the right address.
 
-**14.2 — TLS with ACM** provisions an ACM certificate for your domain and attaches it to the ALB. ACM handles certificate issuance via DNS validation — it writes a CNAME record to your hosted zone and polls for it, which Terraform orchestrates in a single `apply`. You will update the Ingress annotations in the production overlay to reference the certificate ARN and redirect HTTP to HTTPS. After this section, the application is reachable at `https://yourdomain.com`.
+**14.2—TLS with ACM** provisions an ACM certificate for your domain and attaches it to the ALB. ACM handles certificate issuance via DNS validation—it writes a CNAME record to your hosted zone and polls for it, which Terraform orchestrates in a single `apply`. You will update the Ingress annotations in the production overlay to reference the certificate ARN and redirect HTTP to HTTPS. After this section, the application is reachable at `https://yourdomain.com`.
 
-**14.3 — Secrets Management with External Secrets Operator** installs the External Secrets Operator into the cluster via Helm, creates the IAM role and policy that allow it to read from Secrets Manager, and writes the `ExternalSecret` and `SecretStore` resources that define which secrets to sync and how often. You will also write a small Terraform module that creates the Secrets Manager entries for each service's database credentials, replacing the placeholder values in the `secretGenerator`.
+**14.3—Secrets Management with External Secrets Operator** installs the External Secrets Operator into the cluster via Helm, creates the IAM role and policy that allow it to read from Secrets Manager, and writes the `ExternalSecret` and `SecretStore` resources that define which secrets to sync and how often. You will also write a small Terraform module that creates the Secrets Manager entries for each service's database credentials, replacing the placeholder values in the `secretGenerator`.
 
-**14.4 — Kafka Encryption (MSK TLS)** enables the TLS listener on the MSK cluster and disables the plaintext listener, updates the security group rules to allow port 9094 instead of 9092, and patches the `KAFKA_BROKERS` environment variable in the production overlay to use the TLS bootstrap server addresses. The application-level change is minimal — the Go Kafka client library requires explicit TLS configuration, as covered in Section 14.4.
+**14.4—Kafka Encryption (MSK TLS)** enables the TLS listener on the MSK cluster and disables the plaintext listener, updates the security group rules to allow port 9094 instead of 9092, and patches the `KAFKA_BROKERS` environment variable in the production overlay to use the TLS bootstrap server addresses. The application-level change is minimal—the Go Kafka client library requires explicit TLS configuration, as covered in Section 14.4.
 
-**14.5 — Applying the Changes** walks through the full `terraform apply` and `kubectl apply` sequence, verifies each gap is closed, and confirms the integration tests from Chapter 12 still pass against the hardened cluster. You will also review the AWS Security Hub findings — if you enabled it in Chapter 13 — to confirm that the three controls that were previously failing now show as passed.
+**14.5—Applying the Changes** walks through the full `terraform apply` and `kubectl apply` sequence, verifies each gap is closed, and confirms the integration tests from Chapter 12 still pass against the hardened cluster. You will also review the AWS Security Hub findings—if you enabled it in Chapter 13—to confirm that the three controls that were previously failing now show as passed.
 
 ---
 
-By the end of this chapter, the library system will pass a basic security review: encrypted traffic on every public-facing edge, secrets sourced from a managed store rather than committed configuration, and encrypted broker connections inside the cluster. These are not exotic hardening measures. They are the baseline that any production system in a regulated environment must meet — and that a careful engineer expects everywhere else too. Getting comfortable applying them in a learning project means they will not be unfamiliar when the stakes are higher.
+By the end of this chapter, the library system will pass a basic security review: encrypted traffic on every public-facing edge, secrets sourced from a managed store rather than committed configuration, and encrypted broker connections inside the cluster. These are not exotic hardening measures. They are the baseline that any production system in a regulated environment must meet—and that a careful engineer expects everywhere else too. Getting comfortable applying them in a learning project means they will not be unfamiliar when the stakes are higher.
 
-Before section 14.1, confirm your Chapter 13 cluster is running and healthy: `kubectl get pods -n library` should show all pods in the `Running` state. If you have run `terraform destroy` since Chapter 13, re-apply the Chapter 13 Terraform before continuing — the changes in this chapter build on top of the existing infrastructure rather than replacing it.
+Before section 14.1, confirm your Chapter 13 cluster is running and healthy: `kubectl get pods -n library` should show all pods in the `Running` state. If you have run `terraform destroy` since Chapter 13, re-apply the Chapter 13 Terraform before continuing—the changes in this chapter build on top of the existing infrastructure rather than replacing it.
 
 ---
 
@@ -135,5 +135,5 @@ Before section 14.1, confirm your Chapter 13 cluster is running and healthy: `ku
 [^3]: External Secrets Operator Documentation: https://external-secrets.io/latest/
 [^4]: AWS Secrets Manager Documentation: https://docs.aws.amazon.com/secretsmanager/latest/userguide/intro.html
 [^5]: Amazon MSK TLS Encryption: https://docs.aws.amazon.com/msk/latest/developerguide/msk-encryption.html
-[^6]: AWS Load Balancer Controller — TLS: https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/ingress/annotations/#ssl
+[^6]: AWS Load Balancer Controller—TLS: https://kubernetes-sigs.github.io/aws-load-balancer-controller/latest/guide/ingress/annotations/#ssl
 [^7]: Route 53 Pricing: https://aws.amazon.com/route53/pricing/

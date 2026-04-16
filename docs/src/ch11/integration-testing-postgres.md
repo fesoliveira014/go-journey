@@ -49,7 +49,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 It skips on `testing.Short()` and again if `TEST_DATABASE_URL` is absent. Both skips are silent. In a fresh CI environment with no pre-configured Postgres, all repository tests are skipped and the suite still passes.
 
-A subtler issue exists in the reservation test: it calls `db.AutoMigrate(&model.Reservation{})` rather than running the embedded migration files. `AutoMigrate` only adds columns — it never creates `CHECK` constraints or the `UNIQUE` indexes that the real SQL migrations define. A test relying on `AutoMigrate` can miss an entire class of database-enforced invariants.
+A subtler issue exists in the reservation test: it calls `db.AutoMigrate(&model.Reservation{})` rather than running the embedded migration files. `AutoMigrate` only adds columns—it never creates `CHECK` constraints or the `UNIQUE` indexes that the real SQL migrations define. A test relying on `AutoMigrate` can miss an entire class of database-enforced invariants.
 
 The fix for both problems is the same: use Testcontainers to spin up a real Postgres instance that the test controls, so there is never an external dependency to skip over.
 
@@ -97,6 +97,7 @@ package repository_test
 
 import (
     "context"
+    "errors"
     "testing"
     "time"
 
@@ -158,7 +159,7 @@ func setupPostgres(t *testing.T) *gorm.DB {
     if err != nil {
         t.Fatalf("create migrator: %v", err)
     }
-    if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+    if err := m.Up(); err != nil && !errors.Is(err, migrate.ErrNoChange) {
         t.Fatalf("run migrations: %v", err)
     }
 
@@ -172,21 +173,21 @@ func setupPostgres(t *testing.T) *gorm.DB {
 
 This is a build constraint. Go's toolchain evaluates it before compiling. Without `-tags integration`, the file is invisible to `go test`, `go build`, and `go vet`. This keeps the fast unit-test loop untouched: `go test ./...` runs in seconds because it never pulls a Docker image.
 
-The line immediately below — `package repository_test` — is the package declaration. The build constraint must be on the first line, before any blank lines or comments. If you place it after the package declaration or after an import, it is treated as a regular comment and has no effect.
+The line immediately below—`package repository_test`—is the package declaration. The build constraint must be on the first line, before any blank lines or comments. If you place it after the package declaration or after an import, it is treated as a regular comment and has no effect.
 
 **`postgres.Run`**
 
-The `modules/postgres` package provides a typed `Run` function that accepts functional options. Compare this to the Testcontainers Java API where you construct a `PostgreSQLContainer` object and call methods on it — the Go API uses the same options pattern you have seen throughout this project.
+The `modules/postgres` package provides a typed `Run` function that accepts functional options. Compare this to the Testcontainers Java API where you construct a `PostgreSQLContainer` object and call methods on it—the Go API uses the same options pattern you have seen throughout this project.
 
 The image tag `postgres:16-alpine` is pinned to a major version. Using `postgres:latest` in tests is fragile: a major Postgres version bump could change behavior or fail silently if the local image cache is stale.
 
 **`testcontainers.WithWaitStrategy`**
 
-The wait strategy solves a common race condition. Docker reports a container as "started" once its process has been launched, but "started" does not mean "ready to accept connections". Without a wait strategy, your first `gorm.Open` call might fail because Postgres is still initializing the data directory. The log-based wait strategy polls the container's stdout until the phrase `"database system is ready to accept connections"` appears twice. The phrase appears once when Postgres completes initialization and once more after the server enters normal operation — the `.WithOccurrence(2)` requirement ensures both messages have been emitted. `WithStartupTimeout(30*time.Second)` causes the test to fail loudly if Postgres has not started within 30 seconds rather than hanging indefinitely.
+The wait strategy solves a common race condition. Docker reports a container as "started" once its process has been launched, but "started" does not mean "ready to accept connections". Without a wait strategy, your first `gorm.Open` call might fail because Postgres is still initializing the data directory. The log-based wait strategy polls the container's stdout until the phrase `"database system is ready to accept connections"` appears twice. The phrase appears once when Postgres completes initialization and once more after the server enters normal operation—the `.WithOccurrence(2)` requirement ensures both messages have been emitted. `WithStartupTimeout(30*time.Second)` causes the test to fail loudly if Postgres has not started within 30 seconds rather than hanging indefinitely.
 
 **`t.Cleanup`**
 
-`t.Cleanup` registers a function that runs when the test (or subtest) that called it finishes, regardless of whether it passed or failed. It is the testing package's equivalent of `defer` but scoped to the test's lifetime rather than the function call stack. Using `t.Cleanup` here means you never need to remember to call `container.Terminate` at the end of each test — it happens automatically, even if the test panics or calls `t.Fatal`.
+`t.Cleanup` registers a function that runs when the test (or subtest) that called it finishes, regardless of whether it passed or failed. It is the testing package's equivalent of `defer` but scoped to the test's lifetime rather than the function call stack. Using `t.Cleanup` here means you never need to remember to call `container.Terminate` at the end of each test—it happens automatically, even if the test panics or calls `t.Fatal`.
 
 Note that `container.Terminate` takes a fresh `context.Background()` rather than `ctx`. This is intentional. By the time cleanup runs the original `ctx` may be canceled; a fresh context ensures the container is always torn down.
 
@@ -196,7 +197,7 @@ The import alias `gormpostgres` is used because the `modules/postgres` import an
 
 **Running real migrations**
 
-The helper calls `m.Up()` using the same embedded `migrations.FS` that the production binary uses. This means the test database has exactly the schema that production has: `UNIQUE` indexes, `CHECK` constraints, foreign key relationships. This is the critical difference from `db.AutoMigrate`. GORM's `AutoMigrate` looks at your model structs and creates or alters tables to match — but it has no knowledge of raw SQL constraints that live only in migration files.
+The helper calls `m.Up()` using the same embedded `migrations.FS` that the production binary uses. This means the test database has exactly the schema that production has: `UNIQUE` indexes, `CHECK` constraints, foreign key relationships. This is the critical difference from `db.AutoMigrate`. GORM's `AutoMigrate` looks at your model structs and creates or alters tables to match—but it has no knowledge of raw SQL constraints that live only in migration files.
 
 The idiomatic production-grade approach is to embed migration SQL files with `//go:embed` and run them in tests. Never derive schema from struct tags in an integration test context.
 
@@ -244,7 +245,7 @@ func TestBookRepository_Integration_CreateAndGet(t *testing.T) {
 }
 ```
 
-Each test calls `setupPostgres` directly. Each test gets its own container. This is slightly slower than sharing a container across tests but eliminates inter-test contamination entirely — no truncation step required, no risk of test ordering affecting results.
+Each test calls `setupPostgres` directly. Each test gets its own container. This is slightly slower than sharing a container across tests but eliminates inter-test contamination entirely—no truncation step required, no risk of test ordering affecting results.
 
 If startup time becomes a problem (containers taking three or more seconds each), use `TestMain` to start one container for the entire package and share the `*gorm.DB` handle. The trade-off is that you must truncate tables between tests yourself. For most projects, per-test containers are the right default until profiling shows otherwise.
 
@@ -274,7 +275,7 @@ func TestBookRepository_Create_DuplicateISBN(t *testing.T) {
 }
 ```
 
-A mock repository can simulate this by checking an in-memory map of ISBNs and returning `model.ErrDuplicateISBN`. But that simulation encodes an assumption: that the production `Create` method actually checks for duplicates and translates the database error correctly. If the error-translation code in the repository has a bug — for example, if it only catches `pq.Error` but the driver returns a different type — the mock test passes while the real system silently inserts a duplicate.
+A mock repository can simulate this by checking an in-memory map of ISBNs and returning `model.ErrDuplicateISBN`. But that simulation encodes an assumption: that the production `Create` method actually checks for duplicates and translates the database error correctly. If the error-translation code in the repository has a bug—for example, if it only catches `pq.Error` but the driver returns a different type—the mock test passes while the real system silently inserts a duplicate.
 
 The integration test uses the actual `UNIQUE` index on the `isbn` column defined in `000001_create_books.up.sql`. The database enforces the constraint unconditionally. If `repository.Create` does not correctly translate the Postgres `23505` unique-violation error code into `model.ErrDuplicateISBN`, the integration test fails. The mock test would have passed regardless.
 
@@ -291,9 +292,9 @@ Other behaviors that only appear with a real database:
 
 The same `setupPostgres` helper (adapted to the relevant service's `migrations.FS` and model) applies to the auth and reservation services.
 
-**Auth service** — the primary constraint to test is duplicate email. The auth migration defines a `UNIQUE` constraint on the `email` column of the `users` table. An integration test that creates a user and then creates a second user with the same email will verify that the repository correctly translates the Postgres `23505` error into the appropriate domain error. The existing `testDB` helper in `services/auth/internal/repository/user_test.go` already runs migrations via `iofs` — the migration setup is correct. The only thing to change is the skip-on-failure behavior: replace `t.Skipf` with a Testcontainers startup so the test always runs in CI.
+**Auth service**—the primary constraint to test is duplicate email. The auth migration defines a `UNIQUE` constraint on the `email` column of the `users` table. An integration test that creates a user and then creates a second user with the same email will verify that the repository correctly translates the Postgres `23505` error into the appropriate domain error. The existing `testDB` helper in `services/auth/internal/repository/user_test.go` already runs migrations via `iofs`—the migration setup is correct. The only thing to change is the skip-on-failure behavior: replace `t.Skipf` with a Testcontainers startup so the test always runs in CI.
 
-**Reservation service** — the existing helper in `services/reservation/internal/repository/repository_test.go` has two issues to fix:
+**Reservation service**—the existing helper in `services/reservation/internal/repository/repository_test.go` has two issues to fix:
 
 1. It calls `db.AutoMigrate(&model.Reservation{})` rather than running embedded SQL migrations. Replace this with the `iofs` migration approach shown in `setupPostgres`.
 2. It skips when `TEST_DATABASE_URL` is not set. Replace both `t.Skip` calls with a Testcontainers startup.
@@ -312,7 +313,7 @@ test:
     RUN go test ./internal/service/... ./internal/handler/... -v -count=1
 ```
 
-Note that the repository tests at `./internal/repository/...` are deliberately excluded here — they require a database. Add a separate `integration-test` target that uses Earthly's `WITH DOCKER` block:
+Note that the repository tests at `./internal/repository/...` are deliberately excluded here—they require a database. Add a separate `integration-test` target that uses Earthly's `WITH DOCKER` block:
 
 ```earthfile
 integration-test:
@@ -324,7 +325,7 @@ integration-test:
 
 ### How `WITH DOCKER` works
 
-Earthly runs build targets inside containers on a Docker daemon. Normally, those containers cannot themselves start additional containers — they have no access to a Docker socket. `WITH DOCKER` is Earthly's escape hatch: it starts a Docker-in-Docker (DinD) daemon inside the build container, then executes the commands inside `WITH DOCKER ... END` with that daemon available. When Testcontainers calls `docker run postgres:16-alpine`, it reaches the DinD daemon, not the outer host daemon.
+Earthly runs build targets inside containers on a Docker daemon. Normally, those containers cannot themselves start additional containers—they have no access to a Docker socket. `WITH DOCKER` is Earthly's escape hatch: it starts a Docker-in-Docker (DinD) daemon inside the build container, then executes the commands inside `WITH DOCKER ... END` with that daemon available. When Testcontainers calls `docker run postgres:16-alpine`, it reaches the DinD daemon, not the outer host daemon.
 
 From your perspective as a developer, `WITH DOCKER` looks like a scoped block. Any `RUN` commands inside it can start containers. Once the `END` is reached, Earthly tears down the DinD daemon. Images pulled during the run are discarded, so subsequent runs pull them again unless you configure a registry mirror. For CI pipelines where build times matter, this is a worthwhile area to revisit, but it does not affect correctness.
 
@@ -377,6 +378,6 @@ The trade-off is startup time. A Postgres container takes two to four seconds to
 
 ## References
 
-[^1]: Testcontainers for Go — Postgres module: <https://golang.testcontainers.org/modules/postgres/>
-[^2]: golang-migrate — Usage with Go: <https://github.com/golang-migrate/migrate>
-[^3]: Earthly — WITH DOCKER: <https://docs.earthly.dev/docs/earthfile#with-docker>
+[^1]: Testcontainers for Go—Postgres module: <https://golang.testcontainers.org/modules/postgres/>
+[^2]: golang-migrate—Usage with Go: <https://github.com/golang-migrate/migrate>
+[^3]: Earthly—WITH DOCKER: <https://docs.earthly.dev/docs/earthfile#with-docker>

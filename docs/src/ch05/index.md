@@ -50,7 +50,7 @@ The gateway has no database and holds no business state; it is a translation lay
 
 ## Sections
 
-1. **[The BFF Pattern](./bff-pattern.md)**—What a BFF is, the Server struct, stdlib routing, and middleware, the Server struct, stdlib routing, and middleware
+1. **[The BFF Pattern](./bff-pattern.md)**—What a BFF is, the Server struct, stdlib routing, and middleware
 2. **[Templates & HTMX](./templates-htmx.md)**—Go templates, the clone-per-page pattern, and HTMX-powered filtering
 3. **[Session Management](./session-management.md)**—JWT cookies, login/logout flows, OAuth2 orchestration, and flash messages
 4. **[Admin CRUD](./admin-crud.md)**—Role guards, form handling, gRPC error mapping, and the Docker build

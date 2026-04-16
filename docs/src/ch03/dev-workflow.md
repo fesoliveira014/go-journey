@@ -103,6 +103,8 @@ ENV GOWORK=off
 
 # Copy shared modules and service source
 COPY gen/ ./gen/
+COPY pkg/auth/ ./pkg/auth/
+COPY pkg/otel/ ./pkg/otel/
 COPY services/catalog/ ./services/catalog/
 
 WORKDIR /app/services/catalog
@@ -118,7 +120,9 @@ Key differences from the production Dockerfile:
 - **`CMD` instead of `ENTRYPOINT`.** `CMD` is easier to override if you want to debug something (e.g., `docker compose exec catalog sh`).
 - **No `CGO_ENABLED=0`.** The development build does not need to be fully static since the container has the necessary libraries.
 
-The Gateway's `Dockerfile.dev` follows the same pattern, but it needs `gen/`, `pkg/auth/`, and `pkg/otel/` because the gateway imports from all three:
+The `COPY` lines for `gen/`, `pkg/auth/`, and `pkg/otel/` mirror the production Dockerfile—the catalog service imports from all three, so they must all be present for `go mod download` and the subsequent Air-driven builds to resolve correctly.
+
+The Gateway's `Dockerfile.dev` follows the same pattern, since the gateway also imports from `gen/`, `pkg/auth/`, and `pkg/otel/`:
 
 ```dockerfile
 FROM golang:1.22-alpine

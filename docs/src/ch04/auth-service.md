@@ -148,10 +148,10 @@ If you come from Spring, this is the same dependency inversion pattern—a Sprin
 
 ```go
 func (s *AuthService) Register(ctx context.Context, email, password, name string) (string, *model.User, error) {
-    // 1. Validate inputs
-    if email == "" { return "", nil, fmt.Errorf("email is required") }
-    if password == "" { return "", nil, fmt.Errorf("password is required") }
-    if name == "" { return "", nil, fmt.Errorf("name is required") }
+    // 1. Validate inputs — wrap the sentinel so the handler can map to InvalidArgument.
+    if email == "" { return "", nil, fmt.Errorf("%w: email is required", model.ErrInvalidInput) }
+    if password == "" { return "", nil, fmt.Errorf("%w: password is required", model.ErrInvalidInput) }
+    if name == "" { return "", nil, fmt.Errorf("%w: name is required", model.ErrInvalidInput) }
 
     // 2. Hash password with bcrypt
     hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -171,6 +171,14 @@ func (s *AuthService) Register(ctx context.Context, email, password, name string
     return token, created, nil
 }
 ```
+
+`ErrInvalidInput` is a sentinel defined in the `model` package alongside `ErrUserNotFound` and the other domain errors:
+
+```go
+var ErrInvalidInput = errors.New("invalid input")
+```
+
+Wrapping it with `%w` (the same pattern the Catalog service uses for `ErrInvalidBook` in Chapter 2) keeps the human-readable message—"email is required"—while letting the handler detect the category of failure with `errors.Is` and map it to `codes.InvalidArgument`. If the service returned a bare `fmt.Errorf(...)`, the handler would fall through to the default case in `toGRPCError` and return `codes.Internal`, which misrepresents a client-side validation error as a server fault.
 
 The flow is straightforward: validate, hash, persist, issue token. New users always get the `"user"` role. Promoting to admin is a deliberate manual operation (direct SQL update)—there is no "register as admin" RPC.
 
@@ -223,11 +231,13 @@ func (h *AuthHandler) Register(ctx context.Context, req *authv1.RegisterRequest)
 
 ### Error Mapping
 
-The `toGRPCError` function maps six domain errors to appropriate gRPC status codes:
+The `toGRPCError` function maps domain errors to appropriate gRPC status codes:
 
 ```go
 func toGRPCError(err error) error {
     switch {
+    case errors.Is(err, model.ErrInvalidInput):
+        return status.Error(codes.InvalidArgument, err.Error())
     case errors.Is(err, model.ErrUserNotFound):
         return status.Error(codes.NotFound, err.Error())
     case errors.Is(err, model.ErrDuplicateEmail):
@@ -246,7 +256,7 @@ func toGRPCError(err error) error {
 }
 ```
 
-This is analogous to a Spring `@ControllerAdvice` exception handler that maps domain exceptions to HTTP status codes. The default case returns `Internal` with a generic message—never leaking internal details to the client.
+This is analogous to a Spring `@ControllerAdvice` exception handler that maps domain exceptions to HTTP status codes. The default case returns `Internal` with a generic message—never leaking internal details to the client. Note the `ErrInvalidInput` branch: because the service wraps validation failures with this sentinel, `errors.Is` catches them here and returns `codes.InvalidArgument` rather than falling through to the `Internal` default.
 
 ---
 
@@ -281,7 +291,7 @@ authv1.RegisterAuthServiceServer(grpcServer, authHandler)
 
 Each layer only knows about the layer directly below it. The handler does not know about GORM. The service does not know about gRPC. This is the same layered architecture as the Catalog service, and it makes testing straightforward—you can mock any interface boundary.
 
-> **Production note:** **Why `log.Fatal` on missing `JWT_SECRET`?** An earlier draft of this code fell back to `"dev-secret-change-in-production"` when the env var was unset. That pattern is dangerous: a misconfigured deployment (forgotten Kubernetes Secret, typo in a ConfigMap key) would silently start a production service that accepts tokens signed with a publicly known string. The [12-Factor App's Config factor](https://12factor.net/config) is clear here — config belongs in the environment, and missing required config should fail fast. Development defaults belong in a `.env` file or Compose env block, not in the binary itself.
+> **Production note:** **Why `log.Fatal` on missing `JWT_SECRET`?** An earlier draft of this code fell back to `"dev-secret-change-in-production"` when the env var was unset. That pattern is dangerous: a misconfigured deployment (forgotten Kubernetes Secret, typo in a ConfigMap key) would silently start a production service that accepts tokens signed with a publicly known string. The [12-Factor App's Config factor](https://12factor.net/config) is clear here—config belongs in the environment, and missing required config should fail fast. Development defaults belong in a `.env` file or Compose env block, not in the binary itself.
 
 ---
 

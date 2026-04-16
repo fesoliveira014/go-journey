@@ -1,6 +1,6 @@
-# 13.3 ECR — Container Registry for EKS
+# 13.3 ECR—Container Registry for EKS
 
-Chapter 10 built a CI pipeline that publishes five Docker images to the GitHub Container Registry (GHCR) on every push to `main`. GHCR is the right choice for a project hosted on GitHub — authentication is automatic via `GITHUB_TOKEN`, and the registry lives next to the source. When running on EKS, though, GHCR is an external registry. Every node that pulls an image needs credentials — credentials that must be rotated, distributed, and kept out of your manifests.
+Chapter 10 built a CI pipeline that publishes five Docker images to the GitHub Container Registry (GHCR) on every push to `main`. GHCR is the right choice for a project hosted on GitHub—authentication is automatic via `GITHUB_TOKEN`, and the registry lives next to the source. When running on EKS, though, GHCR is an external registry. Every node that pulls an image needs credentials—credentials that must be rotated, distributed, and kept out of your manifests.
 
 Amazon Elastic Container Registry (ECR) is the AWS-native alternative.[^1] It stores images in the same AWS account as the EKS cluster, and authentication between the two is handled by IAM. A node role with the right policy can pull images from ECR without a `Secret`, without `imagePullSecrets` in every pod spec, and without managing credentials at all. For workloads running inside AWS, ECR is the simplest integration.
 
@@ -8,7 +8,7 @@ Amazon Elastic Container Registry (ECR) is the AWS-native alternative.[^1] It st
 
 ## Why ECR over GHCR for EKS
 
-The difference is not about capability — both registries store OCI-compatible images. The difference is about where authentication lives.
+The difference is not about capability—both registries store OCI-compatible images. The difference is about where authentication lives.
 
 With GHCR and Kubernetes, you need a `kubernetes.io/dockerconfigjson` Secret in every namespace that pulls images. You create it once with `kubectl create secret docker-registry`, but you also need to rotate it when the token expires, distribute it to every new namespace, and reference it in every `Deployment` manifest under `imagePullSecrets`. In a multi-namespace cluster, this becomes operational overhead.
 
@@ -38,7 +38,7 @@ resource "aws_ecr_repository" "services" {
   }
 
   tags = {
-    Project = "library-system"
+    Project = "library"
     Service = each.key
   }
 }
@@ -83,11 +83,11 @@ resource "aws_ecr_lifecycle_policy" "services" {
 
 `for_each = toset(local.services)` iterates over the services list, treating it as a set to guarantee uniqueness. Terraform creates one `aws_ecr_repository` resource per service, accessible as `aws_ecr_repository.services["catalog"]`, `aws_ecr_repository.services["auth"]`, and so on. Adding a new service to `local.services` and running `terraform apply` creates the new repository and its lifecycle policy automatically.
 
-`image_tag_mutability = "MUTABLE"` allows overwriting existing tags. This is needed because the `latest` tag is pushed on every build. If you set this to `IMMUTABLE`, every push must use a unique tag — `latest` would fail after the first push. The `sha-<commit>` tags are effectively immutable in practice (you would never rebuild the same commit), but enforcing immutability at the registry level makes `latest` unusable.
+`image_tag_mutability = "MUTABLE"` allows overwriting existing tags. This is needed because the `latest` tag is pushed on every build. If you set this to `IMMUTABLE`, every push must use a unique tag—`latest` would fail after the first push. The `sha-<commit>` tags are effectively immutable in practice (you would never rebuild the same commit), but enforcing immutability at the registry level makes `latest` unusable.
 
-`scan_on_push = true` triggers ECR's built-in vulnerability scanning (basic scanning powered by Clair; enable enhanced scanning in the ECR console for Amazon Inspector integration) every time an image is pushed.[^2] Scan results appear in the ECR console and can be retrieved via the AWS CLI. This is a free, zero-configuration security baseline. It does not block deployments on findings — that would require a separate policy or CI gate — but it gives you visibility without additional tooling.
+`scan_on_push = true` triggers ECR's built-in vulnerability scanning (basic scanning powered by Clair; enable enhanced scanning in the ECR console for Amazon Inspector integration) every time an image is pushed.[^2] Scan results appear in the ECR console and can be retrieved via the AWS CLI. This is a free, zero-configuration security baseline. It does not block deployments on findings—that would require a separate policy or CI gate—but it gives you visibility without additional tooling.
 
-The lifecycle policy has two rules, evaluated in priority order. Rule 1 expires untagged images after 14 days. Untagged images accumulate whenever a push overwrites the `latest` tag — the previous image loses its tag but its layers remain. Without a lifecycle policy, untagged layers accumulate indefinitely and increase your ECR bill. Rule 2 keeps the last 20 images tagged with `sha-` or `latest` prefixes. On an active project with multiple deployments per day, this retains roughly two to three weeks of history, which is enough to roll back to any recent deployment.
+The lifecycle policy has two rules, evaluated in priority order. Rule 1 expires untagged images after 14 days. Untagged images accumulate whenever a push overwrites the `latest` tag—the previous image loses its tag but its layers remain. Without a lifecycle policy, untagged layers accumulate indefinitely and increase your ECR bill. Rule 2 keeps the last 20 images tagged with `sha-` or `latest` prefixes. On an active project with multiple deployments per day, this retains roughly two to three weeks of history, which is enough to roll back to any recent deployment.
 
 ---
 
@@ -112,7 +112,7 @@ images:
     newTag: sha-abc1234f
 ```
 
-This keeps the base manifests portable — they reference short names like `catalog` — while the production overlay injects the environment-specific registry and tag. A CI job updates `newTag` in this file as part of the deploy pipeline, committing the change to trigger a GitOps reconciliation.
+This keeps the base manifests portable—they reference short names like `catalog`—while the production overlay injects the environment-specific registry and tag. A CI job updates `newTag` in this file as part of the deploy pipeline, committing the change to trigger a GitOps reconciliation.
 
 ---
 
@@ -147,7 +147,7 @@ The GitHub Actions push workflow reads these URLs with `terraform output -json e
 
 ## References
 
-[^1]: [Amazon ECR documentation](https://docs.aws.amazon.com/AmazonECR/latest/userguide/what-is-ecr.html) — Overview of ECR concepts, authentication methods, and registry types (private, public, pull-through cache).
-[^2]: [ECR image scanning with Amazon Inspector](https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-scanning.html) — Configuring enhanced scanning, interpreting findings, and setting up EventBridge notifications for critical vulnerabilities.
-[^3]: [Kustomize images transformer](https://kubectl.docs.kubernetes.io/references/kustomize/kustomization/images/) — Reference for the `images` field in `kustomization.yaml`, covering `newName`, `newTag`, and `digest` overrides.
-[^4]: [Amazon ECR lifecycle policies](https://docs.aws.amazon.com/AmazonECR/latest/userguide/LifecyclePolicies.html) — Full lifecycle policy syntax, rule evaluation order, and examples for common retention patterns.
+[^1]: [Amazon ECR documentation](https://docs.aws.amazon.com/AmazonECR/latest/userguide/what-is-ecr.html)—Overview of ECR concepts, authentication methods, and registry types (private, public, pull-through cache).
+[^2]: [ECR image scanning with Amazon Inspector](https://docs.aws.amazon.com/AmazonECR/latest/userguide/image-scanning.html)—Configuring enhanced scanning, interpreting findings, and setting up EventBridge notifications for critical vulnerabilities.
+[^3]: [Kustomize images transformer](https://kubectl.docs.kubernetes.io/references/kustomize/kustomization/images/)—Reference for the `images` field in `kustomization.yaml`, covering `newName`, `newTag`, and `digest` overrides.
+[^4]: [Amazon ECR lifecycle policies](https://docs.aws.amazon.com/AmazonECR/latest/userguide/LifecyclePolicies.html)—Full lifecycle policy syntax, rule evaluation order, and examples for common retention patterns.

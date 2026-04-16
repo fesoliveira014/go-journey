@@ -2,15 +2,15 @@
 
 This hands-on guide walks you through building a complete microservices application in Go. By the end, you will have built a library-management system that covers:
 
-- **Go** — the language, project structure, testing, and idioms
-- **Microservices** — decomposition, gRPC, and event-driven architecture with Kafka
-- **Databases** — PostgreSQL with migrations and the repository pattern
-- **Containers** — Docker, multi-stage builds, and Docker Compose
-- **Orchestration** — Kubernetes (kind locally, EKS in production)
-- **Infrastructure as Code** — Terraform for AWS (VPC, EKS, RDS)
-- **Observability** — OpenTelemetry, Tempo, Prometheus, Grafana, Loki
-- **CI/CD** — GitHub Actions and Earthly
-- **Authentication** — JWT, bcrypt, OAuth2 with Google
+- **Go**—the language, project structure, testing, and idioms
+- **Microservices**—decomposition, gRPC, and event-driven architecture with Kafka
+- **Databases**—PostgreSQL with migrations and the repository pattern
+- **Containers**—Docker, multi-stage builds, and Docker Compose
+- **Orchestration**—Kubernetes (kind locally, EKS in production)
+- **Infrastructure as Code**—Terraform for AWS (VPC, EKS, RDS)
+- **Observability**—OpenTelemetry, Tempo, Prometheus, Grafana, Loki
+- **CI/CD**—GitHub Actions and Earthly
+- **Authentication**—JWT, bcrypt, OAuth2 with Google
 
 ## Who This Is For
 
@@ -32,7 +32,7 @@ Each chapter builds on the previous one, so follow them in order. **The code sni
 
 Every chapter includes:
 
-- **Theory** — why each decision matters
-- **Implementation** — complete, runnable code
-- **Exercises** — problems that reinforce the chapter
-- **References** — links to official documentation and further reading
+- **Theory**—why each decision matters
+- **Implementation**—complete, runnable code
+- **Exercises**—problems that reinforce the chapter
+- **References**—links to official documentation and further reading

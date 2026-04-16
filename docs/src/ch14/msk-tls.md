@@ -1,8 +1,8 @@
-# 14.4 — Kafka Encryption: MSK TLS
+# 14.4—Kafka Encryption: MSK TLS
 
 Chapter 13 deployed the MSK cluster with `client_broker = "PLAINTEXT"` and opened port 9092 in the security group. The comment in the Terraform file acknowledged the gap: port 9094 and TLS were deferred to this chapter. This section closes that gap.
 
-The usual objection to encrypting intra-VPC traffic is that the VPC boundary already provides isolation — an attacker on the public internet cannot reach port 9092, so what is there to protect? The objection holds for the public internet, but the VPC boundary is not the only threat model. A compromised pod inside the cluster, a misconfigured VPC peering attachment, or a broad security group rule opened during debugging all create paths for lateral movement. Any process in the same VPC that can reach the MSK security group can read every Kafka message in transit if those messages are unencrypted. Enabling TLS closes that exposure with near-zero performance impact — modern server CPUs handle TLS at line rate using AES-NI hardware acceleration, and MSK brokers are no different[^1].
+The usual objection to encrypting intra-VPC traffic is that the VPC boundary already provides isolation—an attacker on the public internet cannot reach port 9092, so what is there to protect? The objection holds for the public internet, but the VPC boundary is not the only threat model. A compromised pod inside the cluster, a misconfigured VPC peering attachment, or a broad security group rule opened during debugging all create paths for lateral movement. Any process in the same VPC that can reach the MSK security group can read every Kafka message in transit if those messages are unencrypted. Enabling TLS closes that exposure with near-zero performance impact—modern server CPUs handle TLS at line rate using AES-NI hardware acceleration, and MSK brokers are no different[^1].
 
 The change is also required for compliance. SOC 2 Type II, PCI DSS, and most HIPAA interpretations require encryption in transit for all data. A finding that reads "Kafka traffic between EKS nodes and MSK is unencrypted" will fail an audit. Fixing it is a one-line Terraform change.
 
@@ -12,7 +12,7 @@ No application code changes are needed. The Go Kafka client libraries handle TLS
 
 ## What Changes in Terraform
 
-### `terraform/msk.tf` — Enabling the TLS Listener
+### `terraform/msk.tf`—Enabling the TLS Listener
 
 The `encryption_in_transit` block in `aws_msk_cluster.library` controls which listeners MSK activates. Update it from `PLAINTEXT` to `TLS`:
 
@@ -20,7 +20,7 @@ The `encryption_in_transit` block in `aws_msk_cluster.library` controls which li
 # terraform/msk.tf
 
 resource "aws_msk_cluster" "library" {
-  cluster_name           = "${var.project_name}-kafka"
+  cluster_name           = "library"
   kafka_version          = "3.6.0"
   number_of_broker_nodes = 2
 
@@ -56,14 +56,14 @@ The `client_broker` field accepts three values:
 | Value | Port 9092 open | Port 9094 open | Notes |
 |-------|---------------|---------------|-------|
 | `PLAINTEXT` | Yes | No | Chapter 13 state |
-| `TLS_PLAINTEXT` | Yes | Yes | Both listeners active — useful during migration |
-| `TLS` | No | Yes | TLS only — Chapter 14 target state |
+| `TLS_PLAINTEXT` | Yes | Yes | Both listeners active—useful during migration |
+| `TLS` | No | Yes | TLS only—Chapter 14 target state |
 
-`TLS_PLAINTEXT` is the recommended setting during a migration on a cluster that is already serving traffic: it activates the TLS listener without disabling the plaintext one, so you can deploy the updated client configuration and verify it is working before removing the fallback. For a fresh deployment — which is the case here — go straight to `TLS`. There are no existing consumers to migrate and no compatibility window to maintain.
+`TLS_PLAINTEXT` is the recommended setting during a migration on a cluster that is already serving traffic: it activates the TLS listener without disabling the plaintext one, so you can deploy the updated client configuration and verify it is working before removing the fallback. For a fresh deployment—which is the case here—go straight to `TLS`. There are no existing consumers to migrate and no compatibility window to maintain.
 
 `in_cluster = true` encrypts replication traffic between the two broker nodes. This setting is independent of `client_broker` and was already enabled implicitly in Chapter 13 (it is the default). It is set explicitly here for clarity[^2].
 
-### `terraform/vpc.tf` — Adding the TLS Security Group Rule
+### `terraform/vpc.tf`—Adding the TLS Security Group Rule
 
 The current security group allows inbound TCP on port 9092. That rule is no longer needed once `client_broker = "TLS"` is applied; MSK stops listening on 9092. Even so, it is cleaner to add the TLS rule first, verify the connection, and then remove the plaintext rule in a follow-up apply. For a fresh deployment you can add only the TLS rule:
 
@@ -81,9 +81,9 @@ resource "aws_security_group_rule" "msk_ingress_tls" {
 }
 ```
 
-The `source_security_group_id` references the EKS managed node group security group, which is the same approach used by the `rds_ingress` rule for PostgreSQL. Only traffic originating from EKS worker nodes is permitted — no CIDR block, no `0.0.0.0/0`. This is the correct pattern for intra-VPC service-to-service access: allowlist the source security group, not a broad IP range.
+The `source_security_group_id` references the EKS managed node group security group, which is the same approach used by the `rds_ingress` rule for PostgreSQL. Only traffic originating from EKS worker nodes is permitted—no CIDR block, no `0.0.0.0/0`. This is the correct pattern for intra-VPC service-to-service access: allowlist the source security group, not a broad IP range.
 
-### `terraform/outputs.tf` — Adding the TLS Bootstrap Output
+### `terraform/outputs.tf`—Adding the TLS Bootstrap Output
 
 MSK exposes two attributes for bootstrap broker strings: `bootstrap_brokers` for the plaintext listener and `bootstrap_brokers_tls` for the TLS listener. Chapter 13's `outputs.tf` already exported the plaintext string. Add the TLS equivalent:
 
@@ -114,12 +114,16 @@ This string replaces the port 9092 addresses in the production Kustomize overlay
 
 The production Kustomize overlay in `deploy/k8s/overlays/production/kustomization.yaml` contains three ConfigMap patches that set `KAFKA_BROKERS` to the MSK bootstrap string. Each currently uses the placeholder `MSK_BOOTSTRAP_BROKERS` pointing at port 9092. Update all three to use the TLS bootstrap string on port 9094.
 
-The patches live in the `patches:` block of `kustomization.yaml`. The only value that changes is `KAFKA_BROKERS` — the port number shifts from 9092 to 9094, and the addresses come from `bootstrap_brokers_tls` rather than `bootstrap_brokers`:
+The patches live in the `patches:` block of `kustomization.yaml`. The only value that changes is `KAFKA_BROKERS`—the port number shifts from 9092 to 9094, and the addresses come from `bootstrap_brokers_tls` rather than `bootstrap_brokers`:
 
 ```yaml
 # deploy/k8s/overlays/production/kustomization.yaml (excerpt)
 
   # --- ConfigMap patches (Kafka brokers → MSK TLS) ---
+  # Each patch specifies only KAFKA_BROKERS. Strategic merge on ConfigMap.data
+  # merges by key, so sibling keys (GRPC_PORT, CATALOG_GRPC_ADDR, etc.) are
+  # preserved from the base — listing them here would risk shadowing future
+  # changes in the base with stale values copied into the overlay.
   - target:
       kind: ConfigMap
       name: catalog-config
@@ -131,9 +135,7 @@ The patches live in the `patches:` block of `kustomization.yaml`. The only value
         name: catalog-config
         namespace: library
       data:
-        GRPC_PORT: "50052"
         KAFKA_BROKERS: "b-1.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094,b-2.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094"
-        OTEL_COLLECTOR_ENDPOINT: ""
 
   - target:
       kind: ConfigMap
@@ -146,11 +148,7 @@ The patches live in the `patches:` block of `kustomization.yaml`. The only value
         name: reservation-config
         namespace: library
       data:
-        GRPC_PORT: "50053"
         KAFKA_BROKERS: "b-1.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094,b-2.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094"
-        CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
-        MAX_ACTIVE_RESERVATIONS: "5"
-        OTEL_COLLECTOR_ENDPOINT: ""
 
   - target:
       kind: ConfigMap
@@ -163,10 +161,7 @@ The patches live in the `patches:` block of `kustomization.yaml`. The only value
         name: search-config
         namespace: library
       data:
-        GRPC_PORT: "50054"
         KAFKA_BROKERS: "b-1.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094,b-2.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094"
-        MEILI_URL: "http://meilisearch.data.svc.cluster.local:7700"
-        CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
 ```
 
 Replace the placeholder broker addresses with the actual output from `terraform output msk_bootstrap_brokers_tls`. As in Chapter 13, you can automate this in the CI/CD pipeline by writing the TLS bootstrap string to SSM Parameter Store during the Terraform apply and reading it back before running `kubectl apply`.
@@ -201,7 +196,7 @@ dialer := &kafka.Dialer{
 }
 ```
 
-In both cases, passing an empty `tls.Config{}` is equivalent to passing `nil` for the CA pool — the standard library falls back to the system root store, which trusts Amazon Trust Services, which signed the MSK broker certificate. The connection succeeds without any further configuration.
+In both cases, passing an empty `tls.Config{}` is equivalent to passing `nil` for the CA pool—the standard library falls back to the system root store, which trusts Amazon Trust Services, which signed the MSK broker certificate. The connection succeeds without any further configuration.
 
 If the services use `confluent-kafka-go`, TLS is configured through the `security.protocol` property:
 
@@ -213,7 +208,7 @@ producer, err := kafka.NewProducer(&kafka.ConfigMap{
 })
 ```
 
-The one exception to "no code change needed" arises if your container images use a stripped-down base that does not include a CA bundle — for example, an empty `scratch` image. In that case, Go's `crypto/tls` cannot find any system roots and the TLS handshake will fail with an error like `x509: certificate signed by unknown authority`. The fix is to copy the CA bundle into the image during the Docker build:
+The one exception to "no code change needed" arises if your container images use a stripped-down base that does not include a CA bundle—for example, an empty `scratch` image. In that case, Go's `crypto/tls` cannot find any system roots and the TLS handshake will fail with an error like `x509: certificate signed by unknown authority`. The fix is to copy the CA bundle into the image during the Docker build:
 
 ```dockerfile
 FROM alpine:3.20 AS certs
@@ -225,15 +220,15 @@ COPY --from=builder /app/service /service
 ENTRYPOINT ["/service"]
 ```
 
-The library system's Dockerfiles already copy the CA bundle from Alpine, so this is handled. The point is worth understanding so that the error message — if you ever encounter it in a different project — does not send you down a rabbit hole of debugging TLS configuration when the fix is two Dockerfile lines.
+The library system's Dockerfiles already copy the CA bundle from Alpine, so this is handled. The point is worth understanding so that the error message—if you ever encounter it in a different project—does not send you down a rabbit hole of debugging TLS configuration when the fix is two Dockerfile lines.
 
 ---
 
 ## Migration Strategy
 
-The approach above describes a fresh deployment — no data in the existing cluster, no consumers to migrate. If you apply this chapter's changes to a cluster that is already handling production traffic, the steps are slightly different.
+The approach above describes a fresh deployment—no data in the existing cluster, no consumers to migrate. If you apply this chapter's changes to a cluster that is already handling production traffic, the steps are slightly different.
 
-**Step 1: Switch to `TLS_PLAINTEXT`.** This activates the TLS listener without disabling the plaintext one. Both ports are open. Apply the Terraform change and wait for MSK to complete the broker configuration update. MSK applies this change as a rolling restart — brokers are restarted one at a time, so the cluster remains available, though with reduced redundancy during the restart window. Expect one to two minutes per broker.
+**Step 1: Switch to `TLS_PLAINTEXT`.** This activates the TLS listener without disabling the plaintext one. Both ports are open. Apply the Terraform change and wait for MSK to complete the broker configuration update. MSK applies this change as a rolling restart—brokers are restarted one at a time, so the cluster remains available, though with reduced redundancy during the restart window. Expect one to two minutes per broker.
 
 **Step 2: Deploy with port 9094.** Update the ConfigMap patches to use the TLS bootstrap string and run `kubectl apply -k deploy/k8s/overlays/production/`. The pods restart and begin connecting on port 9094. The plaintext listener is still active, so any pod that has not yet restarted continues to work on port 9092 during the rolling update.
 
@@ -249,7 +244,7 @@ If the broker list comes back without errors, the TLS connection is working. If 
 
 **Step 4: Switch to `TLS` only.** Update `client_broker = "TLS"` in `msk.tf` and apply again. Remove the port 9092 security group rule. MSK performs another rolling restart to disable the plaintext listener.
 
-For a fresh deployment — the case in this chapter — skip directly to `TLS`. There is no traffic to migrate and no compatibility window needed.
+For a fresh deployment—the case in this chapter—skip directly to `TLS`. There is no traffic to migrate and no compatibility window needed.
 
 ---
 
@@ -300,6 +295,6 @@ You should see the Kafka consumer group join log lines without any TLS or connec
 ---
 
 [^1]: MSK encryption in transit documentation: https://docs.aws.amazon.com/msk/latest/developerguide/msk-encryption.html
-[^2]: `aws_msk_cluster` Terraform resource reference — `encryption_info`: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/msk_cluster#encryption_info
+[^2]: `aws_msk_cluster` Terraform resource reference—`encryption_info`: https://registry.terraform.io/providers/hashicorp/aws/latest/docs/resources/msk_cluster#encryption_info
 [^3]: Amazon Trust Services root CA information: https://www.amazontrust.com/repository/
-[^4]: Go `crypto/tls` package — system certificate pool behavior: https://pkg.go.dev/crypto/tls#Config
+[^4]: Go `crypto/tls` package—system certificate pool behavior: https://pkg.go.dev/crypto/tls#Config

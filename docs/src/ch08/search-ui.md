@@ -224,7 +224,7 @@ Two things to note:
 
 1. **Short-circuit for short prefixes.** If the prefix is less than 2 characters, the handler returns an empty response with the correct content type. This renders as empty HTML in the suggestions div, effectively clearing any previous suggestions. The HTMX trigger already filters these out, but the server-side check is defense in depth.
 
-2. **Error handling returns empty HTML.** If the Search Service is down, the user sees no suggestions—not an error message. This is appropriate for autocomplete: It is a progressive enhancement, not a critical feature. The user can still type their query and press Enter to use the full search page.
+2. **Error handling returns empty HTML.** If the Search Service is down, the user sees no suggestions—not an error message. This is appropriate for autocomplete: it is a progressive enhancement, not a critical feature. The user can still type their query and press Enter to use the full search page.
 
 The `renderPartial` method renders a named template without the full page layout (no `<html>`, no nav, no footer). The suggestions template is a list of links:
 

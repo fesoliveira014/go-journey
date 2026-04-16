@@ -1,4 +1,4 @@
-# 14.3 — Secrets Management with External Secrets Operator
+# 14.3—Secrets Management with External Secrets Operator
 
 Chapter 13's production overlay left a comment in the `secretGenerator` block that was easy to skim past:
 
@@ -20,11 +20,11 @@ That comment describes a manual process: you run an AWS CLI command to retrieve 
 
 **Shell history.** Every `aws secretsmanager get-secret-value` invocation that you pipe into a `kubectl create secret` call or paste into an environment variable leaves a copy of the plaintext credential in `~/.zsh_history` or `~/.bash_history`. That file is typically world-readable on developer laptops, synced to dotfile repositories, and occasionally included in support bundles. You are also trusting that every operator who has ever run this step on a shared bastion host did not leave similar traces.
 
-**Rotation without downtime.** AWS Secrets Manager can rotate the RDS master password on a schedule — roughly every 30 days is a common policy. When it does, the old password stops working immediately. If your Kubernetes Secret still holds the old value, every pod that restarts or that reads the credential at connection-establishment time will fail with an authentication error. Manual rotation means someone has to notice the failure, retrieve the new password, update the Secret, and trigger a rolling restart — all while the application is broken.
+**Rotation without downtime.** AWS Secrets Manager can rotate the RDS master password on a schedule—roughly every 30 days is a common policy. When it does, the old password stops working immediately. If your Kubernetes Secret still holds the old value, every pod that restarts or that reads the credential at connection-establishment time will fail with an authentication error. Manual rotation means someone has to notice the failure, retrieve the new password, update the Secret, and trigger a rolling restart—all while the application is broken.
 
-**Error-prone during re-deployments.** Placeholder values are sticky. If you run `kustomize build overlays/production | kubectl apply -f -` after pulling the latest git state on a fresh machine, the Secrets you created manually are already in the cluster — so nothing breaks immediately. But the day you run `terraform destroy` and `terraform apply` to rebuild the cluster for a new region or disaster recovery, you must reconstruct every Secret by hand. The list of secrets grows over time, documentation for the process drifts, and at least one value is wrong.
+**Error-prone during re-deployments.** Placeholder values are sticky. If you run `kustomize build overlays/production | kubectl apply -f -` after pulling the latest git state on a fresh machine, the Secrets you created manually are already in the cluster—so nothing breaks immediately. But the day you run `terraform destroy` and `terraform apply` to rebuild the cluster for a new region or disaster recovery, you must reconstruct every Secret by hand. The list of secrets grows over time, documentation for the process drifts, and at least one value is wrong.
 
-**The principle of least manual intervention.** Infrastructure as code exists to make system state reproducible without human memory. A manual secret-pasting step is a gap in that reproducibility — a step that is not captured in any file that `git blame` can show you, not gated by any code review, and not executable by your CI pipeline without introducing its own secret-management problem.
+**The principle of least manual intervention.** Infrastructure as code exists to make system state reproducible without human memory. A manual secret-pasting step is a gap in that reproducibility—a step that is not captured in any file that `git blame` can show you, not gated by any code review, and not executable by your CI pipeline without introducing its own secret-management problem.
 
 The right answer is to treat secrets the same way you treat infrastructure: define them declaratively, let an automated system reconcile the desired state with the actual state, and audit the process rather than the operator.
 
@@ -32,16 +32,16 @@ The right answer is to treat secrets the same way you treat infrastructure: defi
 
 ## How External Secrets Operator works
 
-**External Secrets Operator** (ESO) is a Kubernetes controller that bridges external secret stores — AWS Secrets Manager, HashiCorp Vault, Google Secret Manager, Azure Key Vault, and others — with native Kubernetes Secrets.[^1] Instead of running a `kubectl` command, you declare two custom resources:
+**External Secrets Operator** (ESO) is a Kubernetes controller that bridges external secret stores—AWS Secrets Manager, HashiCorp Vault, Google Secret Manager, Azure Key Vault, and others—with native Kubernetes Secrets.[^1] Instead of running a `kubectl` command, you declare two custom resources:
 
 - A **`SecretStore`** that tells ESO how to connect to the external store. For AWS Secrets Manager, this specifies the region and the IAM authentication method.
 - An **`ExternalSecret`** that tells ESO which value to fetch and what Kubernetes Secret to create from it. You specify the remote key name, the field within that key's JSON payload, and the local Secret key to populate.
 
-ESO polls the external store on a configurable `refreshInterval`. When it fetches a value, it creates or updates the corresponding Kubernetes Secret. If the value changes in Secrets Manager — because RDS rotated the password — ESO writes the new value to the Secret on the next poll cycle.
+ESO polls the external store on a configurable `refreshInterval`. When it fetches a value, it creates or updates the corresponding Kubernetes Secret. If the value changes in Secrets Manager—because RDS rotated the password—ESO writes the new value to the Secret on the next poll cycle.
 
 ```mermaid
 flowchart LR
-    ASM["AWS Secrets Manager\n(rds!db-library-system-catalog)"]
+    ASM["AWS Secrets Manager\n(rds!db-library-catalog)"]
     ESO["ESO Controller\n(external-secrets namespace)"]
     KS["Kubernetes Secret\n(postgres-catalog-secret)"]
     POD["Pod env var\n(POSTGRES_PASSWORD)"]
@@ -53,17 +53,17 @@ flowchart LR
 
 From the pod's perspective, nothing changes. The Deployment still references `postgres-catalog-secret` via `secretKeyRef`. The difference is that ESO creates and maintains that Secret instead of a human with a clipboard.
 
-ESO does not require any changes to application code, Dockerfiles, or the base Kustomize manifests. The interface between the operator and the application is the Kubernetes Secret object — a stable API that both sides already speak.
+ESO does not require any changes to application code, Dockerfiles, or the base Kustomize manifests. The interface between the operator and the application is the Kubernetes Secret object—a stable API that both sides already speak.
 
 ---
 
 ## IRSA for ESO
 
-ESO needs permission to call `GetSecretValue` on the Secrets Manager secrets it is responsible for. In an EKS cluster, the correct way to grant AWS permissions to a pod is IRSA — the same pattern you used for the EBS CSI driver and the Load Balancer Controller in Chapter 13.
+ESO needs permission to call `GetSecretValue` on the Secrets Manager secrets it is responsible for. In an EKS cluster, the correct way to grant AWS permissions to a pod is IRSA—the same pattern you used for the EBS CSI driver and the Load Balancer Controller in Chapter 13.
 
 The `terraform-aws-modules/iam` module has a built-in preset for External Secrets Operator. Setting `attach_external_secrets_policy = true` creates a policy with the minimum required permissions: `secretsmanager:GetSecretValue`, `secretsmanager:DescribeSecret`, and `secretsmanager:ListSecretVersionIds`.[^2] You scope it to a resource ARN pattern to limit access to only the secrets this cluster owns.
 
-RDS creates Secrets Manager entries automatically when `manage_master_user_password = true` is set on the `aws_db_instance` resource — which your Chapter 13 Terraform already does for all three databases. The automatically created secrets follow the naming pattern `rds!db-<identifier>`. The `*` wildcard in the ARN below matches the random suffix that Secrets Manager appends to prevent enumeration.
+RDS creates Secrets Manager entries automatically when `manage_master_user_password = true` is set on the `aws_db_instance` resource—which your Chapter 13 Terraform already does for all three databases. The automatically created secrets follow the naming pattern `rds!db-<identifier>`. The `*` wildcard in the ARN below matches the random suffix that Secrets Manager appends to prevent enumeration.
 
 Create `terraform/eso.tf`:
 
@@ -128,7 +128,7 @@ resource "helm_release" "external_secrets" {
 }
 ```
 
-The `namespace_service_accounts = ["external-secrets:external-secrets"]` entry is the binding between the Kubernetes identity and the IAM role. The trust policy it generates says, in effect: only tokens issued to the service account named `external-secrets` in the `external-secrets` namespace on this specific OIDC provider may call `AssumeRoleWithWebIdentity` for this role. A token issued to any other pod — even one in the same cluster — is denied.
+The `namespace_service_accounts = ["external-secrets:external-secrets"]` entry is the binding between the Kubernetes identity and the IAM role. The trust policy it generates says, in effect: only tokens issued to the service account named `external-secrets` in the `external-secrets` namespace on this specific OIDC provider may call `AssumeRoleWithWebIdentity` for this role. A token issued to any other pod—even one in the same cluster—is denied.
 
 Apply this before moving to the Kubernetes manifests:
 
@@ -154,7 +154,7 @@ Three pods: the main controller that reconciles `ExternalSecret` resources, a ce
 
 ## Creating the non-RDS secrets
 
-RDS secrets are created automatically by Secrets Manager when you set `manage_master_user_password = true`. The JWT secret and the Meilisearch master key are not database credentials and have no equivalent automated source — you need to create them once:
+RDS secrets are created automatically by Secrets Manager when you set `manage_master_user_password = true`. The JWT secret and the Meilisearch master key are not database credentials and have no equivalent automated source—you need to create them once:
 
 ```bash
 # Generate a cryptographically random 64-byte JWT secret and store it.
@@ -174,7 +174,7 @@ aws secretsmanager create-secret \
   --secret-string "{\"key\":\"$(openssl rand -hex 32)\"}"
 ```
 
-The JSON wrapper (`{"secret": "..."}`) is deliberate. ESO's `remoteRef.property` field extracts a specific key from a JSON-formatted secret value. If you store a bare string instead, you must omit the `property` field and ESO will use the entire value — which works, but JSON-formatted secrets are easier to extend later (if you need to add a `rotation_lambda_arn` field, for example) and are the format Secrets Manager's own rotation framework expects.
+The JSON wrapper (`{"secret": "..."}`) is deliberate. ESO's `remoteRef.property` field extracts a specific key from a JSON-formatted secret value. If you store a bare string instead, you must omit the `property` field and ESO will use the entire value—which works, but JSON-formatted secrets are easier to extend later (if you need to add a `rotation_lambda_arn` field, for example) and are the format Secrets Manager's own rotation framework expects.
 
 Verify both secrets exist:
 
@@ -222,7 +222,7 @@ spec:
 
 The `auth.jwt.serviceAccountRef` field is the cross-namespace reference that ties this `SecretStore` to ESO's IAM permissions. When ESO reconciles an `ExternalSecret` that references this `SecretStore`, it uses the JWT token from the `external-secrets` service account in the `external-secrets` namespace to call STS and assume the IRSA role. The ESO controller itself runs in `external-secrets`, so it can read that service account's token directly.
 
-A `SecretStore` is namespaced — it is only usable by `ExternalSecret` resources in the same namespace. If you had multiple application namespaces, you would either create a `SecretStore` in each one or use a `ClusterSecretStore` (a cluster-scoped variant). For this system, which has a single `library` namespace, the namespaced variant is the right choice.
+A `SecretStore` is namespaced—it is only usable by `ExternalSecret` resources in the same namespace. If you had multiple application namespaces, you would either create a `SecretStore` in each one or use a `ClusterSecretStore` (a cluster-scoped variant). For this system, which has a single `library` namespace, the namespaced variant is the right choice.
 
 ---
 
@@ -257,7 +257,7 @@ spec:
       remoteRef:
         # RDS-managed secrets use the rds! prefix followed by the
         # db-instance identifier.
-        key: rds!db-library-system-catalog
+        key: rds!db-library-catalog
         # The RDS-managed secret is JSON: {"username": "...", "password": "..."}.
         # The property field extracts only the password field.
         property: password
@@ -279,7 +279,7 @@ spec:
   data:
     - secretKey: POSTGRES_PASSWORD
       remoteRef:
-        key: rds!db-library-system-auth
+        key: rds!db-library-auth
         property: password
 ---
 # --- Reservation database password ---
@@ -299,7 +299,7 @@ spec:
   data:
     - secretKey: POSTGRES_PASSWORD
       remoteRef:
-        key: rds!db-library-system-reservation
+        key: rds!db-library-reservation
         property: password
 ---
 # --- JWT signing secret ---
@@ -343,7 +343,7 @@ spec:
         property: key
 ```
 
-Note that the Meilisearch ExternalSecret targets the `data` namespace — not `library` — because the Meilisearch StatefulSet runs in the `data` namespace. This also requires a SecretStore in the `data` namespace. The YAML is identical to the `library`-namespace SecretStore, with only the namespace changed:
+Note that the Meilisearch ExternalSecret targets the `data` namespace—not `library`—because the Meilisearch StatefulSet runs in the `data` namespace. This also requires a SecretStore in the `data` namespace. The YAML is identical to the `library`-namespace SecretStore, with only the namespace changed:
 
 ```yaml
 # deploy/k8s/overlays/production/secret-store-data.yaml
@@ -366,9 +366,9 @@ spec:
 
 Add this file to the `resources` list in the production overlay's `kustomization.yaml`.
 
-Each `ExternalSecret` maps a single field from a Secrets Manager secret to a single key in a Kubernetes Secret. The `target.name` matches exactly the name used in the StatefulSet or Deployment's `secretKeyRef.name` — `postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `jwt-secret`, and `meilisearch-secret`. No application manifest changes are required.
+Each `ExternalSecret` maps a single field from a Secrets Manager secret to a single key in a Kubernetes Secret. The `target.name` matches exactly the name used in the StatefulSet or Deployment's `secretKeyRef.name`—`postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `jwt-secret`, and `meilisearch-secret`. No application manifest changes are required.
 
-The `creationPolicy: Owner` setting is worth understanding. It means ESO creates the Kubernetes Secret and marks itself as the owner via a Kubernetes owner reference. If you run `kubectl delete externalsecret postgres-catalog-secret -n library`, Kubernetes will garbage-collect the associated Secret automatically. This is the right policy for production: the Secret should not outlive its source of truth. The alternative, `creationPolicy: Merge`, is useful when you want to add ESO-managed keys into an existing Secret that is partially managed by other means — not the case here.
+The `creationPolicy: Owner` setting is worth understanding. It means ESO creates the Kubernetes Secret and marks itself as the owner via a Kubernetes owner reference. If you run `kubectl delete externalsecret postgres-catalog-secret -n library`, Kubernetes will garbage-collect the associated Secret automatically. This is the right policy for production: the Secret should not outlive its source of truth. The alternative, `creationPolicy: Merge`, is useful when you want to add ESO-managed keys into an existing Secret that is partially managed by other means—not the case here.
 
 ---
 
@@ -414,7 +414,7 @@ resources:
   - external-secrets.yaml
 ```
 
-The Deployment patches that reference `postgres-catalog-secret`, `jwt-secret`, and so on are unchanged. They were already written to consume a Kubernetes Secret by name. The only thing that changes is who creates those Secrets — Kustomize's `secretGenerator` is replaced by ESO.
+The Deployment patches that reference `postgres-catalog-secret`, `jwt-secret`, and so on are unchanged. They were already written to consume a Kubernetes Secret by name. The only thing that changes is who creates those Secrets—Kustomize's `secretGenerator` is replaced by ESO.
 
 Apply the updated overlay:
 
@@ -453,9 +453,9 @@ kubectl describe externalsecret postgres-catalog-secret -n library
 
 The `Status.Conditions` section will contain a message. Common causes:
 
-- **`unauthorized`** — the IRSA role ARN is wrong, or the `namespace_service_accounts` field in the Terraform module does not exactly match `external-secrets:external-secrets`. Verify with `kubectl describe serviceaccount external-secrets -n external-secrets` and confirm the `eks.amazonaws.com/role-arn` annotation matches the Terraform output.
-- **`ResourceNotFoundException`** — the secret key (e.g., `rds!db-library-system-catalog`) does not exist in Secrets Manager. The RDS identifier in Terraform and the key name in the `ExternalSecret` must match. Run `aws secretsmanager list-secrets` to see the actual names.
-- **`InvalidParameterException`** — the `property` field does not match a key in the JSON payload. Verify the secret format with `aws secretsmanager get-secret-value --secret-id rds!db-library-system-catalog`.
+- **`unauthorized`**—the IRSA role ARN is wrong, or the `namespace_service_accounts` field in the Terraform module does not exactly match `external-secrets:external-secrets`. Verify with `kubectl describe serviceaccount external-secrets -n external-secrets` and confirm the `eks.amazonaws.com/role-arn` annotation matches the Terraform output.
+- **`ResourceNotFoundException`**—the secret key (e.g., `rds!db-library-catalog`) does not exist in Secrets Manager. The RDS identifier in Terraform and the key name in the `ExternalSecret` must match. Run `aws secretsmanager list-secrets` to see the actual names.
+- **`InvalidParameterException`**—the `property` field does not match a key in the JSON payload. Verify the secret format with `aws secretsmanager get-secret-value --secret-id rds!db-library-catalog`.
 
 Once all five resources are `SecretSynced`, confirm the Kubernetes Secrets exist:
 
@@ -477,13 +477,13 @@ kubectl get secret postgres-catalog-secret -n library \
   -o jsonpath='{.data.POSTGRES_PASSWORD}' | base64 -d
 ```
 
-The decoded value should match what `aws secretsmanager get-secret-value --secret-id rds!db-library-system-catalog --query SecretString --output text | jq -r '.password'` returns.
+The decoded value should match what `aws secretsmanager get-secret-value --secret-id rds!db-library-catalog --query SecretString --output text | jq -r '.password'` returns.
 
 ---
 
 ## Secret rotation
 
-When RDS rotates the master password — either on a schedule you configure in Secrets Manager or triggered manually — the sequence is:
+When RDS rotates the master password—either on a schedule you configure in Secrets Manager or triggered manually—the sequence is:
 
 1. Secrets Manager stores the new password and marks the old version as `AWSPREVIOUS`.
 2. ESO polls Secrets Manager at the next `refreshInterval` boundary (up to one hour later with the configuration above).
@@ -519,7 +519,7 @@ For this system, adding Reloader and the annotation to the three database-connec
 
 ## What you have now
 
-The `secretGenerator` block is gone. No placeholder values exist anywhere in the git repository. The five Kubernetes Secrets that the application depends on are created and maintained by ESO, which reads live values from AWS Secrets Manager using a scoped IAM role that requires no static credentials. RDS passwords can rotate on a schedule without requiring any human action — the only question is whether you want automatic pod restarts (Reloader) or manual rolling restarts.
+The `secretGenerator` block is gone. No placeholder values exist anywhere in the git repository. The five Kubernetes Secrets that the application depends on are created and maintained by ESO, which reads live values from AWS Secrets Manager using a scoped IAM role that requires no static credentials. RDS passwords can rotate on a schedule without requiring any human action—the only question is whether you want automatic pod restarts (Reloader) or manual rolling restarts.
 
 The shape of what changed:
 
@@ -536,7 +536,7 @@ The next section addresses the remaining production gap: Kafka connections curre
 ---
 
 [^1]: External Secrets Operator documentation: https://external-secrets.io/latest/
-[^2]: terraform-aws-modules/iam IRSA submodule — External Secrets preset: https://registry.terraform.io/modules/terraform-aws-modules/iam/aws/latest/submodules/iam-role-for-service-accounts-eks
-[^3]: AWS Secrets Manager — RDS managed passwords: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html
+[^2]: terraform-aws-modules/iam IRSA submodule—External Secrets preset: https://registry.terraform.io/modules/terraform-aws-modules/iam/aws/latest/submodules/iam-role-for-service-accounts-eks
+[^3]: AWS Secrets Manager—RDS managed passwords: https://docs.aws.amazon.com/AmazonRDS/latest/UserGuide/rds-secrets-manager.html
 [^4]: EKS IRSA documentation: https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html
 [^5]: Stakater Reloader: https://github.com/stakater/Reloader

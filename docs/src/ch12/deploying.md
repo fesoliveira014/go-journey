@@ -1,6 +1,6 @@
 # 12.6 Deploying and Verifying
 
-Everything is in place. The code changes that make services cluster-aware are committed. The Kubernetes manifests — Deployments, Services, ConfigMaps, PersistentVolumeClaims — are written. Kustomize knows about the `local` overlay. The kind cluster is running with NGINX installed.
+Everything is in place. The code changes that make services cluster-aware are committed. The Kubernetes manifests—Deployments, Services, ConfigMaps, PersistentVolumeClaims—are written. Kustomize knows about the `local` overlay. The kind cluster is running with NGINX installed.
 
 This section walks through the final steps: building images, loading them into the cluster, applying the manifests, and confirming that the system actually works.
 
@@ -32,7 +32,7 @@ kind load docker-image library/reservation:latest --name library
 kind load docker-image library/search:latest      --name library
 ```
 
-Each `kind load` command copies the image tarball from the host Docker daemon into the `containerd` image store inside the `library-control-plane` container. This is a local copy operation — no registry push, no internet access required.
+Each `kind load` command copies the image tarball from the host Docker daemon into the `containerd` image store inside the `library-control-plane` container. This is a local copy operation—no registry push, no internet access required.
 
 **Confirm the images are visible inside the node:**
 
@@ -52,7 +52,7 @@ With the images in place, apply the Kustomize overlay:
 kubectl apply -k deploy/k8s/overlays/local
 ```
 
-The `-k` flag tells `kubectl` to run Kustomize against that directory before applying. Kustomize expands the overlay — merging the base resources with the local patches and the namespace declarations — and streams the result to the Kubernetes API server. You will see output like:
+The `-k` flag tells `kubectl` to run Kustomize against that directory before applying. Kustomize expands the overlay—merging the base resources with the local patches and the namespace declarations—and streams the result to the Kubernetes API server. You will see output like:
 
 ```
 namespace/library created
@@ -91,7 +91,7 @@ service/gateway created
 ingress.networking.k8s.io/library-ingress created
 ```
 
-Kubernetes creates the namespaces first (ordering matters — resources that reference a namespace will fail if it does not exist yet), then the infrastructure workloads, then the application services. The apply operation is declarative: running the same command again is safe and idempotent.
+Kubernetes creates the namespaces first (ordering matters—resources that reference a namespace will fail if it does not exist yet), then the infrastructure workloads, then the application services. The apply operation is declarative: running the same command again is safe and idempotent.
 
 **Wait for infrastructure pods first:**
 
@@ -169,7 +169,7 @@ This verifies that the pod is alive and the gRPC server is responding before you
 
 ### 4. Gateway via Ingress
 
-The Ingress routes `http://library.local` to the Gateway service. For this to work, `library.local` must resolve to `127.0.0.1` — add it to `/etc/hosts` if you have not already:
+The Ingress routes `http://library.local` to the Gateway service. For this to work, `library.local` must resolve to `127.0.0.1`—add it to `/etc/hosts` if you have not already:
 
 ```
 127.0.0.1 library.local
@@ -202,7 +202,7 @@ curl -s "http://library.local/api/search?q=Go+Programming" | jq .
 
 The search result should include the book you just created. This exercises: Gateway routing, Catalog service, PostgreSQL persistence, and the Search service (which is populated via a Kafka event emitted when the book was created).
 
-**Note on telemetry:** `OTEL_COLLECTOR_ENDPOINT` is intentionally empty in the `local` overlay — the kind cluster does not run an OpenTelemetry Collector. Traces and metrics are not collected in this environment. The services log a warning at startup but continue normally. Full observability is configured in the Docker Compose stack (Chapter 9); the kind cluster omits it for simplicity.
+**Note on telemetry:** `OTEL_COLLECTOR_ENDPOINT` is intentionally empty in the `local` overlay—the kind cluster does not run an OpenTelemetry Collector. Traces and metrics are not collected in this environment. The services log a warning at startup but continue normally. Full observability is configured in the Docker Compose stack (Chapter 9); the kind cluster omits it for simplicity.
 
 ---
 
@@ -212,7 +212,7 @@ The search result should include the book you just created. This exercises: Gate
 |---------|--------------|-----|
 | `ImagePullBackOff` | Image not loaded into kind | Re-run `kind load docker-image <image> --name library`. Confirm with `docker exec library-control-plane crictl images`. |
 | `CrashLoopBackOff` | Bad env var, missing secret, or DB not ready | `kubectl logs <pod> -n library`. Check previous run with `kubectl logs <pod> -n library --previous`. |
-| Pod stuck in `Pending` | PVC cannot bind — no matching StorageClass | kind ships with a `standard` StorageClass backed by `rancher.io/local-path`. Run `kubectl get sc` and verify your PVC requests `standard`. |
+| Pod stuck in `Pending` | PVC cannot bind—no matching StorageClass | kind ships with a `standard` StorageClass backed by `rancher.io/local-path`. Run `kubectl get sc` and verify your PVC requests `standard`. |
 | DNS resolution failure inside a pod | Service FQDN truncated or wrong namespace | Use the full FQDN: `<service>.<namespace>.svc.cluster.local`. Run `kubectl exec -it <pod> -- nslookup <service>.<namespace>` to test. |
 | Ingress returns 404 | NGINX controller not ready, or wrong `ingressClassName` | Check `kubectl get pods -n ingress-nginx`. Confirm the Ingress resource has `ingressClassName: nginx`. Verify the `Host` header in your request matches the Ingress `host` rule. |
 | gRPC health check times out | Port-forward not established, or wrong port | Confirm the pod is `Running` first. Check the Service's `targetPort` matches the port the container is actually listening on. |
@@ -227,7 +227,7 @@ kubectl describe pod <pod-name> -n library
 kubectl describe svc <service-name> -n library
 ```
 
-If a Service has no `Endpoints` listed in `kubectl describe svc`, no pod matched the label selector — this is one of the most common sources of 503 errors through an Ingress[^2].
+If a Service has no `Endpoints` listed in `kubectl describe svc`, no pod matched the label selector—this is one of the most common sources of 503 errors through an Ingress[^2].
 
 ---
 
@@ -252,7 +252,7 @@ kubectl apply -k deploy/k8s/overlays/local
 
 ## What's Next
 
-The library system is now running locally on Kubernetes. The same manifests — with a different Kustomize overlay — will be deployed to AWS EKS in Chapter 13. EKS introduces real load balancers, persistent volume classes backed by EBS, IAM-based secrets management, and a Route 53 DNS name instead of `/etc/hosts`. The workflow stays the same; the infrastructure layer underneath changes.
+The library system is now running locally on Kubernetes. The same manifests—with a different Kustomize overlay—will be deployed to AWS EKS in Chapter 13. EKS introduces real load balancers, persistent volume classes backed by EBS, IAM-based secrets management, and a Route 53 DNS name instead of `/etc/hosts`. The workflow stays the same; the infrastructure layer underneath changes.
 
 ---
 

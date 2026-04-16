@@ -6,7 +6,7 @@ The Catalog service needs a database. This section gets PostgreSQL running local
 
 ## Running PostgreSQL Locally
 
-The fastest way to get a development PostgreSQL instance is Docker. No installation, no path configuration, no version conflicts — a single command does it:
+The fastest way to get a development PostgreSQL instance is Docker. No installation, no path configuration, no version conflicts—a single command does it:
 
 ```bash
 docker run -d \
@@ -19,10 +19,10 @@ docker run -d \
 ```
 
 Flags worth noting:
-- `-d` — detached mode; the container runs in the background
-- `--name catalog-postgres` — gives the container a stable name so you can reference it later (`docker stop catalog-postgres`, `docker logs catalog-postgres`, etc.)
-- `-e POSTGRES_DB=catalog` — creates the `catalog` database on first boot; without this you'd have to create it manually
-- `-p 5432:5432` — maps the container's port 5432 to your host machine's port 5432
+- `-d`—detached mode; the container runs in the background
+- `--name catalog-postgres`—gives the container a stable name so you can reference it later (`docker stop catalog-postgres`, `docker logs catalog-postgres`, etc.)
+- `-e POSTGRES_DB=catalog`—creates the `catalog` database on first boot; without this you'd have to create it manually
+- `-p 5432:5432`—maps the container's port 5432 to your host machine's port 5432
 
 To connect with `psql` (the PostgreSQL CLI):
 
@@ -51,7 +51,7 @@ On a solo project with a single database, the typical flow looks like: connect t
 
 - **No shared state**: other developers don't know what changes you made, or in what order. Their local DB drifts from yours.
 - **No history**: six months later, you can't tell if a column was always there or added late. There's no `git log` for your schema.
-- **No rollback**: if the change is wrong, you need to reverse it manually — and remember exactly what you changed.
+- **No rollback**: if the change is wrong, you need to reverse it manually—and remember exactly what you changed.
 - **No environment parity**: the schemas in production, staging, and local dev gradually diverge.
 
 ### Why GORM AutoMigrate is dangerous in production
@@ -64,7 +64,7 @@ GORM ships a feature called `AutoMigrate` that creates or alters tables to match
 
 ### What golang-migrate gives you
 
-`golang-migrate`[^1] solves this with a simple model: Every schema change is a pair of SQL files — an `up` migration that applies the change and a `down` migration that reverses it. Files are numbered sequentially. The tool tracks which migrations have been applied in a `schema_migrations` table it manages itself.
+`golang-migrate`[^1] solves this with a simple model: Every schema change is a pair of SQL files—an `up` migration that applies the change and a `down` migration that reverses it. Files are numbered sequentially. The tool tracks which migrations have been applied in a `schema_migrations` table it manages itself.
 
 The result:
 - Every environment can replay the full migration history from scratch
@@ -119,26 +119,26 @@ Several PostgreSQL-specific features are in play here:
 
 **`uuid-ossp` extension and `uuid_generate_v4()`**
 
-PostgreSQL doesn't generate UUIDs out of the box. The `uuid-ossp` extension adds UUID generation functions. `uuid_generate_v4()` produces a random v4 UUID. The `CREATE EXTENSION IF NOT EXISTS` guard makes the migration idempotent — safe to re-run without error if the extension is already loaded.
+PostgreSQL doesn't generate UUIDs out of the box. The `uuid-ossp` extension adds UUID generation functions. `uuid_generate_v4()` produces a random v4 UUID. The `CREATE EXTENSION IF NOT EXISTS` guard makes the migration idempotent—safe to re-run without error if the extension is already loaded.
 
 PostgreSQL 13+ ships `gen_random_uuid()` as a built-in (no extension needed), but `uuid_generate_v4()` is widely used and works on any supported version.
 
 **`TIMESTAMPTZ` (not `TIMESTAMP`)**
 
-`TIMESTAMPTZ` is "timestamp with time zone". Despite the name, PostgreSQL doesn't store the timezone — it stores everything as UTC and converts on read based on the session's `TimeZone` setting. `TIMESTAMP` (without timezone) stores whatever you give it with no conversion. Always use `TIMESTAMPTZ` for application timestamps. It prevents a class of subtle timezone bugs where rows inserted from different regions have timestamps that don't sort correctly.
+`TIMESTAMPTZ` is "timestamp with time zone". Despite the name, PostgreSQL doesn't store the timezone—it stores everything as UTC and converts on read based on the session's `TimeZone` setting. `TIMESTAMP` (without timezone) stores whatever you give it with no conversion. Always use `TIMESTAMPTZ` for application timestamps. It prevents a class of subtle timezone bugs where rows inserted from different regions have timestamps that don't sort correctly.
 
 **CHECK constraints**
 
 The two `CONSTRAINT` lines enforce business rules at the database level:
 
-- `available_lte_total` — available copies can never exceed total copies
-- `copies_non_negative` — neither count can go negative
+- `available_lte_total`—available copies can never exceed total copies
+- `copies_non_negative`—neither count can go negative
 
-Naming constraints is important. When a constraint is violated, the error message includes its name, which makes debugging from logs much faster. With an auto-generated name you'd see `books_available_copies_total_copies_check` or similar — with a named constraint you see `available_lte_total`, which is self-documenting.
+Naming constraints is important. When a constraint is violated, the error message includes its name, which makes debugging from logs much faster. With an auto-generated name you'd see `books_available_copies_total_copies_check` or similar—with a named constraint you see `available_lte_total`, which is self-documenting.
 
 **Indexes**
 
-The two index statements exist because the catalog supports filtering by genre and author. Without indexes, those queries would do a full table scan. For a library with thousands of books, that's acceptable; for one with millions, it isn't. Adding indexes in the migration that creates the table is the right time — you're declaring "this column will be queried" alongside the schema definition.[^2]
+The two index statements exist because the catalog supports filtering by genre and author. Without indexes, those queries would do a full table scan. For a library with thousands of books, that's acceptable; for one with millions, it isn't. Adding indexes in the migration that creates the table is the right time—you're declaring "this column will be queried" alongside the schema definition.[^2]
 
 ### The down migration
 
@@ -156,8 +156,8 @@ Down migrations are most valuable for rolling back a bad deployment. The workflo
 
 The SQL files live at `services/catalog/migrations/`. They need to be accessible at runtime when the service starts. There are two approaches:
 
-1. **External files** — deploy the SQL files alongside the binary and read them from the filesystem at runtime
-2. **Embedded files** — compile the SQL files into the binary itself
+1. **External files**—deploy the SQL files alongside the binary and read them from the filesystem at runtime
+2. **Embedded files**—compile the SQL files into the binary itself
 
 We use the second approach. The entire `migrations/` package is:
 
@@ -178,7 +178,7 @@ Why embed rather than ship external files?
 - **Immutability**: the migrations bundled with a given binary version are fixed. You can't accidentally run the wrong migrations against a database by deploying mismatched files.
 - **Simpler CI/CD**: one binary to test, one binary to ship, one binary to run.
 
-The trade-off is that you can't add or modify migrations without recompiling. For database migrations, that's not a trade-off — migrations should be immutable once deployed and always version-controlled with the code that depends on them.
+The trade-off is that you can't add or modify migrations without recompiling. For database migrations, that's not a trade-off—migrations should be immutable once deployed and always version-controlled with the code that depends on them.
 
 The next section shows how `runMigrations()` consumes this embedded filesystem.
 
@@ -220,17 +220,17 @@ func runMigrations(db *gorm.DB) error {
 
 Walking through each step:
 
-1. **`db.DB()`** — GORM wraps the standard `*sql.DB`. `golang-migrate` works with `*sql.DB` directly, so we unwrap it.
+1. **`db.DB()`**—GORM wraps the standard `*sql.DB`. `golang-migrate` works with `*sql.DB` directly, so we unwrap it.
 
-2. **`pgmigrate.WithInstance`** — creates a PostgreSQL migration driver from the connection. This driver manages the `schema_migrations` table.
+2. **`pgmigrate.WithInstance`**—creates a PostgreSQL migration driver from the connection. This driver manages the `schema_migrations` table.
 
-3. **`iofs.New(migrations.FS, ".")`** — creates a migration source from the embedded filesystem. The `"."` argument is the root directory inside the embedded filesystem to search for migration files. This is where the `embed.FS` from the `migrations` package gets handed to golang-migrate.
+3. **`iofs.New(migrations.FS, ".")`**—creates a migration source from the embedded filesystem. The `"."` argument is the root directory inside the embedded filesystem to search for migration files. This is where the `embed.FS` from the `migrations` package gets handed to golang-migrate.
 
-4. **`migrate.NewWithInstance`** — wires the source and driver together. The string arguments (`"iofs"`, `"postgres"`) are driver names used internally.
+4. **`migrate.NewWithInstance`**—wires the source and driver together. The string arguments (`"iofs"`, `"postgres"`) are driver names used internally.
 
-5. **`m.Up()`** — applies all unapplied migrations in version order. The critical line is `err != migrate.ErrNoChange`: if no new migrations exist, `m.Up()` returns `migrate.ErrNoChange` rather than `nil`. Treating `ErrNoChange` as an error would cause the service to crash on every startup after the first deployment. We treat it as success.
+5. **`m.Up()`**—applies all unapplied migrations in version order. The critical line is `err != migrate.ErrNoChange`: if no new migrations exist, `m.Up()` returns `migrate.ErrNoChange` rather than `nil`. Treating `ErrNoChange` as an error would cause the service to crash on every startup after the first deployment. We treat it as success.
 
-This pattern — running migrations automatically on service startup — is appropriate for a microservices environment where each service owns its database schema. The service doesn't start serving traffic until migrations have completed.
+This pattern—running migrations automatically on service startup—is appropriate for a microservices environment where each service owns its database schema. The service doesn't start serving traffic until migrations have completed.
 
 ---
 
@@ -294,7 +294,7 @@ If you're running the Catalog Service locally, stop it, apply the migration, and
 - `AutoMigrate` is useful in development but dangerous in production: it never drops columns and tracks no history
 - `golang-migrate` provides ordered, reversible, version-tracked SQL migrations via paired `.up.sql` / `.down.sql` files
 - PostgreSQL-specific features in the books schema: `uuid-ossp` for UUID generation, `TIMESTAMPTZ` for timezone-correct timestamps, named `CHECK` constraints for data integrity, and indexes on frequently-queried columns
-- `//go:embed *.sql` compiles SQL files directly into the binary — no separate file deployment required
+- `//go:embed *.sql` compiles SQL files directly into the binary—no separate file deployment required
 - `runMigrations()` runs at startup; `migrate.ErrNoChange` is expected on every run after the first and must be treated as success
 
 ---

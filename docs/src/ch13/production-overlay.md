@@ -2,7 +2,7 @@
 
 Chapter 12 introduced Kustomize and structured the manifests into a base and two overlays. The local overlay configured kind-specific settings: a `secretGenerator` with plaintext development credentials, a single replica per service, and `imagePullPolicy: IfNotPresent` so kind's locally loaded images are used without hitting a registry. That overlay is still correct for local development and remains untouched.
 
-Now you write the production overlay. At this point you have an EKS cluster, three RDS instances, an MSK cluster, ECR repositories, and a working CI pipeline. The production overlay is the piece that wires those AWS resources into the Kubernetes manifests — without modifying a single file under `deploy/k8s/base/`.
+Now you write the production overlay. At this point you have an EKS cluster, three RDS instances, an MSK cluster, ECR repositories, and a working CI pipeline. The production overlay is the piece that wires those AWS resources into the Kubernetes manifests—without modifying a single file under `deploy/k8s/base/`.
 
 ---
 
@@ -48,7 +48,7 @@ deploy/k8s/
         └── kustomization.yaml   # references only ../../base (no local-infra)
 ```
 
-The base *root* `kustomization.yaml` stays unchanged — it still references `data/`, `messaging/`, and `library/`. What changes are the *sub-kustomizations* inside those directories: `data/` now contains only Meilisearch resources, and `messaging/` contains only the namespace manifest. Postgres and Kafka moved to `local-infra/`.
+The base *root* `kustomization.yaml` stays unchanged—it still references `data/`, `messaging/`, and `library/`. What changes are the *sub-kustomizations* inside those directories: `data/` now contains only Meilisearch resources, and `messaging/` contains only the namespace manifest. Postgres and Kafka moved to `local-infra/`.
 
 Update the `data/` sub-kustomization at `deploy/k8s/base/data/kustomization.yaml` to remove the postgres entries, keeping only Meilisearch:
 
@@ -256,7 +256,7 @@ spec:
               memory: "512Mi"
 ```
 
-This patch doubles the base limits. The `target` selector in `kustomization.yaml` applies it to all Deployments in the `library` namespace. The `placeholder` names in `metadata.name` and the container `name` field are required YAML structure — the target selector is what actually routes the patch to the correct resources.
+This patch doubles the base limits. The `target` selector in `kustomization.yaml` applies it to all Deployments in the `library` namespace. The `placeholder` names in `metadata.name` and the container `name` field are required YAML structure—the target selector is what actually routes the patch to the correct resources.
 
 In practice, you will want per-service tuning once you observe real usage in production. This single patch is a sensible starting point. It avoids the fragility of hardcoding per-service limits in the base.
 
@@ -264,7 +264,7 @@ In practice, you will want per-service tuning once you observe real usage in pro
 
 Each database service uses a different RDS endpoint. The patch for `auth` illustrates the pattern; `catalog` and `reservation` follow the same shape.
 
-There is a critical requirement here that trips people up: because the base `auth` Deployment has both `env` and `envFrom` blocks on the container, any strategic merge patch targeting that container **must include the `envFrom` block**. Kustomize merges containers by name, and if your patch omits `envFrom`, the rendered output will be missing the ConfigMap reference entirely. The original `envFrom` is not preserved — it is replaced by the patch container entry.
+There is a critical requirement here that trips people up: because the base `auth` Deployment has both `env` and `envFrom` blocks on the container, any strategic merge patch targeting that container **must include the `envFrom` block**. Kustomize merges containers by name, and if your patch omits `envFrom`, the rendered output will be missing the ConfigMap reference entirely. The original `envFrom` is not preserved—it is replaced by the patch container entry.
 
 ```yaml
 # deploy/k8s/overlays/production/patches/database-url-auth.yaml
@@ -356,7 +356,7 @@ spec:
                 name: reservation-config
 ```
 
-Two things change from the base `DATABASE_URL` values. First, `host=` points to an RDS endpoint instead of a Kubernetes DNS name. The `xxxxxxxxxxxx` placeholder is replaced with the actual RDS instance identifier once Terraform has provisioned the instances — section 13.4 captures those values as Terraform outputs. Second, `sslmode=require` replaces `sslmode=disable`. RDS enforces TLS; the local Postgres StatefulSet does not.
+Two things change from the base `DATABASE_URL` values. First, `host=` points to an RDS endpoint instead of a Kubernetes DNS name. The `xxxxxxxxxxxx` placeholder is replaced with the actual RDS instance identifier once Terraform has provisioned the instances—section 13.4 captures those values as Terraform outputs. Second, `sslmode=require` replaces `sslmode=disable`. RDS enforces TLS; the local Postgres StatefulSet does not.
 
 The `$(POSTGRES_PASSWORD)` substitution still works exactly as in the base. Kubernetes resolves env variable references within a container's `env` list in declaration order. `POSTGRES_PASSWORD` is declared before `DATABASE_URL`, so the substitution is valid.
 
@@ -401,7 +401,7 @@ These patches specify only the keys that change. `GRPC_PORT`, `CATALOG_GRPC_ADDR
 
 The MSK bootstrap string lists both brokers. Kafka clients use the bootstrap list to discover the full cluster membership; a single entry works for connection, but listing both gives the client a fallback if one broker is temporarily unavailable during startup.
 
-Service-to-service gRPC addresses — `CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"` and similar — require no changes. All application services run in the same EKS cluster and the same `library` namespace. Kubernetes DNS works identically whether the cluster is kind or EKS. Only the dependencies that moved out of the cluster (Postgres, Kafka) need their addresses updated.
+Service-to-service gRPC addresses—`CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"` and similar—require no changes. All application services run in the same EKS cluster and the same `library` namespace. Kubernetes DNS works identically whether the cluster is kind or EKS. Only the dependencies that moved out of the cluster (Postgres, Kafka) need their addresses updated.
 
 ### Ingress patch
 
@@ -438,7 +438,7 @@ The `spec.rules` block is inherited from the base manifest unchanged. The patch 
 
 ## Meilisearch and persistent storage
 
-Meilisearch remains a StatefulSet inside EKS — there is no AWS-managed equivalent for its API. Its PersistentVolumeClaim works without modification.
+Meilisearch remains a StatefulSet inside EKS—there is no AWS-managed equivalent for its API. Its PersistentVolumeClaim works without modification.
 
 In kind, the default StorageClass provisions volumes through the `rancher.io/local-path` provisioner using the host filesystem. In EKS, the default StorageClass is backed by the Amazon EBS CSI driver and provisions `gp2` EBS volumes automatically.
 
@@ -457,7 +457,7 @@ volumeClaimTemplates:
 
 The production overlay increases the Meilisearch volume from 1 Gi (the base manifest value in Chapter 12) to 5 Gi to accommodate index growth under sustained catalog updates. This is storage-class agnostic. It requests `ReadWriteOnce` access. On kind it binds to a local path. On EKS it binds to a `gp2` EBS volume. No further patch is needed.
 
-If you want `gp3` instead — lower cost per GiB, better baseline throughput than `gp2` — add a StorageClass resource to the production overlay and mark it as the cluster default:
+If you want `gp3` instead—lower cost per GiB, better baseline throughput than `gp2`—add a StorageClass resource to the production overlay and mark it as the cluster default:
 
 ```yaml
 # deploy/k8s/overlays/production/storage-class.yaml
@@ -476,7 +476,7 @@ parameters:
 
 `WaitForFirstConsumer` delays volume provisioning until the pod that claims it is scheduled to a node, which lets EBS create the volume in the correct Availability Zone. Using `Immediate` binding can create a volume in a different AZ than the pod lands in, causing a mount failure.
 
-Add this file to the `resources` list in `kustomization.yaml` and also remove the default annotation from the existing `gp2` StorageClass. This is an optional optimization — the system functions correctly with `gp2`.
+Add this file to the `resources` list in `kustomization.yaml` and also remove the default annotation from the existing `gp2` StorageClass. This is an optional optimization—the system functions correctly with `gp2`.
 
 ---
 
@@ -521,9 +521,9 @@ If a Deployment stalls, `kubectl describe deployment/<name> -n library` shows ev
 
 ## What remains for Chapter 14
 
-The `secretGenerator` in this overlay writes placeholder strings into Kubernetes Secrets. That is a deliberate simplification — real credentials belong in AWS Secrets Manager, not in a `kustomization.yaml` committed to a repository.
+The `secretGenerator` in this overlay writes placeholder strings into Kubernetes Secrets. That is a deliberate simplification—real credentials belong in AWS Secrets Manager, not in a `kustomization.yaml` committed to a repository.
 
-Chapter 14 replaces the `secretGenerator` block entirely with ExternalSecret resources. The External Secrets Operator (ESO) watches ExternalSecret objects, fetches the value from AWS Secrets Manager, and creates or updates a native Kubernetes Secret. The Deployments do not change — they continue reading from `postgres-auth-secret` and `jwt-secret` by name. Only the source of those secrets changes.
+Chapter 14 replaces the `secretGenerator` block entirely with ExternalSecret resources. The External Secrets Operator (ESO) watches ExternalSecret objects, fetches the value from AWS Secrets Manager, and creates or updates a native Kubernetes Secret. The Deployments do not change—they continue reading from `postgres-auth-secret` and `jwt-secret` by name. Only the source of those secrets changes.
 
 Until that work is complete, populate secrets out-of-band after applying the overlay:
 
@@ -534,7 +534,7 @@ kubectl create secret generic jwt-secret \
   --namespace library --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-This is operational friction, not a permanent solution — but it is preferable to committing credentials to git.
+This is operational friction, not a permanent solution—but it is preferable to committing credentials to git.
 
 ---
 
@@ -542,15 +542,15 @@ This is operational friction, not a permanent solution — but it is preferable 
 
 The production overlay adds seven things to the base without touching a single base manifest:
 
-1. **Image rewrites** via the `images` transformer — ECR URIs replace local image names across all Deployments.
-2. **Replica patches** — all Deployments run two replicas for availability.
-3. **Resource patches** — CPU and memory limits are doubled to reflect real production capacity (250m–500m CPU, 256Mi–512Mi memory).
-4. **`imagePullPolicy: Always`** — pods always pull from ECR, ensuring the image on disk matches the declared tag.
-5. **DATABASE_URL patches** — RDS endpoints replace in-cluster Postgres DNS names; `sslmode=require` replaces `sslmode=disable`; `envFrom` is preserved to retain ConfigMap references.
-6. **ConfigMap patches** — MSK bootstrap addresses replace the in-cluster Kafka DNS name in `catalog-config`, `reservation-config`, and `search-config`.
-7. **Ingress patch** — ALB controller annotations and `ingressClassName: alb` replace the NGINX configuration.
+1. **Image rewrites** via the `images` transformer—ECR URIs replace local image names across all Deployments.
+2. **Replica patches**—all Deployments run two replicas for availability.
+3. **Resource patches**—CPU and memory limits are doubled to reflect real production capacity (250m–500m CPU, 256Mi–512Mi memory).
+4. **`imagePullPolicy: Always`**—pods always pull from ECR, ensuring the image on disk matches the declared tag.
+5. **DATABASE_URL patches**—RDS endpoints replace in-cluster Postgres DNS names; `sslmode=require` replaces `sslmode=disable`; `envFrom` is preserved to retain ConfigMap references.
+6. **ConfigMap patches**—MSK bootstrap addresses replace the in-cluster Kafka DNS name in `catalog-config`, `reservation-config`, and `search-config`.
+7. **Ingress patch**—ALB controller annotations and `ingressClassName: alb` replace the NGINX configuration.
 
-The base manifests under `deploy/k8s/base/library/` are unchanged from Chapter 12. The local overlay continues to work identically for development. The production overlay encodes every environment difference in one directory. The property established in Chapter 12 — environment differences are explicit and isolated — holds at production scale.
+The base manifests under `deploy/k8s/base/library/` are unchanged from Chapter 12. The local overlay continues to work identically for development. The production overlay encodes every environment difference in one directory. The property established in Chapter 12—environment differences are explicit and isolated—holds at production scale.
 
 ---
 

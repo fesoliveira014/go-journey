@@ -69,13 +69,13 @@ Navigate to `http://localhost:8080/books`. You should see all sixteen seeded boo
 
 Click the **Admin** link in the navigation, or go to `http://localhost:8080/admin`. You should see three cards:
 
-- **Users** — links to `/admin/users`
-- **Reservations** — links to `/admin/reservations`
-- **Books** — links to the "Add Book" form
+- **Users**—links to `/admin/users`
+- **Reservations**—links to `/admin/reservations`
+- **Books**—links to the "Add Book" form
 
 Click **View Users**. You should see a table with one row: the admin account you just created, with role `admin`.
 
-Click **View Reservations**. The table should be empty — no one has reserved any books yet.
+Click **View Reservations**. The table should be empty—no one has reserved any books yet.
 
 ---
 
@@ -110,7 +110,7 @@ This confirms the full flow: the Reservation Service resolves the book title fro
 
 ## What's Next
 
-At this point the library system is functional: users can register, browse, and reserve books; admins can manage the catalog and monitor activity. But the services are tightly coupled — the Reservation Service calls Catalog and Auth synchronously via gRPC, and the Search Service is not yet connected.
+At this point the library system is functional: users can register, browse, and reserve books; admins can manage the catalog and monitor activity. But the services are tightly coupled—the Reservation Service calls Catalog and Auth synchronously via gRPC, and the Search Service is not yet connected.
 
 In **Chapter 7**, we introduce **Kafka** and **event-driven architecture**. The Catalog Service will publish `book.created`, `book.updated`, and `book.deleted` events. The Search Service will consume these events to build and maintain a search index. The Reservation Service will publish `reservation.created` and `reservation.returned` events that the Catalog Service consumes to update available copy counts.
 

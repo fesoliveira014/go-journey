@@ -1,6 +1,6 @@
 # 11.1 Unit Testing Patterns
 
-Go's standard library ships with a testing package that is deliberately minimal. There is no built-in assertion library, no test runner framework, and no magic annotations. What Go does provide — subtests, helper functions, and a set of strong conventions — turns out to be enough for writing expressive, maintainable test suites. This section walks through the patterns you will reach for most often.
+Go's standard library ships with a testing package that is deliberately minimal. There is no built-in assertion library, no test runner framework, and no magic annotations. What Go does provide—subtests, helper functions, and a set of strong conventions—turns out to be enough for writing expressive, maintainable test suites. This section walks through the patterns you will reach for most often.
 
 ---
 
@@ -140,7 +140,7 @@ for _, tt := range tests {
 
 When `t.Parallel()` is called, the subtest pauses until all non-parallel siblings have finished, then all parallel subtests run concurrently. This can significantly reduce wall-clock time for I/O-bound tests.
 
-**Important caveat for this project.** The mock objects used in these tests — `newMockRepo()` and `noopPublisher` — maintain shared state (an in-memory slice of books, event counters). If multiple parallel subtests share a single mock instance, they will race. There are two safe approaches:
+**Important caveat for this project.** The mock objects used in these tests—`newMockRepo()` and `noopPublisher`—maintain shared state (an in-memory slice of books, event counters). If multiple parallel subtests share a single mock instance, they will race. There are two safe approaches:
 
 1. Construct a fresh set of mocks inside each subtest body (before calling `t.Parallel()`):
 
@@ -167,7 +167,7 @@ For the validation table above, the cases are independent, so option 1 is approp
 
 ### Top-level `t.Parallel()`
 
-`t.Parallel()` also works at the top of a test function — not just inside subtests. When a top-level test calls `t.Parallel()`, it runs concurrently with every other top-level parallel test in the same package. Non-parallel tests still run first; then all parallel tests run together.
+`t.Parallel()` also works at the top of a test function—not just inside subtests. When a top-level test calls `t.Parallel()`, it runs concurrently with every other top-level parallel test in the same package. Non-parallel tests still run first; then all parallel tests run together.
 
 ```go
 func TestCreateBook_Validation(t *testing.T) {
@@ -181,14 +181,14 @@ func TestCreateBook_DuplicateISBN(t *testing.T) {
 }
 ```
 
-For unit tests that use mocks or in-memory fakes built inside each test function, this is essentially free speed. A package with thirty independent tests — each doing a bit of setup and one assertion — finishes in the time of the slowest single test rather than the sum of all of them. On a CI runner with many cores, the wall-clock difference can be significant.
+For unit tests that use mocks or in-memory fakes built inside each test function, this is essentially free speed. A package with thirty independent tests—each doing a bit of setup and one assertion—finishes in the time of the slowest single test rather than the sum of all of them. On a CI runner with many cores, the wall-clock difference can be significant.
 
 Two conditions must hold for a test to safely opt into `t.Parallel()`:
 
 1. **The test must not depend on global mutable state.** If the test sets a package-level variable, mutates a shared map, or re-registers a singleton (OpenTelemetry global tracer, `log.SetOutput`, `os.Setenv`), another parallel test could observe the change mid-run. Either isolate the state into test-local instances or keep the test sequential.
 2. **The test must not depend on shared external state.** Anything that hits a real database, a real Kafka broker, a real filesystem path shared with other tests, or reserves a well-known TCP port cannot run in parallel with siblings that touch the same resource. In this project, files named `integration_test.go`, `e2e_test.go`, and the repository tests that reach a real PostgreSQL instance are deliberately left sequential.
 
-The project's unit tests build a fresh mock repository, fake publisher, and `httptest.Server` per test invocation, so they satisfy both conditions and have `t.Parallel()` at the top of every `Test*` function. Running the suite under `go test -race ./...` confirms the promise — the race detector fails the build if any test accidentally shares state across goroutines.
+The project's unit tests build a fresh mock repository, fake publisher, and `httptest.Server` per test invocation, so they satisfy both conditions and have `t.Parallel()` at the top of every `Test*` function. Running the suite under `go test -race ./...` confirms the promise—the race detector fails the build if any test accidentally shares state across goroutines.
 
 A good sanity check when adding new tests is to run `go test -race -count=3 ./...`. The `-count=3` flag re-runs each test three times, which tends to surface flakes that only show up under specific scheduler interleavings. If a test passes with `-count=1` but fails with `-count=3`, there is almost certainly shared state you have not noticed yet.
 
@@ -219,7 +219,7 @@ func mustCreateBook(t *testing.T, svc *service.CatalogService, title string) *mo
 }
 ```
 
-Without `t.Helper()`, a failure inside `mustCreateBook` is reported as occurring on the `t.Fatalf` line inside the helper. When you look at the failure output, you see a line number inside `mustCreateBook` — not the line in the test where you called `mustCreateBook`. You have to trace back from the helper to the caller to understand what was being set up.
+Without `t.Helper()`, a failure inside `mustCreateBook` is reported as occurring on the `t.Fatalf` line inside the helper. When you look at the failure output, you see a line number inside `mustCreateBook`—not the line in the test where you called `mustCreateBook`. You have to trace back from the helper to the caller to understand what was being set up.
 
 ### The fix: `t.Helper()`
 
@@ -229,7 +229,7 @@ func mustCreateBook(t *testing.T, svc *service.CatalogService, title string) *mo
     book, err := svc.CreateBook(context.Background(), &model.Book{
         Title:       title,
         Author:      "Test Author",
-        ISBN:        fmt.Sprintf("978-%010d", rand.Intn(1e10)),
+        ISBN:        fmt.Sprintf("978-%010d", rand.Intn(1_000_000_000)),
         TotalCopies: 5,
     })
     if err != nil {
@@ -331,7 +331,7 @@ func TestBulkImport_Valid(t *testing.T) {
 }
 ```
 
-One subtlety: the `testdata/` directory is not special to the Go module system — it is just a naming convention that the toolchain respects. Do not place Go source files in `testdata/`; they are not compiled, which can cause confusion.
+One subtlety: the `testdata/` directory is not special to the Go module system—it is just a naming convention that the toolchain respects. Do not place Go source files in `testdata/`; they are not compiled, which can cause confusion.
 
 ---
 
@@ -349,6 +349,6 @@ These five patterns cover the vast majority of unit test needs in a Go service. 
 
 ---
 
-[^1]: Go blog — Using Subtests and Sub-benchmarks: https://go.dev/blog/subtests
+[^1]: Go blog—Using Subtests and Sub-benchmarks: https://go.dev/blog/subtests
 [^2]: Go testing package documentation: https://pkg.go.dev/testing
-[^3]: Mitchell Hashimoto — Advanced Testing with Go (GopherCon 2017): https://www.youtube.com/watch?v=8hQG7QlcLBk
+[^3]: Mitchell Hashimoto—Advanced Testing with Go (GopherCon 2017): https://www.youtube.com/watch?v=8hQG7QlcLBk

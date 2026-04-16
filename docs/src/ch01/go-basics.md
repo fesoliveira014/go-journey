@@ -1,6 +1,6 @@
 ## 1.2 Go Language Essentials
 
-This section moves fast. You already know what a struct is, what an interface is, and why error handling matters. The goal here is to show you how Go's versions of these things differ from what you already know — and where those differences bite you if you come in with C++/Java assumptions.
+This section moves fast. You already know what a struct is, what an interface is, and why error handling matters. The goal here is to show you how Go's versions of these things differ from what you already know—and where those differences bite you if you come in with C++/Java assumptions.
 
 ---
 
@@ -25,7 +25,7 @@ var y int64 = int64(x)
 
 This is intentional. Go treats implicit numeric promotion as a source of bugs and refuses to do it.
 
-**Every type has a zero value.** Variables declared but not initialized are not garbage — they have deterministic defaults:
+**Every type has a zero value.** Variables declared but not initialized are not garbage—they have deterministic defaults:
 
 | Type | Zero value |
 |------|-----------|
@@ -44,13 +44,13 @@ var p *int       // nil
 
 This eliminates an entire class of uninitialized-variable bugs. You will miss it when you go back to C.
 
-**No pointer arithmetic.** `p++` on a pointer is a compile error. Go is not C — the runtime manages memory, and the GC needs pointer provenance intact.
+**No pointer arithmetic.** `p++` on a pointer is a compile error. Go is not C—the runtime manages memory, and the GC needs pointer provenance intact.
 
 ---
 
 ### Structs
 
-Go has no classes. Structs are the unit of data grouping, and methods are attached to types — not enclosed within them.
+Go has no classes. Structs are the unit of data grouping, and methods are attached to types—not enclosed within them.
 
 ```go
 type Book struct {
@@ -115,13 +115,13 @@ fmt.Println(record.CreatedAt)  // promoted from Timestamps
 fmt.Println(record.String())   // promoted method from Book
 ```
 
-This is not inheritance. The embedded type has no knowledge of the outer type. There is no `super`. If `BookRecord` needs different behavior, it defines its own method with the same name — the outer type's method takes precedence, and the inner one is still accessible via `record.Book.String()`.
+This is not inheritance. The embedded type has no knowledge of the outer type. There is no `super`. If `BookRecord` needs different behavior, it defines its own method with the same name—the outer type's method takes precedence, and the inner one is still accessible via `record.Book.String()`.
 
 ---
 
 ### Interfaces
 
-In Java/Kotlin, you write `implements Serializable`. In C++ you inherit from a pure-virtual base class. In Go, interface satisfaction is **implicit**: if your type has the methods, it satisfies the interface — no declaration required.
+In Java/Kotlin, you write `implements Serializable`. In C++ you inherit from a pure-virtual base class. In Go, interface satisfaction is **implicit**: if your type has the methods, it satisfies the interface—no declaration required.
 
 ```go
 // Standard library interface — defined in package fmt
@@ -150,7 +150,7 @@ type Repository interface {
 }
 ```
 
-Any type with those three methods satisfies `Repository`. The concrete type — a PostgreSQL implementation, a Redis cache, an in-memory fake — never needs to reference this interface.
+Any type with those three methods satisfies `Repository`. The concrete type—a PostgreSQL implementation, a Redis cache, an in-memory fake—never needs to reference this interface.
 
 **Why this matters for testing.** Because interfaces are satisfied implicitly, you can define a minimal interface in your test package and point it at a fake implementation without touching production code at all. You will see this pattern constantly in this project.
 
@@ -174,7 +174,7 @@ if book, ok := v.(Book); ok {
 
 ### Slices and Maps
 
-**Slices** are Go's equivalent of `std::vector` or `ArrayList` — a dynamically sized view over an underlying array. Unlike C arrays, slices carry their length and capacity.
+**Slices** are Go's equivalent of `std::vector` or `ArrayList`—a dynamically sized view over an underlying array. Unlike C arrays, slices carry their length and capacity.
 
 ```go
 // nil slice — zero value, no allocation
@@ -191,7 +191,7 @@ books = []Book{b1, b2, b3}
 books = append(books, Book{Title: "Clean Code"})
 ```
 
-A nil slice and an empty slice behave the same for `len`, `append`, and `range` — but they are not equal under `reflect.DeepEqual`. The convention is to return a nil slice for "no results" rather than an empty one, and to let callers use `len(result) == 0` to check emptiness.
+A nil slice and an empty slice behave the same for `len`, `append`, and `range`—but they are not equal under `reflect.DeepEqual`. The convention is to return a nil slice for "no results" rather than an empty one, and to let callers use `len(result) == 0` to check emptiness.
 
 **Iteration** always uses `range`:
 
@@ -208,7 +208,7 @@ for _, book := range books {
 
 Unlike C++, range gives you a **copy** of each element. Mutating `book` inside the loop does not affect the slice. Use the index if you need to modify in place: `books[i].Year = 2024`.
 
-**Slicing a slice** produces a new header over the same backing array — not a copy:
+**Slicing a slice** produces a new header over the same backing array—not a copy:
 
 ```go
 first3 := books[0:3] // shares memory with books
@@ -237,13 +237,13 @@ if !ok {
 delete(index, "978-0-13-468599-1")
 ```
 
-Map iteration order is deliberately randomized on each run — do not rely on it.
+Map iteration order is deliberately randomized on each run—do not rely on it.
 
 ---
 
 ### Pointers
 
-You know pointers from C. Go pointers are simpler — same concept, no arithmetic, and the runtime enforces nil safety automatically.
+You know pointers from C. Go pointers are simpler—same concept, no arithmetic, and the runtime enforces nil safety automatically.
 
 ```go
 b := Book{Title: "TGPL"}
@@ -270,13 +270,13 @@ func (b Book) String() string {
 }
 ```
 
-Pick one consistently per type. Mixing pointer and value receivers on the same type is allowed but confusing — you will lose track of which interfaces the type satisfies.
+Pick one consistently per type. Mixing pointer and value receivers on the same type is allowed but confusing—you will lose track of which interfaces the type satisfies.
 
 ---
 
 ### Error Handling
 
-Go has no exceptions. Errors are values — functions return them as an additional return value, and callers check them explicitly.
+Go has no exceptions. Errors are values—functions return them as an additional return value, and callers check them explicitly.
 
 ```go
 func (r *InMemoryRepo) FindByGenre(genre string) ([]Book, error) {
@@ -317,7 +317,7 @@ if errors.Is(err, ErrNotFound) {
 }
 ```
 
-Contrast with Java: No try/catch, no checked exceptions, no `throws` declarations. The caller always knows a function can fail because the signature says so. The downside is that error handling is verbose — you will write `if err != nil` hundreds of times. The upside is that the control flow is always explicit and local. There are no surprise exceptions propagating through six stack frames.
+Contrast with Java: No try/catch, no checked exceptions, no `throws` declarations. The caller always knows a function can fail because the signature says so. The downside is that error handling is verbose—you will write `if err != nil` hundreds of times. The upside is that the control flow is always explicit and local. There are no surprise exceptions propagating through six stack frames.
 
 Contrast with C: Returning an `int` error code loses the message and the chain. Go's `error` interface carries both the message and the wrapped cause, so you get readable stack-like context without stack-unwinding overhead.
 
@@ -341,11 +341,11 @@ Implement the following in a file `cmd/catalog/main.go` (or a standalone `_test.
 
 4. Write a function `FilterByGenre(books []Book, genre string) ([]Book, error)` that:
    - Returns all books matching the given genre (case-insensitive).
-   - Returns `(nil, error)` when no books match — with an error message that includes the genre name.
+   - Returns `(nil, error)` when no books match—with an error message that includes the genre name.
 
 5. In `main` (or a test), call `FilterByGenre` for both a genre that exists and one that does not. Print the results using `fmt.Println` (which calls `String()` automatically on `Stringer` values). Handle the error from the second call by printing it with `fmt.Fprintf(os.Stderr, ...)`.
 
-**Reference implementation** — expand only after attempting:
+**Reference implementation**—expand only after attempting:
 
 <details>
 <summary>Show solution</summary>

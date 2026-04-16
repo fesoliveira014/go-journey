@@ -64,7 +64,7 @@ A **trace** is the collection of all spans sharing the same trace ID. Visually, 
       [catalog] db SELECT books        ──────────── 12ms
 ```
 
-Each indentation level is a child span. The request took 45 ms total — 12 ms of which was the database query. Without tracing, you would know the request took 45 ms (from your HTTP access log) but would not know whether the time was spent in your code, in the database, or in network latency between services.
+Each indentation level is a child span. The request took 45 ms total—12 ms of which was the database query. Without tracing, you would know the request took 45 ms (from your HTTP access log) but would not know whether the time was spent in your code, in the database, or in network latency between services.
 
 Spans also carry a **status**. If the Catalog Service returns a gRPC error, the span's status is set to `Error` with a description. Visualization tools (Grafana Tempo, Jaeger) highlight error spans in red, making it easy to spot failures in a trace waterfall.
 

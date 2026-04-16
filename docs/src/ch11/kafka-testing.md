@@ -6,7 +6,7 @@ But they leave four things completely untested:
 
 1. **Consumer group joining.** Sarama's consumer group implementation negotiates with a Kafka coordinator before any message is delivered. If the broker address is wrong, the Kafka version is mismatched, or the group ID clashes with a running instance, the consumer never starts. Unit tests cannot expose this.
 
-2. **Offset management.** `session.MarkMessage` in `ConsumeClaim` advances the consumer group's committed offset. If you forget to call it — or call it before handling is complete — messages are reprocessed on restart. Unit tests cannot verify commit timing.
+2. **Offset management.** `session.MarkMessage` in `ConsumeClaim` advances the consumer group's committed offset. If you forget to call it—or call it before handling is complete—messages are reprocessed on restart. Unit tests cannot verify commit timing.
 
 3. **Header propagation.** The reservation publisher injects OpenTelemetry trace context into Kafka headers via `headerCarrier`; the catalog consumer extracts it in `ConsumeClaim`. If sarama ever serializes header keys differently than the consumer expects, traces break and monitoring silently degrades. Only a test through the real serialization path catches this.
 
@@ -18,7 +18,7 @@ In Spring terms, this is analogous to the difference between testing a `@KafkaLi
 
 ## Setting up a Kafka container with Testcontainers
 
-The `testcontainers-go` Kafka module[^1] starts a Confluent Local Kafka image in Docker. Because Kafka requires a running ZooKeeper (or KRaft controller), starting the container takes roughly 10–15 seconds — noticeably slower than a PostgreSQL container. The standard mitigation is to start Kafka once in `TestMain` and share it across all tests in a suite.
+The `testcontainers-go` Kafka module[^1] starts a Confluent Local Kafka image in Docker. Because Kafka requires a running ZooKeeper (or KRaft controller), starting the container takes roughly 10–15 seconds—noticeably slower than a PostgreSQL container. The standard mitigation is to start Kafka once in `TestMain` and share it across all tests in a suite.
 
 Create a helper file in your integration test package:
 
@@ -52,7 +52,7 @@ func setupKafka(t *testing.T) []string {
 }
 ```
 
-`kafkatc.Run` returns a running container with the broker's listener exposed on a dynamic port. `container.Brokers` resolves to something like `["localhost:32801"]` — the actual port varies per run. Because ports are ephemeral, tests never conflict with each other or with production services.
+`kafkatc.Run` returns a running container with the broker's listener exposed on a dynamic port. `container.Brokers` resolves to something like `["localhost:32801"]`—the actual port varies per run. Because ports are ephemeral, tests never conflict with each other or with production services.
 
 The `//go:build integration` tag at the top of the file ensures this code is only compiled when you explicitly run:
 
@@ -72,25 +72,40 @@ Starting a new container for every test function would make your suite unbearabl
 package kafka_test
 
 import (
+    "context"
+    "log"
     "os"
     "testing"
+
+    kafkatc "github.com/testcontainers/testcontainers-go/modules/kafka"
 )
 
 var sharedBrokers []string
 
 func TestMain(m *testing.M) {
-    // Use a dummy *testing.T just for setup — TestMain has no *testing.T.
-    setup := &testing.T{}
-    sharedBrokers = setupKafka(setup)
+    ctx := context.Background()
+
+    container, err := kafkatc.Run(ctx, "confluentinc/confluent-local:7.6.0")
+    if err != nil {
+        log.Fatalf("setup kafka: %v", err)
+    }
+    defer container.Terminate(ctx)
+
+    brokers, err := container.Brokers(ctx)
+    if err != nil {
+        log.Fatalf("get kafka brokers: %v", err)
+    }
+    sharedBrokers = brokers
+
     os.Exit(m.Run())
 }
 ```
 
-> **Warning:** Constructing `&testing.T{}` manually is fragile — methods like `t.Fatalf` and `t.Cleanup` expect a `*testing.T` provided by the test framework. Calling `t.Fatalf` on this zero-value `*testing.T` triggers a panic rather than a graceful test failure. A more robust approach is to call `log.Fatal` on error and use `defer container.Terminate(ctx)` directly in `TestMain`.
+> **Warning:** This pattern avoids the `&testing.T{}` footgun sometimes seen elsewhere: calling `t.Fatalf` on a zero-value `*testing.T` panics instead of failing gracefully, and any `t.Cleanup` hooks registered against it are never invoked. Using `log.Fatal` in `TestMain` gives a clean failure and process exit, and `defer container.Terminate(ctx)` guarantees the container is reaped when the test binary exits normally.
 
 `TestMain` is called before any test function. `m.Run()` executes all tests in the package and returns an exit code. By assigning the broker list to a package-level variable, every test function in the suite can use it without paying the container startup cost more than once.
 
-One limitation: `t.Cleanup` registered in `setupKafka` is attached to the dummy `*testing.T`, not the real test harness. If you need guaranteed cleanup, call `container.Terminate` explicitly at the end of `TestMain` instead.
+Note that `os.Exit` does not run deferred functions, so the `defer container.Terminate(ctx)` above covers the normal path but not a `log.Fatal` from inside `TestMain`. In practice, if setup fails the process dies before any container needs cleanup; if `m.Run()` returns, `os.Exit` bypasses the `defer`, but Testcontainers' [Ryuk reaper](https://golang.testcontainers.org/features/garbage_collector/) removes the container shortly after the process exits.
 
 ---
 
@@ -98,7 +113,7 @@ One limitation: `t.Cleanup` registered in `setupKafka` is attached to the dummy 
 
 The Reservation Service's `kafka.Publisher` wraps a `sarama.SyncProducer`. Its `Publish` method serializes a `ReservationEvent` to JSON, sets the message key to `event.BookID`, and injects the OTel trace context into message headers via `headerCarrier`. That is three things to verify.
 
-The verification approach is asymmetric—produce through the real publisher, then read back using sarama's lower-level partition consumer API. A partition consumer is simpler than a consumer group for this purpose — it does not join a group, does not negotiate offsets with a coordinator, and does not require a group rebalance. It just reads raw messages from a topic partition. This is the Kafka equivalent of reading a single message off a queue for assertion purposes.
+The verification approach is asymmetric—produce through the real publisher, then read back using sarama's lower-level partition consumer API. A partition consumer is simpler than a consumer group for this purpose—it does not join a group, does not negotiate offsets with a coordinator, and does not require a group rebalance. It just reads raw messages from a topic partition. This is the Kafka equivalent of reading a single message off a queue for assertion purposes.
 
 ```go
 //go:build integration
@@ -191,11 +206,11 @@ func TestPublisher_RoundTrip(t *testing.T) {
 }
 ```
 
-`sarama.OffsetOldest` on the partition consumer means "start from offset 0". Without this, sarama defaults to `OffsetNewest` and the consumer would only see messages published after it connects — which, given our produce-then-consume ordering, would mean it sees nothing.
+`sarama.OffsetOldest` on the partition consumer means "start from offset 0". Without this, sarama defaults to `OffsetNewest` and the consumer would only see messages published after it connects—which, given our produce-then-consume ordering, would mean it sees nothing.
 
 The topic is not explicitly created. When the publisher sends the first message, sarama's producer creates the topic with default settings (one partition, replication factor 1). This is fine for tests. In production you would pre-create topics with explicit partition counts and retention policies.
 
-The OTel header check is deliberately minimal: it only verifies that `traceparent` is present, not that it contains a valid trace ID. A full trace ID assertion would require starting a real OTel SDK and a trace exporter in the test, which is overkill here. The presence of the header confirms that the propagation path — `Inject` in the publisher, `Extract` in the consumer — is not broken.
+The OTel header check is deliberately minimal: it only verifies that `traceparent` is present, not that it contains a valid trace ID. A full trace ID assertion would require starting a real OTel SDK and a trace exporter in the test, which is overkill here. The presence of the header confirms that the propagation path—`Inject` in the publisher, `Extract` in the consumer—is not broken.
 
 ---
 
@@ -210,7 +225,7 @@ You already have a PostgreSQL setup from section 11.2. Reuse the same `setupPost
 3. Start `consumer.Run` in a goroutine.
 4. Poll the database until `available_copies` equals 4 or until a timeout.
 
-Step 4 is the tricky part. `consumer.Run` is asynchronous — it runs in a separate goroutine and delivers results via side effects on the database. You cannot use a channel here because the consumer does not signal when it has processed a message. The standard approach is a polling loop with a timeout.
+Step 4 is the tricky part. `consumer.Run` is asynchronous—it runs in a separate goroutine and delivers results via side effects on the database. You cannot use a channel here because the consumer does not signal when it has processed a message. The standard approach is a polling loop with a timeout.
 
 ```go
 //go:build integration
@@ -320,7 +335,7 @@ Note that `consumer.Run` in the real code has a hardcoded group ID (`"catalog-av
 func Run(ctx context.Context, brokers []string, topic string, svc AvailabilityUpdater, groupID string) error
 ```
 
-This is a concrete example of how writing integration tests shapes your API design. The hardcoded group ID was an implementation convenience that becomes an obstacle the moment you want to run two tests simultaneously. Accepting the group ID as a parameter is the right production API anyway — it allows operators to tune the consumer group name without recompiling.
+This is a concrete example of how writing integration tests shapes your API design. The hardcoded group ID was an implementation convenience that becomes an obstacle the moment you want to run two tests simultaneously. Accepting the group ID as a parameter is the right production API anyway—it allows operators to tune the consumer group name without recompiling.
 
 ---
 
@@ -372,7 +387,7 @@ func (c *capturingIndexer) Delete(_ context.Context, id string) error {
 
 The `sync.Mutex` is not optional. `consumer.Run` delivers messages in the goroutine that calls `ConsumeClaim`, which is a different goroutine from your test's polling loop. Without the mutex, the slice appends in `Upsert` and `Delete` would race with the reads in your polling condition check. Go's race detector (`go test -race -tags integration`) will catch this immediately if you omit the lock.
 
-With the capturing indexer in place, the test itself only needs Kafka — no Postgres, no Meilisearch:
+With the capturing indexer in place, the test itself only needs Kafka—no Postgres, no Meilisearch:
 
 ```go
 //go:build integration
@@ -444,13 +459,13 @@ func TestSearchConsumer_BookCreated_CallsUpsert(t *testing.T) {
             t.Fatal("timed out waiting for indexer upsert")
         case <-time.After(200 * time.Millisecond):
             idx.mu.Lock()
-            upserted := append([]any(nil), idx.upserted...) // snapshot
+            upserted := append([]model.BookDocument(nil), idx.upserted...) // snapshot
             idx.mu.Unlock()
 
             if len(upserted) == 0 {
                 continue
             }
-            doc := upserted[0].(model.BookDocument)
+            doc := upserted[0]
             if doc.ID != bookID {
                 t.Errorf("upserted ID: want %q, got %q", bookID, doc.ID)
             }
@@ -464,9 +479,9 @@ func TestSearchConsumer_BookCreated_CallsUpsert(t *testing.T) {
 }
 ```
 
-This test exercises the full Kafka path — group join, partition assignment, message deserialization, `ConsumeClaim` loop — without any dependency on Meilisearch. If you later add a `book.deleted` scenario, the same capturing indexer catches calls to `Delete`.
+This test exercises the full Kafka path—group join, partition assignment, message deserialization, `ConsumeClaim` loop—without any dependency on Meilisearch. If you later add a `book.deleted` scenario, the same capturing indexer catches calls to `Delete`.
 
-The snapshot pattern (`append([]any(nil), idx.upserted...)`) copies the slice while holding the lock, then releases the lock before doing assertions. This is important: Holding a mutex while calling `t.Errorf` is not inherently unsafe in Go, but it is poor practice because `t.Errorf` may trigger housekeeping that takes nontrivial time under the lock.
+The snapshot pattern (`append([]model.BookDocument(nil), idx.upserted...)`) copies the slice while holding the lock, then releases the lock before doing assertions. This is important: Holding a mutex while calling `t.Errorf` is not inherently unsafe in Go, but it is poor practice because `t.Errorf` may trigger housekeeping that takes nontrivial time under the lock.
 
 ---
 
@@ -474,7 +489,7 @@ The snapshot pattern (`append([]any(nil), idx.upserted...)`) copies the slice wh
 
 ### Consumer group rebalancing
 
-When a new consumer group joins a Kafka cluster for the first time, the broker assigns partitions via a rebalance protocol. This takes time — typically 1–3 seconds. If you produce a message, then immediately start a consumer, the consumer may miss messages produced before the assignment completes if its initial offset policy is `OffsetNewest`.
+When a new consumer group joins a Kafka cluster for the first time, the broker assigns partitions via a rebalance protocol. This takes time—typically 1–3 seconds. If you produce a message, then immediately start a consumer, the consumer may miss messages produced before the assignment completes if its initial offset policy is `OffsetNewest`.
 
 The solution used throughout this section is to set `config.Consumer.Offsets.Initial = sarama.OffsetOldest`. This tells sarama that when there is no committed offset for the group (which is the case for a fresh group), start from the beginning of the topic. Since each test uses a unique group ID, there is never a committed offset, and `OffsetOldest` is always effective.
 
@@ -482,7 +497,7 @@ This is also why tests produce the message *before* starting the consumer: the m
 
 ### Unique group IDs
 
-Never use a hardcoded group ID in a test. If two test functions in the same suite use the same group ID, they share offset state. Whichever test runs first commits an offset; the second test starts from that committed offset and may find no messages. The failure is intermittent and order-dependent — the worst kind.
+Never use a hardcoded group ID in a test. If two test functions in the same suite use the same group ID, they share offset state. Whichever test runs first commits an offset; the second test starts from that committed offset and may find no messages. The failure is intermittent and order-dependent—the worst kind.
 
 The pattern used here is:
 
@@ -494,7 +509,7 @@ groupID := fmt.Sprintf("test-%s", t.Name())
 
 ### Topic auto-creation
 
-Sarama's producer auto-creates topics with default broker settings (one partition, replication factor 1, default retention). This is acceptable in a test environment. If you need to test specific partition counts — for example, to verify that a round-robin consumer group distributes load correctly — you should create topics explicitly using sarama's `ClusterAdmin`:
+Sarama's producer auto-creates topics with default broker settings (one partition, replication factor 1, default retention). This is acceptable in a test environment. If you need to test specific partition counts—for example, to verify that a round-robin consumer group distributes load correctly—you should create topics explicitly using sarama's `ClusterAdmin`:
 
 ```go
 admin, _ := sarama.NewClusterAdmin(brokers, sarama.NewConfig())
@@ -527,7 +542,7 @@ The `defer cancel()` at the top of each test function is the defense. Even if th
 
 ## Summary
 
-The tests in this section cover the two integration surfaces that unit tests cannot reach: the serialization path between the reservation publisher and the catalog consumer, and the Kafka-to-database path within the Catalog Service. The search consumer test demonstrates that you do not always need the full dependency chain — a capturing mock combined with a real Kafka round-trip is often sufficient to test message routing and deserialization.
+The tests in this section cover the two integration surfaces that unit tests cannot reach: the serialization path between the reservation publisher and the catalog consumer, and the Kafka-to-database path within the Catalog Service. The search consumer test demonstrates that you do not always need the full dependency chain—a capturing mock combined with a real Kafka round-trip is often sufficient to test message routing and deserialization.
 
 The key patterns introduced here carry over to any Kafka integration test in Go:
 
@@ -541,5 +556,5 @@ The key patterns introduced here carry over to any Kafka integration test in Go:
 
 ---
 
-[^1]: Testcontainers for Go — Kafka module: https://golang.testcontainers.org/modules/kafka/
-[^2]: IBM/sarama — Go Kafka client: https://github.com/IBM/sarama
+[^1]: Testcontainers for Go—Kafka module: https://golang.testcontainers.org/modules/kafka/
+[^2]: IBM/sarama—Go Kafka client: https://github.com/IBM/sarama

@@ -73,7 +73,7 @@ In production, you would add more processors here: `memory_limiter` to prevent t
 
 Two exporters, one per signal type:
 
-- `otlp/tempo` forwards traces to Tempo via OTLP/gRPC. The `/tempo` suffix is just a label—it lets you define multiple OTLP exporters with different configurations. `tls.insecure: true` disables TLS for the inter-container connection---acceptable in Docker Compose, not in production.
+- `otlp/tempo` forwards traces to Tempo via OTLP/gRPC. The `/tempo` suffix is just a label—it lets you define multiple OTLP exporters with different configurations. `tls.insecure: true` disables TLS for the inter-container connection—acceptable in Docker Compose, not in production.
 
 - `prometheus` exposes a Prometheus scrape endpoint on port 8889. Rather than pushing metrics to Prometheus, the Collector converts OTLP metrics to Prometheus format and serves them on an HTTP endpoint. Prometheus then pulls from this endpoint on its regular scrape interval. This push-to-pull conversion is one of the Collector's most useful features.
 
@@ -115,7 +115,7 @@ The configuration is minimal for development. Tempo receives traces via OTLP/gRP
 
 In production, you would use object storage (S3, GCS, Azure Blob) as the backend instead of local disk. Tempo is designed for this—it stores traces as compressed blocks in object storage, which is orders of magnitude cheaper than a traditional database. This is why Tempo can handle high trace volumes without breaking the budget.
 
-Tempo indexes traces by trace ID, service name, span name, and duration. Unlike Prometheus, it does not build inverted indexes over arbitrary labels — this is what keeps storage costs low. To query traces beyond a known trace ID, Tempo offers TraceQL, a query language that filters spans by attributes, duration, and structural relationships. For example, `{resource.service.name = "catalog" && duration > 500ms}` finds slow spans in the Catalog Service. TraceQL queries run in Grafana's Explore view against the Tempo datasource, so you do not need a separate tool.
+Tempo indexes traces by trace ID, service name, span name, and duration. Unlike Prometheus, it does not build inverted indexes over arbitrary labels—this is what keeps storage costs low. To query traces beyond a known trace ID, Tempo offers TraceQL, a query language that filters spans by attributes, duration, and structural relationships. For example, `{resource.service.name = "catalog" && duration > 500ms}` finds slow spans in the Catalog Service. TraceQL queries run in Grafana's Explore view against the Tempo datasource, so you do not need a separate tool.
 
 Tempo exposes an HTTP API on port 3200 that Grafana uses to query traces. You can also query directly:
 

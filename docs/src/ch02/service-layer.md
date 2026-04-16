@@ -1,8 +1,8 @@
 # 2.4 Service Layer & Business Logic
 
-The repository layer you built in the previous section knows exactly one thing: how to talk to a database. That's intentional — it has no opinion about whether a book title is required, whether you can delete a book that's currently checked out, or how to coordinate multiple repository calls into a single operation. That's the job of the **service layer**.
+The repository layer you built in the previous section knows exactly one thing: how to talk to a database. That's intentional—it has no opinion about whether a book title is required, whether you can delete a book that's currently checked out, or how to coordinate multiple repository calls into a single operation. That's the job of the **service layer**.
 
-The service layer is where business logic lives. It sits between the transport layer (gRPC handlers) and the persistence layer (repositories), and it does not depend on gRPC or GORM — it interacts with the transport and persistence layers only through interfaces it defines or receives. This section covers how Go interfaces enable that clean separation, how to express domain errors in a way callers can inspect, and how to test business logic in isolation using hand-written mocks.
+The service layer is where business logic lives. It sits between the transport layer (gRPC handlers) and the persistence layer (repositories), and it does not depend on gRPC or GORM—it interacts with the transport and persistence layers only through interfaces it defines or receives. This section covers how Go interfaces enable that clean separation, how to express domain errors in a way callers can inspect, and how to test business logic in isolation using hand-written mocks.
 
 ---
 
@@ -21,7 +21,7 @@ class PostgresBookRepository : BookRepository {  // explicit declaration
 }
 ```
 
-Go works differently. Interface satisfaction is **implicit** — a type satisfies an interface by having the right method signatures. There is no `implements` keyword and no declaration of intent:
+Go works differently. Interface satisfaction is **implicit**—a type satisfies an interface by having the right method signatures. There is no `implements` keyword and no declaration of intent:
 
 ```go
 // The interface lives in the service package — the consumer owns it.
@@ -35,9 +35,9 @@ type BookRepository interface {
 }
 ```
 
-The GORM-backed `BookRepository` struct in `services/catalog/internal/repository/` has all these methods with matching signatures. That's enough — it satisfies the interface automatically. The repository package doesn't import the service package, doesn't know the interface exists, and doesn't care.
+The GORM-backed `BookRepository` struct in `services/catalog/internal/repository/` has all these methods with matching signatures. That's enough—it satisfies the interface automatically. The repository package doesn't import the service package, doesn't know the interface exists, and doesn't care.
 
-This is a deliberate inversion of the Java pattern. In Java, the interface usually lives near the implementation and the consumer depends on it from there. In Go, the convention is for the **consumer to define the interface it needs** — the service package declares exactly the repository surface it uses, and any type that matches can be plugged in. This makes interfaces smaller, more focused, and trivial to mock.
+This is a deliberate inversion of the Java pattern. In Java, the interface usually lives near the implementation and the consumer depends on it from there. In Go, the convention is for the **consumer to define the interface it needs**—the service package declares exactly the repository surface it uses, and any type that matches can be plugged in. This makes interfaces smaller, more focused, and trivial to mock.
 
 The practical consequence: you can introduce a new `BookRepository` implementation (an in-memory cache, a read-replica adapter) without touching anything in the service package. The dependency arrow points inward.
 
@@ -57,9 +57,9 @@ func NewCatalogService(repo BookRepository) *CatalogService {
 }
 ```
 
-> **Note:** Later chapters extend this constructor to accept an `EventPublisher` for Kafka integration. The pattern stays the same — add a new interface dependency, pass it through the constructor.
+> **Note:** Later chapters extend this constructor to accept an `EventPublisher` for Kafka integration. The pattern stays the same—add a new interface dependency, pass it through the constructor.
 
-This is manual dependency injection — no framework, a constructor that takes what it needs. The service has no idea whether `repo` is backed by PostgreSQL, SQLite, or an in-memory map. That's the point.
+This is manual dependency injection—no framework, a constructor that takes what it needs. The service has no idea whether `repo` is backed by PostgreSQL, SQLite, or an in-memory map. That's the point.
 
 Most service methods are thin orchestrators. `GetBook` delegates:
 
@@ -69,7 +69,7 @@ func (s *CatalogService) GetBook(ctx context.Context, id uuid.UUID) (*model.Book
 }
 ```
 
-There is no business logic here that warrants a dedicated layer. The layer still matters — it's the right place for logic *when it exists*, and it decouples the gRPC handler from the repository interface. If you later need to add an audit log entry every time a book is fetched, this is where it goes, without touching the handler or the repository.
+There is no business logic here that warrants a dedicated layer. The layer still matters—it's the right place for logic *when it exists*, and it decouples the gRPC handler from the repository interface. If you later need to add an audit log entry every time a book is fetched, this is where it goes, without touching the handler or the repository.
 
 `CreateBook` is where the service earns its keep:
 
@@ -129,15 +129,15 @@ if errors.Is(err, model.ErrInvalidBook) {
 }
 ```
 
-`errors.Is` traverses the error chain — it unwraps wrapped errors recursively until it finds a match. This means the gRPC handler doesn't need to parse the error string to decide how to respond. It checks `errors.Is(err, model.ErrBookNotFound)` and maps to `codes.NotFound`, or checks `model.ErrInvalidBook` and maps to `codes.InvalidArgument`.
+`errors.Is` traverses the error chain—it unwraps wrapped errors recursively until it finds a match. This means the gRPC handler doesn't need to parse the error string to decide how to respond. It checks `errors.Is(err, model.ErrBookNotFound)` and maps to `codes.NotFound`, or checks `model.ErrInvalidBook` and maps to `codes.InvalidArgument`.
 
-Compare this to Java's exception hierarchy. The Go pattern achieves the same classification goal without inheritance or `instanceof` — wrap a sentinel, unwrap it with `errors.Is`.[^2]
+Compare this to Java's exception hierarchy. The Go pattern achieves the same classification goal without inheritance or `instanceof`—wrap a sentinel, unwrap it with `errors.Is`.[^2]
 
 ---
 
 ## Testing with Hand-Written Mocks
 
-Go's standard library includes `testing` but no mocking framework. The ecosystem has tools like `gomock` and `testify/mock`, but for learning, hand-written mocks are better — they show you exactly what's happening rather than hiding it behind code generation.
+Go's standard library includes `testing` but no mocking framework. The ecosystem has tools like `gomock` and `testify/mock`, but for learning, hand-written mocks are better—they show you exactly what's happening rather than hiding it behind code generation.
 
 A mock needs only to implement the same interface. Here's the one from `catalog_test.go`:
 
@@ -172,7 +172,7 @@ func (m *mockBookRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.
 // ... Delete, Update, List, UpdateAvailability implemented similarly
 ```
 
-This is not a fake of the database — it's a fake of the repository interface. The service tests run entirely in memory, with no network, no PostgreSQL container, no Docker. They are fast and deterministic.
+This is not a fake of the database—it's a fake of the repository interface. The service tests run entirely in memory, with no network, no PostgreSQL container, no Docker. They are fast and deterministic.
 
 The tests themselves follow a consistent pattern:
 
@@ -194,7 +194,7 @@ func TestCatalogService_CreateBook_MissingTitle(t *testing.T) {
 
 Notice what's being tested: not "does GORM insert correctly" (the repository tests cover that), but "does the service reject invalid input". Each test exercises one business rule. When a test fails, you know exactly which rule broke.
 
-Why hand-written over `mockgen`? Small, focused interfaces (often 1–3 methods) are Go's norm[^1] — they're trivial to implement by hand. The mock above also stores actual state in a map, which makes tests more realistic than `gomock`'s call-expectation style. And there's no generated code to decode when something fails.
+Why hand-written over `mockgen`? Small, focused interfaces (often 1–3 methods) are Go's norm[^1]—they're trivial to implement by hand. The mock above also stores actual state in a map, which makes tests more realistic than `gomock`'s call-expectation style. And there's no generated code to decode when something fails.
 
 ---
 
@@ -212,13 +212,13 @@ This is incomplete: a book can be deleted even if copies are currently checked o
 
 **Your task:** Add a new sentinel error and enforce the invariant in the service layer. Write the test first, then fix the implementation.
 
-**Step 1 — Add a sentinel error** to `model/errors.go`:
+**Step 1—Add a sentinel error** to `model/errors.go`:
 
 ```go
 ErrBookHasActiveReservations = errors.New("book has active reservations")
 ```
 
-**Step 2 — Write a failing test** in `catalog_test.go`:
+**Step 2—Write a failing test** in `catalog_test.go`:
 
 ```go
 func TestCatalogService_DeleteBook_WithActiveReservations(t *testing.T) {
@@ -244,9 +244,9 @@ func TestCatalogService_DeleteBook_WithActiveReservations(t *testing.T) {
 }
 ```
 
-Run `go test ./...` from `services/catalog/` — the test should fail because `DeleteBook` doesn't check anything yet.
+Run `go test ./...` from `services/catalog/`—the test should fail because `DeleteBook` doesn't check anything yet.
 
-**Step 3 — Implement the rule.** Think about what the service needs to do before reading the solution.
+**Step 3—Implement the rule.** Think about what the service needs to do before reading the solution.
 
 <details>
 <summary>Solution</summary>
@@ -272,11 +272,11 @@ func (s *CatalogService) DeleteBook(ctx context.Context, id uuid.UUID) error {
 
 A few things worth noting:
 
-- The service makes **two repository calls** — `GetByID` then `Delete`. This is the service as orchestrator: neither the repository nor the gRPC handler has any reason to know this check needs to happen.
-- The error message embeds the counts for observability — a caller logging the error gets context without having to re-fetch the book.
+- The service makes **two repository calls**—`GetByID` then `Delete`. This is the service as orchestrator: neither the repository nor the gRPC handler has any reason to know this check needs to happen.
+- The error message embeds the counts for observability—a caller logging the error gets context without having to re-fetch the book.
 - The mock's `UpdateAvailability` modifies `AvailableCopies` in the in-memory map, so the test correctly reflects the post-checkout state. No database required.
 
-Run `go test ./...` again — all tests should pass.
+Run `go test ./...` again—all tests should pass.
 
 </details>
 
@@ -284,9 +284,9 @@ Run `go test ./...` again — all tests should pass.
 
 ## What Comes Next
 
-The service layer is complete. It validates input, enforces invariants, wraps domain errors, and coordinates repository calls — all without coupling itself to GORM or gRPC. The next section connects everything: the gRPC handler calls the service, which calls the repository, and `main.go` wires all three together with dependency injection.
+The service layer is complete. It validates input, enforces invariants, wraps domain errors, and coordinates repository calls—all without coupling itself to GORM or gRPC. The next section connects everything: the gRPC handler calls the service, which calls the repository, and `main.go` wires all three together with dependency injection.
 
 ---
 
-[^1]: [Effective Go — Interfaces](https://go.dev/doc/effective_go#interfaces)
+[^1]: [Effective Go—Interfaces](https://go.dev/doc/effective_go#interfaces)
 [^2]: [Go Blog: Error handling and Go](https://go.dev/blog/error-handling-and-go)

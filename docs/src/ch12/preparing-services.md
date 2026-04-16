@@ -8,7 +8,7 @@ Before writing a single manifest, two code-level concerns need addressing: grace
 
 ### The Pod Termination Lifecycle
 
-When Kubernetes decides to stop a pod — whether because of a rolling update, a node drain, or a manual `kubectl delete pod` — it follows this sequence[^1]:
+When Kubernetes decides to stop a pod—whether because of a rolling update, a node drain, or a manual `kubectl delete pod`—it follows this sequence[^1]:
 
 ```mermaid
 sequenceDiagram
@@ -50,7 +50,7 @@ ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscal
 defer cancel()
 ```
 
-The Kafka consumers in catalog and search already use this pattern — the consumer loop checks `ctx.Done()` and exits cleanly when the context is cancelled. The gap is that `grpcServer.Serve` is not wired to the same context. It runs forever until the process dies.
+The Kafka consumers in catalog and search already use this pattern—the consumer loop checks `ctx.Done()` and exits cleanly when the context is cancelled. The gap is that `grpcServer.Serve` is not wired to the same context. It runs forever until the process dies.
 
 The fix is a goroutine that waits for context cancellation and then calls `grpcServer.GracefulStop()`. `GracefulStop` stops the server from accepting new connections and blocks until all active RPCs complete, which unblocks `Serve`.
 
@@ -90,7 +90,7 @@ When `SIGTERM` arrives, `ctx.Done()` is closed, the goroutine calls `GracefulSto
 
 ### Auth: Add Signal Handling
 
-Auth currently has no signal handling at all — `main` just calls `grpcServer.Serve` and blocks. Add both the context and the shutdown goroutine. Auth uses `log` rather than `slog`, so keep that consistent:
+Auth currently has no signal handling at all—`main` just calls `grpcServer.Serve` and blocks. Add both the context and the shutdown goroutine. Auth uses `log` rather than `slog`, so keep that consistent:
 
 ```diff
 +import (
@@ -159,7 +159,7 @@ Reservation uses `slog` and already imports `context`. Add `os/signal` and `sysc
  }
 ```
 
-One note on variable naming: reservation initializes `otelCtx` as a separate `context.Background()` at the top of `main` specifically for the OTel shutdown defer. Keep that separate variable — the OTel `shutdown` func should not receive a cancelled context at teardown time. Use the signal context only for the gRPC server and any consumers.
+One note on variable naming: reservation initializes `otelCtx` as a separate `context.Background()` at the top of `main` specifically for the OTel shutdown defer. Keep that separate variable—the OTel `shutdown` func should not receive a cancelled context at teardown time. Use the signal context only for the gRPC server and any consumers.
 
 ### Search: Wire the Existing Context
 
@@ -218,7 +218,7 @@ The gateway uses `net/http` rather than gRPC. The standard library's `http.Serve
 +}
 ```
 
-`server.ListenAndServe` (and the package-level `http.ListenAndServe`) returns `http.ErrServerClosed` when `Shutdown` is called — that is the normal exit path, not an error. The `err != http.ErrServerClosed` guard prevents a spurious error log on clean shutdown. The variable is named `sigCtx` to avoid shadowing the existing `ctx` declared at the top of `main` for OTel initialization.
+`server.ListenAndServe` (and the package-level `http.ListenAndServe`) returns `http.ErrServerClosed` when `Shutdown` is called—that is the normal exit path, not an error. The `err != http.ErrServerClosed` guard prevents a spurious error log on clean shutdown. The variable is named `sigCtx` to avoid shadowing the existing `ctx` declared at the top of `main` for OTel initialization.
 
 ---
 
@@ -237,11 +237,11 @@ service Health {
 }
 ```
 
-`Check` takes an optional service name string and returns one of `SERVING`, `NOT_SERVING`, or `SERVICE_UNKNOWN`. An empty string conventionally means "the overall server". During shutdown you set the status to `NOT_SERVING` before calling `GracefulStop` — Kubernetes will see the probe fail and stop routing traffic before the server stops accepting connections.
+`Check` takes an optional service name string and returns one of `SERVING`, `NOT_SERVING`, or `SERVICE_UNKNOWN`. An empty string conventionally means "the overall server". During shutdown you set the status to `NOT_SERVING` before calling `GracefulStop`—Kubernetes will see the probe fail and stop routing traffic before the server stops accepting connections.
 
 ### Adding the Health Server
 
-The `google.golang.org/grpc/health` package is part of the grpc-go module. It was already pulled in when you added gRPC to the project — no new `go get` needed.
+The `google.golang.org/grpc/health` package is part of the grpc-go module. It was already pulled in when you added gRPC to the project—no new `go get` needed.
 
 The pattern is the same for catalog, auth, reservation, and search:
 
@@ -292,7 +292,7 @@ containers:
 The distinction between the two probes matters:
 
 - **Readiness probe**: controls whether the pod receives traffic. A failing readiness probe removes the pod from the Service endpoints without restarting it. Use this to signal "I am not yet ready" during startup (migrations running, warm-up in progress) and "I am draining" during shutdown.
-- **Liveness probe**: controls whether the pod is restarted. A failing liveness probe triggers a container restart. Set `initialDelaySeconds` high enough that the pod has time to complete startup before the first check — a liveness probe that fires before migrations finish will restart the pod in a loop.
+- **Liveness probe**: controls whether the pod is restarted. A failing liveness probe triggers a container restart. Set `initialDelaySeconds` high enough that the pod has time to complete startup before the first check—a liveness probe that fires before migrations finish will restart the pod in a loop.
 
 Adjust the port for each service: `50051` for auth, `50052` for catalog, `50053` for reservation, `50054` for search.
 
@@ -320,7 +320,7 @@ containers:
       periodSeconds: 5
 ```
 
-For full shutdown signalling you could make the `/healthz` handler return a non-200 response once the signal context is cancelled — passing the signal context into the handler and checking `ctx.Err()`. That level of sophistication is optional for now; `server.Shutdown` already stops accepting new connections, so the readiness probe will fail naturally once the listener closes.
+For full shutdown signalling you could make the `/healthz` handler return a non-200 response once the signal context is cancelled—passing the signal context into the handler and checking `ctx.Err()`. That level of sophistication is optional for now; `server.Shutdown` already stops accepting new connections, so the readiness probe will fail naturally once the listener closes.
 
 ---
 
@@ -348,7 +348,7 @@ Expected response:
 }
 ```
 
-If you get `Failed to dial target host`, the service is not running. If you get `unknown service grpc.health.v1.Health`, the health server is not registered — double-check that both `healthpb.RegisterHealthServer` and `health.NewServer()` calls are present.
+If you get `Failed to dial target host`, the service is not running. If you get `unknown service grpc.health.v1.Health`, the health server is not registered—double-check that both `healthpb.RegisterHealthServer` and `health.NewServer()` calls are present.
 
 You can also check a named service (useful if you register per-service statuses):
 
@@ -357,7 +357,7 @@ grpcurl -plaintext -d '{"service": "catalog.v1.CatalogService"}' \
     localhost:50052 grpc.health.v1.Health/Check
 ```
 
-Named statuses are not set in this implementation — the empty-string overall status is sufficient for Kubernetes probes. That said, registering per-service statuses is straightforward if you want finer-grained health reporting later.
+Named statuses are not set in this implementation—the empty-string overall status is sufficient for Kubernetes probes. That said, registering per-service statuses is straightforward if you want finer-grained health reporting later.
 
 ---
 

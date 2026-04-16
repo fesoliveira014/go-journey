@@ -1,6 +1,6 @@
 # 12.4 Infrastructure Manifests
 
-Application services — `auth`, `catalog`, `reservation`, `search`, `gateway` — are stateless. Every pod is interchangeable. Kubernetes can kill one, schedule a replacement on a different node, and nothing is lost because state lives elsewhere. That is what makes Deployments work: all replicas are equivalent, any pod can be discarded.
+Application services—`auth`, `catalog`, `reservation`, `search`, `gateway`—are stateless. Every pod is interchangeable. Kubernetes can kill one, schedule a replacement on a different node, and nothing is lost because state lives elsewhere. That is what makes Deployments work: all replicas are equivalent, any pod can be discarded.
 
 Infrastructure is different. PostgreSQL stores your data on disk. Kafka stores committed log segments on disk. Meilisearch builds its search index on disk. When a pod restarts, that data must still be there. Kubernetes has a dedicated resource for exactly this: the **StatefulSet**.
 
@@ -10,17 +10,17 @@ Infrastructure is different. PostgreSQL stores your data on disk. Kafka stores c
 
 A Deployment gives pods random names (`postgres-catalog-7b4f9-xk2p`) and no guarantees about order. A StatefulSet gives you four things that Deployments do not[^1]:
 
-**Stable network identity.** Pods get predictable, ordinal names: `postgres-catalog-0`, `postgres-catalog-1`, and so on. The name is permanent — if pod-0 is deleted and rescheduled, it comes back as pod-0 with the same DNS identity. This is critical for stateful systems that embed their own hostname in configuration (Kafka's `KAFKA_ADVERTISED_LISTENERS` is the canonical example).
+**Stable network identity.** Pods get predictable, ordinal names: `postgres-catalog-0`, `postgres-catalog-1`, and so on. The name is permanent—if pod-0 is deleted and rescheduled, it comes back as pod-0 with the same DNS identity. This is critical for stateful systems that embed their own hostname in configuration (Kafka's `KAFKA_ADVERTISED_LISTENERS` is the canonical example).
 
 **Ordered startup and shutdown.** Pod-0 must reach the `Ready` state before pod-1 starts. Pod-1 must terminate before pod-0 during scale-down. This matters for Kafka's KRaft controller election and for any leader/follower replication scheme.
 
-**`volumeClaimTemplates`.** Each pod gets its own dedicated PersistentVolumeClaim. This is not a shared volume — `postgres-catalog-0` and `postgres-catalog-1` each own their own disk. With a Deployment you would have to manage PVCs by hand; with a StatefulSet the template handles it automatically.
+**`volumeClaimTemplates`.** Each pod gets its own dedicated PersistentVolumeClaim. This is not a shared volume—`postgres-catalog-0` and `postgres-catalog-1` each own their own disk. With a Deployment you would have to manage PVCs by hand; with a StatefulSet the template handles it automatically.
 
-**Headless Service.** StatefulSets pair with a headless Service (`clusterIP: None`). Normal Services load-balance across all backing pods and return a single virtual IP. A headless Service performs no load balancing — DNS resolves directly to individual pod IPs. Combined with ordinal naming, this lets you address `postgres-catalog-0.postgres-catalog.data.svc.cluster.local` and know with certainty which pod you are talking to[^2].
+**Headless Service.** StatefulSets pair with a headless Service (`clusterIP: None`). Normal Services load-balance across all backing pods and return a single virtual IP. A headless Service performs no load balancing—DNS resolves directly to individual pod IPs. Combined with ordinal naming, this lets you address `postgres-catalog-0.postgres-catalog.data.svc.cluster.local` and know with certainty which pod you are talking to[^2].
 
 ---
 
-## PostgreSQL — Catalog Service
+## PostgreSQL—Catalog Service
 
 The catalog database lives in the `data` namespace. The manifest set is three objects: a headless Service, a StatefulSet, and a ConfigMap. The Secret is assumed to be pre-created (covered in section 12.5).
 
@@ -65,7 +65,7 @@ data:
   POSTGRES_USER: postgres
 ```
 
-The `POSTGRES_DB` and `POSTGRES_USER` keys are the standard environment variables expected by the official Postgres Docker image. In the Docker Compose file from chapter 3, these were set via shell-level variables `POSTGRES_CATALOG_DB` and `POSTGRES_CATALOG_USER` (using `${VAR:-default}` expansion), but the container itself always sees `POSTGRES_DB` and `POSTGRES_USER`. The password is intentionally absent here — it belongs in a Secret.
+The `POSTGRES_DB` and `POSTGRES_USER` keys are the standard environment variables expected by the official Postgres Docker image. In the Docker Compose file from Chapter 3, these were set via shell-level variables `POSTGRES_CATALOG_DB` and `POSTGRES_CATALOG_USER` (using `${VAR:-default}` expansion), but the container itself always sees `POSTGRES_DB` and `POSTGRES_USER`. The password is intentionally absent here—it belongs in a Secret.
 
 ### StatefulSet
 
@@ -123,13 +123,13 @@ spec:
 Points worth calling out:
 
 - `serviceName: postgres-catalog` links the StatefulSet to the headless Service. Kubernetes uses this to build the per-pod DNS records.
-- `envFrom` loads `POSTGRES_DB` and `POSTGRES_USER` from the ConfigMap as environment variables. `env` adds `POSTGRES_PASSWORD` from the Secret — the two mechanisms compose cleanly.
+- `envFrom` loads `POSTGRES_DB` and `POSTGRES_USER` from the ConfigMap as environment variables. `env` adds `POSTGRES_PASSWORD` from the Secret—the two mechanisms compose cleanly.
 - The readiness probe runs `pg_isready -U postgres` inside the container. This is exactly the same health check used in `docker-compose.yml` (the `pg_isready` call in the `healthcheck.test` array). A pod that fails this probe is removed from Service endpoints, so traffic never routes to an unready database.
-- `volumeClaimTemplates` creates a PVC named `postgres-data-postgres-catalog-0` automatically. When the pod restarts, Kubernetes rebinds the same PVC — the data is not lost[^3].
+- `volumeClaimTemplates` creates a PVC named `postgres-data-postgres-catalog-0` automatically. When the pod restarts, Kubernetes rebinds the same PVC—the data is not lost[^3].
 
 ---
 
-## PostgreSQL — Auth and Reservation
+## PostgreSQL—Auth and Reservation
 
 The auth and reservation databases follow the same pattern. Only the names and database values differ:
 
@@ -174,7 +174,7 @@ Kafka lives in the `messaging` namespace. The configuration is more involved bec
 
 ### The Networking Problem
 
-In Docker Compose, `KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"` works because all containers share the `library-net` bridge network and `kafka` resolves via Docker's built-in DNS. In Kubernetes, services in different namespaces cannot use short names. A pod in the `library` namespace resolving `kafka:9092` will fail — that name is not in scope.
+In Docker Compose, `KAFKA_ADVERTISED_LISTENERS: "PLAINTEXT://kafka:9092"` works because all containers share the `library-net` bridge network and `kafka` resolves via Docker's built-in DNS. In Kubernetes, services in different namespaces cannot use short names. A pod in the `library` namespace resolving `kafka:9092` will fail—that name is not in scope.
 
 The fix is the FQDN. When Kafka starts, it registers its advertised listener address with ZooKeeper (or, in KRaft mode, with the controller quorum). Clients use that address to establish connections. If Kafka advertises `kafka:9092`, a client in `library` cannot reach it. If Kafka advertises the full FQDN `kafka-0.kafka.messaging.svc.cluster.local:9092`, any pod in the cluster can connect regardless of namespace.
 
@@ -205,7 +205,7 @@ Compare with Docker Compose:
 | `KAFKA_ADVERTISED_LISTENERS` | `PLAINTEXT://kafka:9092` | `PLAINTEXT://kafka-0.kafka.messaging.svc.cluster.local:9092` |
 | `KAFKA_CONTROLLER_QUORUM_VOTERS` | `1@kafka:9093` | `1@kafka-0.kafka.messaging.svc.cluster.local:9093` |
 
-Everything else — KRaft mode, `KAFKA_PROCESS_ROLES: "broker,controller"`, no ZooKeeper — is identical. The mode does not change between environments; only the addresses do.
+Everything else—KRaft mode, `KAFKA_PROCESS_ROLES: "broker,controller"`, no ZooKeeper—is identical. The mode does not change between environments; only the addresses do.
 
 ### Headless Service
 
@@ -286,7 +286,7 @@ The readiness probe mirrors the Docker Compose health check: run `kafka-topics.s
 
 ## Meilisearch
 
-Meilisearch is straightforward compared to Kafka — single instance, HTTP API, simple environment configuration.
+Meilisearch is straightforward compared to Kafka—single instance, HTTP API, simple environment configuration.
 
 ### ConfigMap
 
@@ -358,7 +358,7 @@ spec:
             storage: 1Gi
 ```
 
-The readiness probe is HTTP rather than `exec`. Kubernetes calls `GET /health` on port 7700 directly — no shell wrapper needed. A `200 OK` response signals the pod is ready. This matches the Docker Compose health check (`wget --spider http://localhost:7700/health`), just expressed in Kubernetes-native syntax.
+The readiness probe is HTTP rather than `exec`. Kubernetes calls `GET /health` on port 7700 directly—no shell wrapper needed. A `200 OK` response signals the pod is ready. This matches the Docker Compose health check (`wget --spider http://localhost:7700/health`), just expressed in Kubernetes-native syntax.
 
 Meilisearch's headless Service follows the same pattern as the others, with port 7700:
 
@@ -409,7 +409,7 @@ sequenceDiagram
     P->>K: TCP connect to 10.244.0.15:9092
 ```
 
-Key point: the headless Service does not proxy traffic. It only provides DNS records. Kubernetes DNS populates an A record per pod in the StatefulSet, using the pod's ordinal name as a subdomain of the service name. When `catalog` connects to `kafka-0.kafka.messaging.svc.cluster.local`, it is connecting directly to the Kafka pod IP — there is no intermediate load balancer.
+Key point: the headless Service does not proxy traffic. It only provides DNS records. Kubernetes DNS populates an A record per pod in the StatefulSet, using the pod's ordinal name as a subdomain of the service name. When `catalog` connects to `kafka-0.kafka.messaging.svc.cluster.local`, it is connecting directly to the Kafka pod IP—there is no intermediate load balancer.
 
 ---
 
@@ -460,7 +460,7 @@ Apply just messaging:
 kubectl apply -k k8s/messaging/
 ```
 
-Kustomize processes all listed resources as a single apply operation — namespace, ConfigMaps, Services, and StatefulSets are applied together. Ordering within the apply is handled by the Kubernetes API server, which creates namespaced resources after the namespace object exists.
+Kustomize processes all listed resources as a single apply operation—namespace, ConfigMaps, Services, and StatefulSets are applied together. Ordering within the apply is handled by the Kubernetes API server, which creates namespaced resources after the namespace object exists.
 
 ---
 
@@ -475,7 +475,7 @@ Kustomize processes all listed resources as a single apply operation — namespa
 | ConfigMap | Non-secret environment configuration |
 | Secret reference | Injects passwords and keys without embedding them in manifests |
 
-The next section introduces Kustomize environments — including the overlay that generates these Secrets for local development without committing credentials to the repository.
+The next section introduces Kustomize environments—including the overlay that generates these Secrets for local development without committing credentials to the repository.
 
 ---
 

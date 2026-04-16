@@ -190,7 +190,7 @@ This is the equivalent of the Hibernate or JDBC auto-instrumentation you get wit
 
 ## Manual Instrumentation: Kafka
 
-HTTP and gRPC have mature contrib libraries that handle context propagation automatically. Kafka does not. The `otelsarama` contrib package exists — check compatibility with your Sarama version before adopting it. Our approach is manual: we implement the `propagation.TextMapCarrier` interface ourselves.
+HTTP and gRPC have mature contrib libraries that handle context propagation automatically. Kafka does not. The `otelsarama` contrib package exists—check compatibility with your Sarama version before adopting it. Our approach is manual: we implement the `propagation.TextMapCarrier` interface ourselves.
 
 ### The TextMapCarrier Adapter
 

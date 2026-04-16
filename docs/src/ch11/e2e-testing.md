@@ -42,9 +42,9 @@ Test client (bufconn)
 
 Compare this to the bufconn test from section 11.3. That test also ran through the interceptor and gRPC server. The difference is in the repository layer. section 11.3's bufconn test could use either a real or a mocked repository—the test goal was to verify the gRPC wiring, so a mock was sufficient. Here the repository is always real. The test goal is to verify that the full vertical slice works end-to-end within a single service.
 
-This is the Go equivalent of a Spring Boot `@SpringBootTest` with `DEFINED_PORT` and a Testcontainers data source — the full application context, real database, real request/response cycle.
+This is the Go equivalent of a Spring Boot `@SpringBootTest` with `DEFINED_PORT` and a Testcontainers data source—the full application context, real database, real request/response cycle.
 
-Critically, this is **not** a multi-service test. The Reservation Service does not know about the Catalog Service's database, and the Catalog Service does not call the Reservation Service. Each service is tested in its own test binary, in its own directory, with its own containers. Cross-service flows — a reservation triggering a catalog stock update — are discussed at the end of this section under "what we are not testing."
+Critically, this is **not** a multi-service test. The Reservation Service does not know about the Catalog Service's database, and the Catalog Service does not call the Reservation Service. Each service is tested in its own test binary, in its own directory, with its own containers. Cross-service flows—a reservation triggering a catalog stock update—are discussed at the end of this section under "what we are not testing."
 
 ---
 
@@ -71,7 +71,7 @@ services/
         helpers_test.go
 ```
 
-The helpers file in each service is responsible for the three setup functions that every e2e test will call: `setupPostgres`, `setupKafka`, and `startCatalogServer` (or the service-appropriate variant). These are not test cases — they are test infrastructure, so they live in a separate file but in the same `e2e_test` package.
+The helpers file in each service is responsible for the three setup functions that every e2e test will call: `setupPostgres`, `setupKafka`, and `startCatalogServer` (or the service-appropriate variant). These are not test cases—they are test infrastructure, so they live in a separate file but in the same `e2e_test` package.
 
 ### setupPostgres
 
@@ -187,9 +187,9 @@ func setupKafka(t *testing.T) []string {
 }
 ```
 
-Like PostgreSQL, Kafka uses a dedicated Testcontainers module (`testcontainers-go/modules/kafka`). The module handles all the KRaft-mode configuration internally — node IDs, controller quorum voters, listener protocols — so you don't have to set any Kafka environment variables yourself. The `confluent-local` image is purpose-built for single-node testing: it starts in KRaft mode (no ZooKeeper) and auto-creates topics by default.
+Like PostgreSQL, Kafka uses a dedicated Testcontainers module (`testcontainers-go/modules/kafka`). The module handles all the KRaft-mode configuration internally—node IDs, controller quorum voters, listener protocols—so you don't have to set any Kafka environment variables yourself. The `confluent-local` image is purpose-built for single-node testing: it starts in KRaft mode (no ZooKeeper) and auto-creates topics by default.
 
-The return value is a `[]string` of broker addresses — the same type that `sarama.NewSyncProducer` and `sarama.NewConsumerGroup` both accept. Keeping the signature consistent with what your application packages expect means you can pass the slice directly without any adaptation.
+The return value is a `[]string` of broker addresses—the same type that `sarama.NewSyncProducer` and `sarama.NewConsumerGroup` both accept. Keeping the signature consistent with what your application packages expect means you can pass the slice directly without any adaptation.
 
 ### startCatalogServer
 
@@ -376,21 +376,21 @@ func TestCatalog_E2E(t *testing.T) {
 
 Walk through what each step is actually testing:
 
-**Step 1 — Create:** The gRPC request traverses the auth interceptor, which validates the JWT and extracts the caller's identity. It then reaches the handler, is validated by the service layer, and is persisted by the GORM repository via a real `INSERT`. The Kafka publisher also fires a `BookCreated` event to the real broker. The returned `bookID` came from PostgreSQL's auto-generated UUID — if there were a schema mismatch in the primary-key column, this step fails.
+**Step 1—Create:** The gRPC request traverses the auth interceptor, which validates the JWT and extracts the caller's identity. It then reaches the handler, is validated by the service layer, and is persisted by the GORM repository via a real `INSERT`. The Kafka publisher also fires a `BookCreated` event to the real broker. The returned `bookID` came from PostgreSQL's auto-generated UUID—if there were a schema mismatch in the primary-key column, this step fails.
 
-**Steps 2 and 3 — Get and List:** These verify that the `SELECT` queries work correctly and that the schema matches what the struct tags declare. A column-name mismatch that the mock would never surface will cause step 2 to return an empty struct or an ORM error here.
+**Steps 2 and 3—Get and List:** These verify that the `SELECT` queries work correctly and that the schema matches what the struct tags declare. A column-name mismatch that the mock would never surface will cause step 2 to return an empty struct or an ORM error here.
 
-**Step 4 — Update:** Exercises the `UPDATE` path and immediately re-reads to confirm the write was committed (not rolled back silently due to a missed transaction boundary).
+**Step 4—Update:** Exercises the `UPDATE` path and immediately re-reads to confirm the write was committed (not rolled back silently due to a missed transaction boundary).
 
-**Steps 5 and 6 — Delete and NotFound:** Verifies that the soft-delete or hard-delete mechanism in the repository actually makes the row invisible to subsequent reads. Soft-delete bugs — where a `deleted_at` timestamp is set but the `FindByID` query does not filter on it — are caught here but invisible to unit tests.
+**Steps 5 and 6—Delete and NotFound:** Verifies that the soft-delete or hard-delete mechanism in the repository actually makes the row invisible to subsequent reads. Soft-delete bugs—where a `deleted_at` timestamp is set but the `FindByID` query does not filter on it—are caught here but invisible to unit tests.
 
-**Step 7 — Unauthenticated rejection:** Verifies that the auth interceptor is actually wired into the server. A server started with `grpc.NewServer()` and no interceptors would pass steps 1 through 6 just as well. This step is the proof that the interceptor is present and active. It costs one additional RPC call and catches the most expensive category of wiring mistake.
+**Step 7—Unauthenticated rejection:** Verifies that the auth interceptor is actually wired into the server. A server started with `grpc.NewServer()` and no interceptors would pass steps 1 through 6 just as well. This step is the proof that the interceptor is present and active. It costs one additional RPC call and catches the most expensive category of wiring mistake.
 
 ---
 
 ## Reservation e2e test
 
-The Reservation Service is structurally similar to catalog, with two differences. First, it has a dependency on the Catalog Service's gRPC API — it needs to look up book details when creating a reservation. For a service-level test we mock that outbound gRPC client: we are not testing the Catalog Service here. Second, the business logic includes a max-active-reservations rule that should return `codes.ResourceExhausted`. That rule cannot be tested by a unit test in isolation — it queries the reservation count from the real database.
+The Reservation Service is structurally similar to catalog, with two differences. First, it has a dependency on the Catalog Service's gRPC API—it needs to look up book details when creating a reservation. For a service-level test we mock that outbound gRPC client: we are not testing the Catalog Service here. Second, the business logic includes a max-active-reservations rule that should return `codes.ResourceExhausted`. That rule cannot be tested by a unit test in isolation—it queries the reservation count from the real database.
 
 ```go
 //go:build integration
@@ -417,10 +417,14 @@ import (
 )
 
 // mockCatalogClient satisfies the catalogv1.CatalogServiceClient interface
-// by implementing only the methods the reservation service actually calls.
-// No embedding is needed — the compiler will catch any missing methods at
-// the call site where *mockCatalogClient is passed as CatalogServiceClient.
-type mockCatalogClient struct{}
+// by embedding it. The embedded interface value is nil, so any method that
+// the reservation service does not call will panic with a nil-interface
+// dereference if it is ever invoked — which is exactly the behaviour we
+// want in a test: unexpected calls fail loudly. Only GetBook is overridden
+// because that is the sole method the reservation service depends on.
+type mockCatalogClient struct {
+    catalogv1.CatalogServiceClient
+}
 
 func (m *mockCatalogClient) GetBook(_ context.Context, req *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.GetBookResponse, error) {
     return &catalogv1.GetBookResponse{
@@ -678,9 +682,9 @@ func TestAuth_E2E(t *testing.T) {
 }
 ```
 
-The auth test deliberately avoids Kafka because the Auth Service does not publish events. Adding a Kafka container to this test would be dishonest — it would imply a dependency that does not exist and would slow down the suite for no benefit. Match the infrastructure footprint of each e2e test to the actual dependencies of the service under test.
+The auth test deliberately avoids Kafka because the Auth Service does not publish events. Adding a Kafka container to this test would be dishonest—it would imply a dependency that does not exist and would slow down the suite for no benefit. Match the infrastructure footprint of each e2e test to the actual dependencies of the service under test.
 
-Step 6 tests an edge case that only exists at the level of a full integration: the token is generated outside the Auth Service (simulating a token that was valid at login but has since expired), passed to `ValidateToken`, and rejected. The expiry check runs against the real system clock in the real JWT library — no mocked time, no stubbed clock interface.
+Step 6 tests an edge case that only exists at the level of a full integration: the token is generated outside the Auth Service (simulating a token that was valid at login but has since expired), passed to `ValidateToken`, and rejected. The expiry check runs against the real system clock in the real JWT library—no mocked time, no stubbed clock interface.
 
 ---
 
@@ -706,7 +710,7 @@ The existing repository tests that use `t.Skip` are left exactly as they are. Th
 
 ### Build tag discipline
 
-Every file under `internal/e2e/` carries `//go:build integration` at the top, before the `package` declaration. This is not optional — if any file in the package is missing the tag, `go test ./...` will try to compile the package and fail because `testcontainers-go` imports Docker client libraries that are heavy dependencies.
+Every file under `internal/e2e/` carries `//go:build integration` at the top, before the `package` declaration. This is not optional—if any file in the package is missing the tag, `go test ./...` will try to compile the package and fail because `testcontainers-go` imports Docker client libraries that are heavy dependencies.
 
 ```go
 //go:build integration
@@ -714,7 +718,7 @@ Every file under `internal/e2e/` carries `//go:build integration` at the top, be
 package e2e_test
 ```
 
-The `_test` suffix on the package name is intentional. It places these tests in the external test package, which means they can only access exported symbols from the service. This enforces the same boundary that a real client of the service would face — if your service's public API is awkward to use from tests, it is awkward for real callers too.
+The `_test` suffix on the package name is intentional. It places these tests in the external test package, which means they can only access exported symbols from the service. This enforces the same boundary that a real client of the service would face—if your service's public API is awkward to use from tests, it is awkward for real callers too.
 
 ### Running tests
 
@@ -738,7 +742,7 @@ The `-count=1` flag disables Go's test-result cache. Without it, Go will cache t
 
 ## Earthfile integration
 
-Earthly's `WITH DOCKER` block provides Docker-in-Docker capability that makes integration tests portable across CI environments. The pattern established in section 11.4 for Kafka tests applies directly to e2e tests — the test binary itself starts and stops containers via the Docker socket, so the only Earthly requirement is that Docker is available inside the build step.
+Earthly's `WITH DOCKER` block provides Docker-in-Docker capability that makes integration tests portable across CI environments. The pattern established in section 11.4 for Kafka tests applies directly to e2e tests—the test binary itself starts and stops containers via the Docker socket, so the only Earthly requirement is that Docker is available inside the build step.
 
 ```earthfile
 # In services/catalog/Earthfile
@@ -781,7 +785,7 @@ integration-test:
     BUILD ./services/search+integration-test
 ```
 
-Earthly executes independent `BUILD` targets in parallel by default. The four service integration tests will run concurrently, each with its own Docker-daemon scope. There is no shared state between them — each service starts its own Postgres and Kafka containers, which means total wall-clock time for the full integration suite is bounded by the slowest single service rather than the sum of all four.
+Earthly executes independent `BUILD` targets in parallel by default. The four service integration tests will run concurrently, each with its own Docker-daemon scope. There is no shared state between them—each service starts its own Postgres and Kafka containers, which means total wall-clock time for the full integration suite is bounded by the slowest single service rather than the sum of all four.
 
 Invoking the full suite from the project root:
 
@@ -829,7 +833,7 @@ These gaps are addressable in several ways:
 
 **Contract testing with Pact**[^1] defines a consumer-driven contract: the Reservation Service declares what it expects from the Catalog Service's Kafka events, and the Catalog Service verifies its output against those expectations. Neither service needs to run at the same time. This is the recommended approach for verifying the serialization contract between independently-deployed services.
 
-**Gateway-level HTTP e2e tests** start all services and the gateway in containers and exercise user-facing scenarios through HTTP. These tests are expensive — 60 to 120 seconds to start — and are appropriate for a small set of critical user paths: login, reserve a book, return a book.
+**Gateway-level HTTP e2e tests** start all services and the gateway in containers and exercise user-facing scenarios through HTTP. These tests are expensive—60 to 120 seconds to start—and are appropriate for a small set of critical user paths: login, reserve a book, return a book.
 
 **Frontend and browser tests** using Playwright or Cypress are only relevant once the application has a browser-facing UI. They sit at the very top of the pyramid and should be reserved for the handful of user journeys that are truly business-critical.
 
@@ -849,7 +853,7 @@ Looking back at the full test strategy from this chapter:
 | Kafka | Testcontainers + Sarama | Serialization mismatches, consumer-group offsets |
 | Service e2e | All of the above | Full vertical slice: request → DB → event |
 
-Each layer catches a distinct category of bug. The service-level e2e tests catch the bugs that no individual layer would catch on its own: the subtle interactions between layers — an interceptor that passes but corrupts the context for the handler below it, a repository that writes the row but fails to commit it, a publisher that serializes the event but uses the wrong topic name.
+Each layer catches a distinct category of bug. The service-level e2e tests catch the bugs that no individual layer would catch on its own: the subtle interactions between layers—an interceptor that passes but corrupts the context for the handler below it, a repository that writes the row but fails to commit it, a publisher that serializes the event but uses the wrong topic name.
 
 These are the bugs that make it to production when teams trust only unit tests. They are also the bugs that are most expensive to diagnose in production, because they only manifest when the full stack is present.
 
@@ -857,5 +861,5 @@ The test suite you now have is not exhaustive. No test suite is. But it is strat
 
 ---
 
-[^1]: Testing microservices — Sam Newman: https://samnewman.io/patterns/testing/
+[^1]: Testing microservices—Sam Newman: https://samnewman.io/patterns/testing/
 [^2]: Earthly WITH DOCKER: https://docs.earthly.dev/docs/earthfile#with-docker

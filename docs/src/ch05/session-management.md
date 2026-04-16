@@ -260,7 +260,7 @@ srv := handler.New(authClient, catalogClient, reservationClient, searchClient, t
     handler.WithFlashKey(flashKey))
 ```
 
-The `Server` constructor has grown since Section 5.1 — it now accepts the reservation and search clients introduced in Chapters 7 and 8, plus a functional option for flash message configuration.
+The `Server` constructor has grown since Section 5.1—it now accepts the reservation and search clients introduced in Chapters 7 and 8, plus a functional option for flash message configuration.
 
 [securecookie]: https://pkg.go.dev/github.com/gorilla/securecookie
 

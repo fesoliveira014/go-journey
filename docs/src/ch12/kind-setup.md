@@ -14,7 +14,7 @@ This makes kind the right tool for:
 - Running cluster-level integration tests in CI (the Earthfile targets from Chapter 10 use this)
 - Experimenting with cluster configuration without touching a shared environment
 
-kind is not designed for production use. It does not support multi-node networking across machines, persistent volumes backed by real storage, or cloud provider integrations. Use it where you use unit and integration tests — as a fast feedback loop.
+kind is not designed for production use. It does not support multi-node networking across machines, persistent volumes backed by real storage, or cloud provider integrations. Use it where you use unit and integration tests—as a fast feedback loop.
 
 ---
 
@@ -89,8 +89,8 @@ nodes:
 
 What each part does:
 
-- `node-labels: "ingress-ready=true"` — the NGINX Ingress Controller that you install in the next step uses a node selector targeting this label. Without the label, the Ingress Controller pod will not schedule.
-- `extraPortMappings` — Docker normally isolates the container's network. These mappings punch through: traffic arriving on `localhost:80` or `localhost:443` on your machine is forwarded into the cluster node. This is what makes `http://localhost/api/catalog` work from your browser.
+- `node-labels: "ingress-ready=true"`—the NGINX Ingress Controller that you install in the next step uses a node selector targeting this label. Without the label, the Ingress Controller pod will not schedule.
+- `extraPortMappings`—Docker normally isolates the container's network. These mappings punch through: traffic arriving on `localhost:80` or `localhost:443` on your machine is forwarded into the cluster node. This is what makes `http://localhost/api/catalog` work from your browser.
 
 ---
 
@@ -126,7 +126,7 @@ kubectl --context kind-library get pods -A
 
 ## Installing the NGINX Ingress Controller
 
-Kubernetes itself does not route external HTTP traffic — that is the job of an Ingress Controller. For kind, the NGINX project ships a ready-made manifest tuned for this exact setup[^2]:
+Kubernetes itself does not route external HTTP traffic—that is the job of an Ingress Controller. For kind, the NGINX project ships a ready-made manifest tuned for this exact setup[^2]:
 
 ```bash
 kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/kind/deploy.yaml
@@ -151,7 +151,7 @@ kubectl -n ingress-nginx describe pod -l app.kubernetes.io/component=controller
 
 ## The `kind load` Gotcha
 
-This trips up almost everyone the first time. kind nodes are Docker containers, not VMs — they run `containerd` internally and do not share the Docker daemon on your host. When you build an image with `docker build` or `earthly +docker`, that image lives in your host Docker daemon's image store. The kind node cannot see it.
+This trips up almost everyone the first time. kind nodes are Docker containers, not VMs—they run `containerd` internally and do not share the Docker daemon on your host. When you build an image with `docker build` or `earthly +docker`, that image lives in your host Docker daemon's image store. The kind node cannot see it.
 
 If you deploy a pod referencing an image that exists only on the host, Kubernetes attempts to pull it from a registry and fails (or uses a stale cached version). The symptom is pods stuck in `ImagePullBackOff`.
 
@@ -195,7 +195,7 @@ kind load docker-image library/gateway:latest   --name library
 kubectl apply -f k8s/
 ```
 
-This sequence — build, load, apply — replaces the inner loop you would otherwise spend waiting for a CI pipeline or a remote registry push. On a laptop with warm Earthly caches and a running cluster, the full cycle takes under a minute.
+This sequence—build, load, apply—replaces the inner loop you would otherwise spend waiting for a CI pipeline or a remote registry push. On a laptop with warm Earthly caches and a running cluster, the full cycle takes under a minute.
 
 ---
 
@@ -221,7 +221,7 @@ This removes the Docker container, all pods, all persistent volumes, and the kub
 | `kind load docker-image <image> --name library` | Copy a local image into the cluster |
 | `kind delete cluster --name library` | Tear down and remove everything |
 
-The cluster you just created is where everything in the rest of this chapter will run. The next section introduces Kubernetes manifests — Deployments, Services, and ConfigMaps — and how to write them for the library services.
+The cluster you just created is where everything in the rest of this chapter will run. The next section introduces Kubernetes manifests—Deployments, Services, and ConfigMaps—and how to write them for the library services.
 
 ---
 

@@ -1,6 +1,6 @@
 # Chapter 10: CI/CD with GitHub Actions & Earthly
 
-In this chapter, we build a production-grade CI/CD pipeline for the library system. Rather than scripting builds directly in YAML, we put all build logic in Earthly targets---portable and cacheable---and use GitHub Actions purely for triggering and orchestration. The result is a pipeline that runs identically on your laptop and in CI.
+In this chapter, we build a production-grade CI/CD pipeline for the library system. Rather than scripting builds directly in YAML, we put all build logic in Earthly targets—portable and cacheable—and use GitHub Actions purely for triggering and orchestration. The result is a pipeline that runs identically on your laptop and in CI.
 
 ## What You'll Learn
 
@@ -32,4 +32,4 @@ Merge to main
                     └── +build-and-push ──► ghcr.io/<org>/<service>:sha
 ```
 
-Every CI step is an Earthly target, so you can reproduce any failure locally with a single `earthly +<target>` command — no CI-specific environment required.
+Every CI step is an Earthly target, so you can reproduce any failure locally with a single `earthly +<target>` command—no CI-specific environment required.

@@ -156,7 +156,10 @@ func (h *AuthHandler) CompleteOAuth2(ctx context.Context, req *authv1.CompleteOA
     // Exchange authorization code for access token
     oauthToken, err := h.oauthConfig.Exchange(ctx, req.GetCode())
     if err != nil {
-        return nil, status.Error(codes.Internal, fmt.Sprintf("failed to exchange code: %v", err))
+        // Log internally for diagnostics, but return a generic message to the client —
+        // the raw OAuth error may include provider details or token fragments.
+        slog.Error("oauth code exchange failed", "error", err)
+        return nil, status.Error(codes.Internal, "authentication failed")
     }
 
     // Fetch user profile from Google

@@ -1,6 +1,6 @@
 # 7.4 Reservation UI
 
-The reservation UI extends the gateway (our Backend for Frontend (BFF) from Chapter 5) with three new capabilities: reserving a book, listing a user's reservations, and returning a book. No new architectural concepts—we apply the patterns we already know to a new feature.
+The reservation UI extends the gateway—our Backend-for-Frontend (BFF) from Chapter 5—with three new capabilities: reserving a book, listing a user's reservations, and returning a book. No new architectural concepts; we apply the patterns we already know to a new feature.
 
 ---
 
@@ -281,7 +281,7 @@ There are several ways to handle this in the UI, if needed:
 - **Cache invalidation.** The Reservation Service could notify the gateway to invalidate its cache for that book (if the gateway had a cache).
 - **Polling.** The book detail page could poll for updated availability.
 
-We do none of these — the simplest approach is often the right one: accept the brief inconsistency and let the system converge.
+We do none of these—the simplest approach is often the right one: accept the brief inconsistency and let the system converge.
 
 ---
 

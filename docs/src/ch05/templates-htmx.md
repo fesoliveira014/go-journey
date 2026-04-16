@@ -57,7 +57,7 @@ Here is `base.html`:
 </html>
 ```
 
-> **Why the `integrity` and `crossorigin` attributes?** Loading JavaScript from a third-party CDN without a [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) (SRI) hash means a CDN compromise can inject malicious code into every page you serve. The browser downloads the script, hashes it, and refuses to execute if the hash doesn't match the one in `integrity`. `crossorigin="anonymous"` is required for SRI to work against cross-origin resources. The [HTMX install page](https://htmx.org/docs/#installing) publishes the SRI hash for every release — copy it in verbatim when you pin a version. In production you'd typically self-host HTMX from your own static assets and skip the CDN entirely.
+> **Why the `integrity` and `crossorigin` attributes?** Loading JavaScript from a third-party CDN without a [Subresource Integrity](https://developer.mozilla.org/en-US/docs/Web/Security/Subresource_Integrity) (SRI) hash means a CDN compromise can inject malicious code into every page you serve. The browser downloads the script, hashes it, and refuses to execute if the hash doesn't match the one in `integrity`. `crossorigin="anonymous"` is required for SRI to work against cross-origin resources. The [HTMX install page](https://htmx.org/docs/#installing) publishes the SRI hash for every release—copy it in verbatim when you pin a version. In production you'd typically self-host HTMX from your own static assets and skip the CDN entirely.
 
 The `{{block "title" .}}Library System{{end}}` action defines a block named `"title"` with a default value of "Library System". A page template can override this:
 
@@ -322,7 +322,7 @@ func (s *Server) renderPartial(w http.ResponseWriter, name string, data any) {
 }
 ```
 
-This is progressive enhancement: The page works without JavaScript (you get full-page reloads on filter changes), but with HTMX it feels like an SPA.
+This is progressive enhancement: the page works without JavaScript (you get full-page reloads on filter changes), but with HTMX it feels like an SPA.
 
 ---
 

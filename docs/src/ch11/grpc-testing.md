@@ -14,7 +14,7 @@ This is fast and useful for testing business logic in isolation, but it bypasses
 1. The client serializes the request struct into protobuf wire format.
 2. The bytes cross a transport (TCP, Unix socket, etc.).
 3. The server deserializes the bytes back into a Go struct.
-4. Registered server interceptors run — in the library system, that means `UnaryAuthInterceptor`, which reads the `authorization` metadata header, validates the JWT, and either passes the request down the chain or returns `codes.Unauthenticated`.
+4. Registered server interceptors run—in the library system, that means `UnaryAuthInterceptor`, which reads the `authorization` metadata header, validates the JWT, and either passes the request down the chain or returns `codes.Unauthenticated`.
 5. gRPC metadata (request headers) is propagated from the incoming context.
 6. The handler runs and returns a response or a gRPC `status.Status` error.
 7. The response is serialized and sent back to the client.
@@ -27,7 +27,7 @@ For a system where authentication, authorization, and correct error codes are se
 
 ## How bufconn works
 
-`google.golang.org/grpc/test/bufconn` provides a single type: `Listener`. Under the hood it is a pair of in-memory byte buffers that implement `net.Listener` and `net.Conn`. When a goroutine writes to one end, another goroutine reads from the other — exactly like a network socket, but with no kernel involvement and no port allocation.
+`google.golang.org/grpc/test/bufconn` provides a single type: `Listener`. Under the hood it is a pair of in-memory byte buffers that implement `net.Listener` and `net.Conn`. When a goroutine writes to one end, another goroutine reads from the other—exactly like a network socket, but with no kernel involvement and no port allocation.
 
 ```
 +------------------------------------------------------------------+
@@ -41,7 +41,7 @@ For a system where authentication, authorization, and correct error codes are se
 +------------------------------------------------------------------+
 ```
 
-Because the bytes still flow through the full gRPC stack on both sides — encoding, decoding, header frames, trailers — the behavior is identical to what you would observe over a real TCP connection. The only thing removed is the OS network stack.
+Because the bytes still flow through the full gRPC stack on both sides—encoding, decoding, header frames, trailers—the behavior is identical to what you would observe over a real TCP connection. The only thing removed is the OS network stack.
 
 To connect a gRPC client to a `bufconn.Listener` you supply a custom dialer via `grpc.WithContextDialer`. Instead of resolving a hostname and opening a TCP socket, the dialer calls `lis.DialContext`, which returns an in-memory connection to the server.
 
@@ -102,21 +102,21 @@ func startCatalogServer(t *testing.T, svc *service.CatalogService, jwtSecret str
 
 Walk through each part:
 
-**`bufconn.Listen(bufSize)`** — creates the in-memory listener. The buffer size (1 MiB here) is the maximum amount of data that can be in flight between client and server at any one time. For tests this value is rarely a bottleneck; 1 MiB is a safe default.
+**`bufconn.Listen(bufSize)`**—creates the in-memory listener. The buffer size (1 MiB here) is the maximum amount of data that can be in flight between client and server at any one time. For tests this value is rarely a bottleneck; 1 MiB is a safe default.
 
-**`grpc.NewServer(grpc.UnaryInterceptor(...))`** — creates a real gRPC server with the same interceptor chain that runs in production. Passing `pkgauth.UnaryAuthInterceptor(jwtSecret, nil)` means every unary RPC goes through JWT validation before reaching the handler. This is the critical difference from calling the handler directly.
+**`grpc.NewServer(grpc.UnaryInterceptor(...))`**—creates a real gRPC server with the same interceptor chain that runs in production. Passing `pkgauth.UnaryAuthInterceptor(jwtSecret, nil)` means every unary RPC goes through JWT validation before reaching the handler. This is the critical difference from calling the handler directly.
 
-**`catalogv1.RegisterCatalogServiceServer(srv, handler.NewCatalogHandler(svc))`** — registers the handler with the server, exactly as `main.go` does.
+**`catalogv1.RegisterCatalogServiceServer(srv, handler.NewCatalogHandler(svc))`**—registers the handler with the server, exactly as `main.go` does.
 
-**`go func() { srv.Serve(lis) }()`** — starts the server in a goroutine. `Serve` blocks until the server stops, so it must not run on the test goroutine.
+**`go func() { srv.Serve(lis) }()`**—starts the server in a goroutine. `Serve` blocks until the server stops, so it must not run on the test goroutine.
 
-**`t.Cleanup(func() { srv.GracefulStop() })`** — registers a cleanup function that runs when the test (or subtest) completes. `GracefulStop` finishes in-flight RPCs before shutting down. Using `t.Cleanup` rather than `defer` is idiomatic for test helpers because `defer` in a helper runs when the helper returns, not when the test finishes.
+**`t.Cleanup(func() { srv.GracefulStop() })`**—registers a cleanup function that runs when the test (or subtest) completes. `GracefulStop` finishes in-flight RPCs before shutting down. Using `t.Cleanup` rather than `defer` is idiomatic for test helpers because `defer` in a helper runs when the helper returns, not when the test finishes.
 
-**`grpc.NewClient("passthrough:///bufconn", ...)`** — creates the client connection. The scheme `passthrough:///` tells gRPC's name resolver to use the address string as-is and not attempt DNS lookup. The actual address (`"bufconn"`) is irrelevant because the custom dialer ignores it.
+**`grpc.NewClient("passthrough:///bufconn", ...)`**—creates the client connection. The scheme `passthrough:///` tells gRPC's name resolver to use the address string as-is and not attempt DNS lookup. The actual address (`"bufconn"`) is irrelevant because the custom dialer ignores it.
 
-**`grpc.WithContextDialer(...)`** — supplies the dialer that routes connections through the in-memory listener instead of the OS network stack.
+**`grpc.WithContextDialer(...)`**—supplies the dialer that routes connections through the in-memory listener instead of the OS network stack.
 
-**`grpc.WithTransportCredentials(insecure.NewCredentials())`** — disables TLS. The bufconn pipe is already within the same process; TLS adds no security benefit in tests and would require certificate setup.
+**`grpc.WithTransportCredentials(insecure.NewCredentials())`**—disables TLS. The bufconn pipe is already within the same process; TLS adds no security benefit in tests and would require certificate setup.
 
 The second `t.Cleanup` closes the client connection after the test completes, releasing the underlying resources.
 
@@ -182,9 +182,9 @@ func TestCreateBook_WithAuth(t *testing.T) {
 }
 ```
 
-`metadata.Pairs` builds gRPC metadata — the equivalent of HTTP headers. `metadata.NewOutgoingContext` attaches the metadata to the context so the client stub includes it in the request. The interceptor reads the `authorization` header, validates the JWT signed with `"test-secret"`, extracts the claims, and allows the request to proceed.
+`metadata.Pairs` builds gRPC metadata—the equivalent of HTTP headers. `metadata.NewOutgoingContext` attaches the metadata to the context so the client stub includes it in the request. The interceptor reads the `authorization` header, validates the JWT signed with `"test-secret"`, extracts the claims, and allows the request to proceed.
 
-Note that `pkgauth.GenerateToken` uses the same `"test-secret"` that was passed to `startCatalogServer`. If the secrets differ, the interceptor will return `codes.Unauthenticated` even with a valid-looking token — worth testing as a third case.
+Note that `pkgauth.GenerateToken` uses the same `"test-secret"` that was passed to `startCatalogServer`. If the secrets differ, the interceptor will return `codes.Unauthenticated` even with a valid-looking token—worth testing as a third case.
 
 The full import list for these tests:
 
@@ -253,7 +253,7 @@ func TestCreateBook_Integration(t *testing.T) {
 }
 ```
 
-The `setupPostgres` helper from Section 11.2 starts the container, runs migrations, and registers `t.Cleanup` to terminate the container. Because `startCatalogServer` also registers its cleanup via `t.Cleanup`, the shutdown order is correct: the gRPC server stops first, then the database container terminates. Go runs `t.Cleanup` functions in LIFO order — last registered, first called.
+The `setupPostgres` helper from Section 11.2 starts the container, runs migrations, and registers `t.Cleanup` to terminate the container. Because `startCatalogServer` also registers its cleanup via `t.Cleanup`, the shutdown order is correct: the gRPC server stops first, then the database container terminates. Go runs `t.Cleanup` functions in LIFO order—last registered, first called.
 
 This test validates things that no unit test can:
 
@@ -268,7 +268,7 @@ The trade-off is speed. Starting a container takes a few seconds. Keep these tes
 
 ## Auth service bufconn tests
 
-The pattern is identical for the Auth Service, but the interceptor configuration differs. The Auth Service has endpoints that must be reachable without a valid JWT — you cannot authenticate if you need a token to call `Register` or `Login`. The `skipMethods` parameter of `UnaryAuthInterceptor` lists the fully-qualified method names that bypass the check:
+The pattern is identical for the Auth Service, but the interceptor configuration differs. The Auth Service has endpoints that must be reachable without a valid JWT—you cannot authenticate if you need a token to call `Register` or `Login`. The `skipMethods` parameter of `UnaryAuthInterceptor` lists the fully-qualified method names that bypass the check:
 
 ```go
 func startAuthServer(t *testing.T, svc *authservice.AuthService, jwtSecret string) authv1.AuthServiceClient {
@@ -351,7 +351,7 @@ func TestAuthFlow(t *testing.T) {
 
 Three assertions in one test are acceptable here because the steps are sequential and dependent—you cannot log in without registering, and you cannot validate a token without logging in. Splitting them into separate tests would require repeated setup. If any step fails, `t.Fatalf` halts the test immediately, so a failure message pinpoints exactly which step broke.
 
-The `ValidateToken` call also verifies that the token the Auth Service issues is accepted by the same interceptor it uses for protected endpoints — a circular check that confirms the signing key is consistent throughout the service.
+The `ValidateToken` call also verifies that the token the Auth Service issues is accepted by the same interceptor it uses for protected endpoints—a circular check that confirms the signing key is consistent throughout the service.
 
 ---
 
@@ -367,5 +367,5 @@ Use direct handler calls for logic-heavy unit tests where you want fast feedback
 
 ---
 
-[^1]: bufconn package reference — https://pkg.go.dev/google.golang.org/grpc/test/bufconn
-[^2]: gRPC Go testing guide — https://grpc.io/docs/languages/go/testing/
+[^1]: bufconn package reference—https://pkg.go.dev/google.golang.org/grpc/test/bufconn
+[^2]: gRPC Go testing guide—https://grpc.io/docs/languages/go/testing/

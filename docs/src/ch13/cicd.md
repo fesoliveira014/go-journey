@@ -1,10 +1,10 @@
 # 13.8 CI/CD Pipeline
 
-Chapter 10 built a CI/CD pipeline that runs tests with Earthly and pushes container images to GitHub Container Registry (GHCR) on every push to `main`. That was the right scope for a pipeline with no cloud target: build it, verify it, store it. Now there is a cloud target. Every section of this chapter has added infrastructure — an EKS cluster, ECR repositories, an RDS database per service, an MSK broker — and none of it is doing anything useful until a deployment pipeline closes the loop. This section builds that pipeline.
+Chapter 10 built a CI/CD pipeline that runs tests with Earthly and pushes container images to GitHub Container Registry (GHCR) on every push to `main`. That was the right scope for a pipeline with no cloud target: build it, verify it, store it. Now there is a cloud target. Every section of this chapter has added infrastructure—an EKS cluster, ECR repositories, an RDS database per service, an MSK broker—and none of it is doing anything useful until a deployment pipeline closes the loop. This section builds that pipeline.
 
 The end state: a push to `main` runs the existing CI job, builds and pushes images to both GHCR and ECR, and then deploys to the EKS cluster by applying the production Kustomize overlay. No long-lived AWS credentials are stored in GitHub. A failed rollout fails the job so you can investigate. The entire process is auditable in the GitHub Actions log.
 
-The central challenge is authentication. The pipeline needs permission to push to ECR and to call the Kubernetes API. The naive approach — create an IAM user, generate an access key, and store it as a GitHub secret — works, but it carries serious risk: long-lived credentials that never expire, credentials that must be rotated manually, and credentials that are one leaked secret away from full account access. The production answer is OIDC federation.
+The central challenge is authentication. The pipeline needs permission to push to ECR and to call the Kubernetes API. The naive approach—create an IAM user, generate an access key, and store it as a GitHub secret—works, but it carries serious risk: long-lived credentials that never expire, credentials that must be rotated manually, and credentials that are one leaked secret away from full account access. The production answer is OIDC federation.
 
 ---
 
@@ -32,9 +32,9 @@ sequenceDiagram
     GHA->>EKS: kubectl apply (using temporary credentials)
 ```
 
-The critical detail is the `sub` claim. GitHub sets it to a string that encodes the repository and the ref that triggered the workflow: `repo:owner/repo:ref:refs/heads/main`. The IAM trust policy uses this claim as a condition. A token minted for a pull request from a fork has a different `sub` — it cannot assume the deployment role. You get branch-scoped permissions with no extra work.
+The critical detail is the `sub` claim. GitHub sets it to a string that encodes the repository and the ref that triggered the workflow: `repo:owner/repo:ref:refs/heads/main`. The IAM trust policy uses this claim as a condition. A token minted for a pull request from a fork has a different `sub`—it cannot assume the deployment role. You get branch-scoped permissions with no extra work.
 
-The credentials STS returns are temporary — they expire in 15 minutes by default. If the token is leaked, the narrow exploitation window limits what an attacker can do. There is nothing to rotate. There is nothing stored in GitHub secrets that grants AWS access. This is the correct model for any pipeline interacting with a cloud provider.
+The credentials STS returns are temporary—they expire in 15 minutes by default. If the token is leaked, the narrow exploitation window limits what an attacker can do. There is nothing to rotate. There is nothing stored in GitHub secrets that grants AWS access. This is the correct model for any pipeline interacting with a cloud provider.
 
 ---
 
@@ -154,7 +154,7 @@ output "github_actions_role_arn" {
 }
 ```
 
-The `ECRPush` statement uses `Resource = "*"` because `ecr:GetAuthorizationToken` is an account-level action — it cannot be scoped to a specific repository. The other ECR actions can be scoped, but since all repositories in this account belong to this project, the broad scope is acceptable. In a shared account, replace `"*"` with specific repository ARNs.
+The `ECRPush` statement uses `Resource = "*"` because `ecr:GetAuthorizationToken` is an account-level action—it cannot be scoped to a specific repository. The other ECR actions can be scoped, but since all repositories in this account belong to this project, the broad scope is acceptable. In a shared account, replace `"*"` with specific repository ARNs.
 
 The `aws_eks_access_entry` approach is the modern replacement for editing the `aws-auth` ConfigMap manually. The ConfigMap approach required the cluster creator to have a special bootstrap IAM identity, had no Terraform resource prior to 2023, and was a frequent source of hard-to-debug lockouts. Access entries manage Kubernetes RBAC through the AWS API and are fully idempotent.
 
@@ -171,7 +171,7 @@ terraform output github_actions_role_arn
 # arn:aws:iam::123456789012:role/github-actions-deploy
 ```
 
-Copy the role ARN. You will store it as a GitHub Actions variable (not a secret — it contains no credentials) named `AWS_DEPLOY_ROLE_ARN`. Store your AWS region as `AWS_REGION` and your ECR registry URI as `ECR_REGISTRY`.
+Copy the role ARN. You will store it as a GitHub Actions variable (not a secret—it contains no credentials) named `AWS_DEPLOY_ROLE_ARN`. Store your AWS region as `AWS_REGION` and your ECR registry URI as `ECR_REGISTRY`.
 
 ---
 
@@ -286,7 +286,7 @@ jobs:
         run: |
           aws eks update-kubeconfig \
             --region "${AWS_REGION}" \
-            --name library-cluster
+            --name library-system
 
       # Patch the production overlay to use the exact image tags from this commit.
       # kustomize edit set image rewrites the image field in the overlay's
@@ -324,13 +324,13 @@ jobs:
 
 The `environment: production` declaration integrates with GitHub's Environments feature. If you configure the `production` environment to require a manual approval, every push to `main` pauses at the deploy step until a designated reviewer approves it. This is useful for projects where you want automated builds but gated deployments. If you want fully automated deploys, remove the line.
 
-The `role-session-name` field in the OIDC step is optional but recommended. Including the `run_id` makes it trivial to correlate a set of AWS API calls — visible in CloudTrail — with the specific workflow run that made them.
+The `role-session-name` field in the OIDC step is optional but recommended. Including the `run_id` makes it trivial to correlate a set of AWS API calls—visible in CloudTrail—with the specific workflow run that made them.
 
 ---
 
 ## Optional: Terraform plan on pull requests
 
-A common extension is running `terraform plan` on pull requests so reviewers can see infrastructure changes alongside code changes. The full PR workflow is out of scope here — it requires configuring OIDC trust for pull request events, which introduces complexity around scoping permissions appropriately for untrusted contributor branches — but the skeleton is worth showing.
+A common extension is running `terraform plan` on pull requests so reviewers can see infrastructure changes alongside code changes. The full PR workflow is out of scope here—it requires configuring OIDC trust for pull request events, which introduces complexity around scoping permissions appropriately for untrusted contributor branches—but the skeleton is worth showing.
 
 ```yaml
 # .github/workflows/pr.yml
@@ -408,7 +408,7 @@ kubectl rollout history deployment/catalog --namespace library
 kubectl rollout undo deployment/catalog --namespace library --to-revision=3
 ```
 
-The rollback reverts the pod spec — the image reference, environment variables, resource limits — to whatever was in the previous ReplicaSet. It does not touch the Kustomize overlay files in git. If you roll back via `kubectl rollout undo`, the overlay in git and the live cluster are now out of sync. The next push to `main` will re-apply the overlay and re-advance to the current image tag, overwriting the rollback. For a quick recovery from a bad deploy this is acceptable. For a longer-lived rollback, commit a change to the production overlay that pins to the last known good image tag and let the pipeline apply it.
+The rollback reverts the pod spec—the image reference, environment variables, resource limits—to whatever was in the previous ReplicaSet. It does not touch the Kustomize overlay files in git. If you roll back via `kubectl rollout undo`, the overlay in git and the live cluster are now out of sync. The next push to `main` will re-apply the overlay and re-advance to the current image tag, overwriting the rollback. For a quick recovery from a bad deploy this is acceptable. For a longer-lived rollback, commit a change to the production overlay that pins to the last known good image tag and let the pipeline apply it.
 
 ECR retains every image tag you push unless you configure a lifecycle policy to expire old tags. The image that was running before a bad deploy is always available for re-deployment. The tag is `sha-<previous-commit-sha>`, which you can retrieve from the GitHub Actions log for any successful deploy job.
 
@@ -428,7 +428,7 @@ For production systems where rollback is a planned procedure rather than an emer
 
 ---
 
-With the deploy job in place, every push to `main` now follows a fully automated path: tests pass, images are built and stored in both GHCR and ECR, and the production cluster converges to the new state. The entire process is observable — GitHub Actions logs show each step, CloudTrail logs show every AWS API call, and `kubectl rollout history` shows every revision the cluster has run. The library system is running in the cloud, deployed by a pipeline that stores no long-lived credentials.
+With the deploy job in place, every push to `main` now follows a fully automated path: tests pass, images are built and stored in both GHCR and ECR, and the production cluster converges to the new state. The entire process is observable—GitHub Actions logs show each step, CloudTrail logs show every AWS API call, and `kubectl rollout history` shows every revision the cluster has run. The library system is running in the cloud, deployed by a pipeline that stores no long-lived credentials.
 
 ---
 

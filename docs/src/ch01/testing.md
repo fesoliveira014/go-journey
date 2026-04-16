@@ -1,12 +1,12 @@
 ## 1.4 Testing
 
-Go's testing story is opinionated and minimal. There is no JUnit, no TestNG, no pytest — just the standard library's `testing` package and a handful of conventions baked into the toolchain. If you are used to writing `@Test` annotations or `assert.assertEquals`, you will immediately notice the absence of assertions. Go's philosophy is that your test functions are ordinary code, and `if` is perfectly capable of expressing a failure condition.
+Go's testing story is opinionated and minimal. There is no JUnit, no TestNG, no pytest—just the standard library's `testing` package and a handful of conventions baked into the toolchain. If you are used to writing `@Test` annotations or `assert.assertEquals`, you will immediately notice the absence of assertions. Go's philosophy is that your test functions are ordinary code, and `if` is perfectly capable of expressing a failure condition.
 
 ---
 
 ### The `_test.go` Convention
 
-The Go toolchain identifies test files by their name: Any file ending in `_test.go` is excluded from the production build and only compiled when running tests. There is no annotation, no test runner configuration — the filename is the contract.
+The Go toolchain identifies test files by their name: Any file ending in `_test.go` is excluded from the production build and only compiled when running tests. There is no annotation, no test runner configuration—the filename is the contract.
 
 Inside a test file, test functions follow a strict signature:
 
@@ -18,8 +18,8 @@ The function must start with `Test`, the next character must be uppercase, and t
 
 | Method | Behavior | Java/Kotlin analogue |
 |---|---|---|
-| `t.Errorf(...)` | Marks the test as failed, continues running | `fail(message)` — soft |
-| `t.Fatalf(...)` | Marks the test as failed, stops immediately | `fail(message)` — hard |
+| `t.Errorf(...)` | Marks the test as failed, continues running | `fail(message)`—soft |
+| `t.Fatalf(...)` | Marks the test as failed, stops immediately | `fail(message)`—hard |
 | `t.Logf(...)` | Logs a message, only visible with `-v` | `System.out.println` |
 
 These three methods are the only assertion mechanism you get by default. This constraint forces you to write precise, readable failure messages instead of relying on a framework to format them for you. Many Go projects add `github.com/stretchr/testify/assert` for convenience, but the standard library suffices and is what this project uses.[^1]
@@ -51,8 +51,8 @@ The `-race` flag instruments the binary to detect concurrent memory accesses tha
 
 Testing an HTTP handler normally means spinning up a real server, making a real network call, and tearing down afterward. Go eliminates this with `net/http/httptest`.[^3]
 
-- `httptest.NewRequest(method, target, body)` — creates an `*http.Request` suitable for passing directly to a handler, without a real TCP connection.
-- `httptest.NewRecorder()` — creates a `*httptest.ResponseRecorder` that implements `http.ResponseWriter` and captures the response status, headers, and body in memory.
+- `httptest.NewRequest(method, target, body)`—creates an `*http.Request` suitable for passing directly to a handler, without a real TCP connection.
+- `httptest.NewRecorder()`—creates a `*httptest.ResponseRecorder` that implements `http.ResponseWriter` and captures the response status, headers, and body in memory.
 
 This means you can test a handler as a plain function call:
 
@@ -63,7 +63,7 @@ handler.Health(rec, req)
 // rec.Code, rec.Body, rec.Header() are all available now
 ```
 
-No ports, no goroutines, no teardown. This is the standard Go pattern. If you've used Spring's `MockMvc` or Ktor's `testApplication`, the motivation is identical — but the implementation is lighter because the handler is already just a function.
+No ports, no goroutines, no teardown. This is the standard Go pattern. If you've used Spring's `MockMvc` or Ktor's `testApplication`, the motivation is identical—but the implementation is lighter because the handler is already just a function.
 
 ---
 
@@ -128,7 +128,7 @@ func TestHealthHandler(t *testing.T) {
 Key points:
 
 - The anonymous struct slice is the table. Each field corresponds to something that varies between test cases.
-- `t.Run(tc.name, ...)` creates a **subtest**. Subtests are individually addressable — you can run a single one with `go test -run TestHealthHandler/GET_returns_200`.
+- `t.Run(tc.name, ...)` creates a **subtest**. Subtests are individually addressable—you can run a single one with `go test -run TestHealthHandler/GET_returns_200`.
 - Failure messages are scoped to the subtest, so a multi-case failure clearly identifies which case broke.
 
 The books handler follows the same structure:
@@ -192,7 +192,7 @@ go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 ```
 
-The first command runs tests and writes a coverage profile to `coverage.out`. The second opens it in your browser, color-coding each line: green for covered, red for not. This is the built-in Go workflow — no plugin or external tool required.
+The first command runs tests and writes a coverage profile to `coverage.out`. The second opens it in your browser, color-coding each line: green for covered, red for not. This is the built-in Go workflow—no plugin or external tool required.
 
 For a quick summary without the browser:
 
@@ -201,7 +201,7 @@ go test -cover ./...
 # ok   github.com/fesoliveira014/library-system/services/gateway/internal/handler   coverage: 87.5% of statements
 ```
 
-Coverage is a proxy metric, not a goal. 100% coverage does not mean the code is correct; it means every line was executed at least once. What matters is that your cases cover the meaningful behavioral boundaries — which is exactly what table-driven tests are good at making explicit.
+Coverage is a proxy metric, not a goal. 100% coverage does not mean the code is correct; it means every line was executed at least once. What matters is that your cases cover the meaningful behavioral boundaries—which is exactly what table-driven tests are good at making explicit.
 
 ---
 
@@ -231,7 +231,7 @@ Your test function should have the signature `func TestBooksIDHandler(t *testing
 
 ---
 
-[^1]: [Go testing package — pkg.go.dev](https://pkg.go.dev/testing)
-[^2]: [Go Wiki: Table-driven tests — go.dev](https://go.dev/wiki/TableDrivenTests)
-[^3]: [httptest package — pkg.go.dev](https://pkg.go.dev/net/http/httptest)
-[^4]: [Earthly documentation — docs.earthly.dev](https://docs.earthly.dev/)
+[^1]: [Go testing package—pkg.go.dev](https://pkg.go.dev/testing)
+[^2]: [Go Wiki: Table-driven tests—go.dev](https://go.dev/wiki/TableDrivenTests)
+[^3]: [httptest package—pkg.go.dev](https://pkg.go.dev/net/http/httptest)
+[^4]: [Earthly documentation—docs.earthly.dev](https://docs.earthly.dev/)

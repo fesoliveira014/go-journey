@@ -1,6 +1,6 @@
 # 10.2 The Earthly Build System
 
-Every team eventually ends up with a build script that works in CI but not locally---or vice versa. The culprit is almost always environmental drift: different Go versions, different lint tool versions, missing environment variables, undocumented system dependencies. Earthly solves this problem by running every build step inside a container. If it builds on your laptop, it builds in CI — and the outputs are bit-for-bit identical.
+Every team eventually ends up with a build script that works in CI but not locally—or vice versa. The culprit is almost always environmental drift: different Go versions, different lint tool versions, missing environment variables, undocumented system dependencies. Earthly solves this problem by running every build step inside a container. If it builds on your laptop, it builds in CI—and the outputs are bit-for-bit identical.
 
 This section covers Earthly in depth, because it is the primary build and CI tool for this project. By the end you will understand how to read and write Earthfiles, how the caching model works, and how the root Earthfile orchestrates builds across all five services.
 
@@ -57,7 +57,7 @@ earthly ./services/catalog+lint
 earthly ./services/gateway+test
 ```
 
-In GitHub Actions, the CI job installs Earthly and then runs `earthly +ci` — the same command you run locally. There is no CI-specific build script to maintain. The category of "it worked locally but failed in CI" failures from environment drift disappears.
+In GitHub Actions, the CI job installs Earthly and then runs `earthly +ci`—the same command you run locally. There is no CI-specific build script to maintain. The category of "it worked locally but failed in CI" failures from environment drift disappears.
 
 If a lint failure appears in CI, you run `earthly ./services/catalog+lint` locally and see the exact same output. If a test fails in CI, you run `earthly ./services/catalog+test` and reproduce it immediately.
 
@@ -118,7 +118,7 @@ docker:
     SAVE IMAGE catalog:latest
 ```
 
-### `deps` — Dependency Layer
+### `deps`—Dependency Layer
 
 ```earthfile
 deps:
@@ -133,13 +133,13 @@ deps:
     SAVE ARTIFACT go.sum AS LOCAL go.sum
 ```
 
-This target copies only the `go.mod` and `go.sum` files — nothing else — and then runs `go mod download`. The reason for this separation is layer caching.
+This target copies only the `go.mod` and `go.sum` files—nothing else—and then runs `go mod download`. The reason for this separation is layer caching.
 
-Docker (and Earthly) cache build layers. If the inputs to a step have not changed since the last run, the cached layer is reused. By copying only the module files first and running `go mod download` before copying any application source, you ensure that dependency downloads only happen when dependencies actually change — not every time you edit a `.go` file.
+Docker (and Earthly) cache build layers. If the inputs to a step have not changed since the last run, the cached layer is reused. By copying only the module files first and running `go mod download` before copying any application source, you ensure that dependency downloads only happen when dependencies actually change—not every time you edit a `.go` file.
 
 If you have ever written a Java Dockerfile, you have done the same thing: copy `pom.xml` or `build.gradle` first, run the dependency download step, then copy the source.
 
-The `COPY ../../+gen-mod/gen ../gen` syntax is a cross-Earthfile artifact reference. Instead of directly copying `../../gen/go.mod` — which would fail because Earthly scopes each service's build context to its own directory — the service Earthfile references an artifact target defined in the root Earthfile. The root `+gen-mod` target copies `gen/go.mod` and `gen/go.sum` into a `scratch` container and saves them as a named artifact. The service then pulls that artifact into its own container. This indirection is necessary in monorepos where local modules live outside the service's build context.
+The `COPY ../../+gen-mod/gen ../gen` syntax is a cross-Earthfile artifact reference. Instead of directly copying `../../gen/go.mod`—which would fail because Earthly scopes each service's build context to its own directory—the service Earthfile references an artifact target defined in the root Earthfile. The root `+gen-mod` target copies `gen/go.mod` and `gen/go.sum` into a `scratch` container and saves them as a named artifact. The service then pulls that artifact into its own container. This indirection is necessary in monorepos where local modules live outside the service's build context.
 
 The `go mod download` command is chained with subshell calls for each local module: `(cd ../gen && go mod download)`. Each local module has its own `go.mod` with its own dependencies, and Go does not download them transitively. Without these subshells, the build would fail later when the compiler tries to resolve imports from the local modules.
 
@@ -147,7 +147,7 @@ The project uses Go workspaces for local development, but `GOWORK=off` disables 
 
 `SAVE ARTIFACT go.mod AS LOCAL go.mod` writes the resolved `go.mod` back to your working directory. This is how `go mod tidy` updates (run inside the container) flow back out to your checkout.
 
-### `src` — Source Layer
+### `src`—Source Layer
 
 ```earthfile
 src:
@@ -158,7 +158,7 @@ src:
     COPY ../../+pkg-otel-src/pkg-otel ../pkg/otel
 ```
 
-`FROM +deps` starts this target from the state of the `deps` target — the base image with all Go modules already downloaded. Now we copy the actual source code.
+`FROM +deps` starts this target from the state of the `deps` target—the base image with all Go modules already downloaded. Now we copy the actual source code.
 
 The source copy uses the `+gen-src`, `+pkg-auth-src`, and `+pkg-otel-src` artifact targets from the root Earthfile, following the same cross-Earthfile pattern as `deps`. The `-src` variants copy the full source trees (not just `go.mod` files).
 
@@ -168,7 +168,7 @@ Notice that `src` produces no `SAVE ARTIFACT`; it is an intermediate target. Its
 
 In Gradle terms, this is like a `compileClasspath` configuration that `test` and `assemble` both inherit from.
 
-### `lint` — Static Analysis
+### `lint`—Static Analysis
 
 ```earthfile
 lint:
@@ -179,15 +179,15 @@ lint:
     RUN golangci-lint run ./...
 ```
 
-The linter is installed inside the container at a pinned version. This means every developer and every CI run uses exactly the same linter version — no drift, no "works on my machine" lint failures.
+The linter is installed inside the container at a pinned version. This means every developer and every CI run uses exactly the same linter version—no drift, no "works on my machine" lint failures.
 
 The `.golangci.yml` configuration is copied from the root Earthfile's `+golangci-config` artifact target. It lives at the repository root (not inside the service directory) so all services share the same lint rules. If you added a new rule to `.golangci.yml`, all five services would pick it up the next time `+lint` ran.
 
 The `RUN go build ./...` step before `golangci-lint run` is deliberate. Some linters (notably those based on `go/analysis`) need compiled export data for dependencies to perform type-aware checks. When the replaced local modules (`gen`, `pkg/auth`, `pkg/otel`) have not been built, golangci-lint may report "could not load export data" errors. Running `go build` first populates the build cache with the necessary export data.
 
-Note that `.golangci.yml` is copied after `+src`. This means a change to lint configuration invalidates the lint layer but not the source layer — the compiled package cache is still reused.
+Note that `.golangci.yml` is copied after `+src`. This means a change to lint configuration invalidates the lint layer but not the source layer—the compiled package cache is still reused.
 
-### `test` — Unit Tests
+### `test`—Unit Tests
 
 ```earthfile
 test:
@@ -197,9 +197,9 @@ test:
 
 Tests run against the same `+src` layer used by `lint` and `build`. The `-count=1` flag disables Go's test result cache, ensuring tests always run fresh. The `-v` flag produces verbose output, which is useful in CI logs.
 
-The test target deliberately scopes to `./internal/service/...` and `./internal/handler/...` rather than `./...`. This avoids running integration tests that require a live database or Kafka broker. Those belong in a separate target that accepts a running Docker network — a topic covered in a later section.
+The test target deliberately scopes to `./internal/service/...` and `./internal/handler/...` rather than `./...`. This avoids running integration tests that require a live database or Kafka broker. Those belong in a separate target that accepts a running Docker network—a topic covered in a later section.
 
-### `build` — Compile
+### `build`—Compile
 
 ```earthfile
 build:
@@ -212,7 +212,7 @@ build:
 
 `SAVE ARTIFACT /bin/catalog` makes the compiled binary available to other targets. Without this declaration, the binary exists only inside this container and disappears when the target finishes. With it, any target can reference it as `+build/catalog`.
 
-### `docker` — Container Image
+### `docker`—Container Image
 
 ```earthfile
 docker:
@@ -223,7 +223,7 @@ docker:
     SAVE IMAGE catalog:latest
 ```
 
-This target starts fresh from `alpine:3.19` — not from `+src`. The Go toolchain, module cache, and source code are not needed at runtime. The final image contains only the Alpine base and the compiled binary. This keeps the image small (typically under 20 MB for a static Go binary on Alpine) and reduces the attack surface.
+This target starts fresh from `alpine:3.19`—not from `+src`. The Go toolchain, module cache, and source code are not needed at runtime. The final image contains only the Alpine base and the compiled binary. This keeps the image small (typically under 20 MB for a static Go binary on Alpine) and reduces the attack surface.
 
 `COPY +build/catalog /usr/local/bin/catalog` pulls the artifact saved by the `build` target into this container. This is Earthly's artifact reference syntax: `+targetname/path`.
 
@@ -345,7 +345,7 @@ golangci-config:
     SAVE ARTIFACT /.golangci.yml
 ```
 
-Each shared module has two artifact targets: a `-mod` target (just `go.mod` and `go.sum`, for the `deps` layer) and a `-src` target (the full source tree, for the `src` layer). This split preserves the layer caching strategy — changes to source files do not invalidate the dependency download layer.
+Each shared module has two artifact targets: a `-mod` target (just `go.mod` and `go.sum`, for the `deps` layer) and a `-src` target (the full source tree, for the `src` layer). This split preserves the layer caching strategy—changes to source files do not invalidate the dependency download layer.
 
 The `golangci-config` target does the same for the shared lint configuration. All service `+lint` targets reference `../../+golangci-config/.golangci.yml` instead of copying the file directly.
 
@@ -390,7 +390,7 @@ docker:
     BUILD ./services/search+docker
 ```
 
-The `+ci` target runs lint and test across all five services. Earthly executes `BUILD` directives in parallel by default — all ten targets run concurrently, subject to resource limits. On a developer workstation with eight cores, the wall-clock time for `earthly +ci` is roughly the time for the slowest single service, not the sum of all services.
+The `+ci` target runs lint and test across all five services. Earthly executes `BUILD` directives in parallel by default—all ten targets run concurrently, subject to resource limits. On a developer workstation with eight cores, the wall-clock time for `earthly +ci` is roughly the time for the slowest single service, not the sum of all services.
 
 `+lint` and `+test` are convenience targets for running one phase across all services. You would use `earthly +lint` after editing `.golangci.yml` to confirm no regressions.
 
@@ -415,7 +415,7 @@ deps  (changes when go.mod changes)
               └── docker  (changes when binary changes)
 ```
 
-On a typical development iteration — editing a `.go` file and running `earthly +test` — the `deps` layer is served from cache; only `src` and `test` actually execute. Module downloads do not happen again.
+On a typical development iteration—editing a `.go` file and running `earthly +test`—the `deps` layer is served from cache; only `src` and `test` actually execute. Module downloads do not happen again.
 
 ### Remote Cache
 
@@ -452,7 +452,7 @@ This re-executes every layer from scratch. You rarely need it, but it is the esc
 
 2. **Benchmark the cache.** Run `earthly ./services/catalog+test` twice in a row. Note the wall-clock times. Then modify a single line in `internal/service/catalog.go` and run it again. Which layers were cached on the third run? Which were not?
 
-3. **Parallelize the root `+ci` target.** The current `+ci` target runs `BUILD` directives for lint and test sequentially within each service listing. Earthly actually runs independent `BUILD` directives in parallel automatically — confirm this by looking at the Earthly output and identifying which targets ran concurrently. How does this compare to `./gradlew check` on a multi-module Gradle project?
+3. **Parallelize the root `+ci` target.** The current `+ci` target runs `BUILD` directives for lint and test sequentially within each service listing. Earthly actually runs independent `BUILD` directives in parallel automatically—confirm this by looking at the Earthly output and identifying which targets ran concurrently. How does this compare to `./gradlew check` on a multi-module Gradle project?
 
 4. **Add a `migrate` target.** Add a target to the catalog Earthfile that runs the database migrations using `golang-migrate`. The target should accept the database DSN as an `ARG`. Think about what base image is appropriate for this target and whether it should run in CI or only during deployment.
 
@@ -460,6 +460,6 @@ This re-executes every layer from scratch. You rarely need it, but it is the esc
 
 ## References
 
-[^1]: [Earthly documentation — Earthfile reference](https://docs.earthly.dev/docs/earthfile)
-[^2]: [Earthly documentation — Remote caching](https://docs.earthly.dev/docs/caching/caching-via-registry)
-[^3]: [Earthly documentation — Earthly CI integration overview](https://docs.earthly.dev/ci-integration)
+[^1]: [Earthly documentation—Earthfile reference](https://docs.earthly.dev/docs/earthfile)
+[^2]: [Earthly documentation—Remote caching](https://docs.earthly.dev/docs/caching/caching-via-registry)
+[^3]: [Earthly documentation—Earthly CI integration overview](https://docs.earthly.dev/ci-integration)

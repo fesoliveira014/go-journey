@@ -218,15 +218,15 @@ if book.AvailableCopies <= 0 {
 // ...create reservation, then later somebody decrements availability...
 ```
 
-It is also **wrong** under concurrency — this is a textbook [time-of-check-to-time-of-use (TOCTOU)][toctou] bug: two requests for the last copy of a book call `GetBook` in parallel, both see `AvailableCopies == 1`, both pass the guard, both create reservations. The catalog ends up with `available_copies = -1` or, worse, two users hold the same physical copy.
+It is also **wrong** under concurrency—this is a textbook [time-of-check-to-time-of-use (TOCTOU)][toctou] bug: two requests for the last copy of a book call `GetBook` in parallel, both see `AvailableCopies == 1`, both pass the guard, both create reservations. The catalog ends up with `available_copies = -1` or, worse, two users hold the same physical copy.
 
 The fix flips the flow so that the **database** is the gate, not the service:
 
-1. `catalog.UpdateAvailability(book, -1)` runs a guarded `UPDATE` that refuses to go below zero (`WHERE available_copies + ? >= 0`). PostgreSQL's row-level locking during `UPDATE` serializes the two racing decrements — one wins, the other gets zero rows affected and returns `FailedPrecondition`.
+1. `catalog.UpdateAvailability(book, -1)` runs a guarded `UPDATE` that refuses to go below zero (`WHERE available_copies + ? >= 0`). PostgreSQL's row-level locking during `UPDATE` serializes the two racing decrements—one wins, the other gets zero rows affected and returns `FailedPrecondition`.
 2. Only after the decrement succeeds do we create the reservation row.
-3. If the reservation insert then fails (database down, constraint violation, context cancelled), we compensate with `UpdateAvailability(+1)` so catalog's counter does not drift. The compensation is best-effort — if it also fails, the counter will stay off by one until operator reconciliation or a separate job fixes it. The expiration reaper (see _Expiring reservations_) cannot heal this gap on its own: it only expires existing reservation rows, so an orphaned decrement with no paired row is never reconciled by the reaper.
+3. If the reservation insert then fails (database down, constraint violation, context cancelled), we compensate with `UpdateAvailability(+1)` so catalog's counter does not drift. The compensation is best-effort—if it also fails, the counter will stay off by one until operator reconciliation or a separate job fixes it. The expiration reaper (see _Expiring reservations_) cannot heal this gap on its own: it only expires existing reservation rows, so an orphaned decrement with no paired row is never reconciled by the reaper.
 
-This pattern is sometimes called "optimistic decrement with compensation" and is the pragmatic middle ground between a full two-phase commit (overkill here) and a distributed saga (useful when the workflow has more than two steps). The underlying principle — *let the database be the arbiter, not the application* — applies to any scarce-resource allocation: seat booking, inventory reservation, rate-limit token issuance.
+This pattern is sometimes called "optimistic decrement with compensation" and is the pragmatic middle ground between a full two-phase commit (overkill here) and a distributed saga (useful when the workflow has more than two steps). The underlying principle—*let the database be the arbiter, not the application*—applies to any scarce-resource allocation: seat booking, inventory reservation, rate-limit token issuance.
 
 [toctou]: https://en.wikipedia.org/wiki/Time-of-check_to_time-of-use
 
@@ -296,7 +296,7 @@ func (s *ReservationService) expireIfDue(ctx context.Context, r *model.Reservati
 
 This is **lazy evaluation**. It keeps what the user sees consistent with what the clock says: users never see their own overdue reservations still listed as active, because the act of reading fixes the row on the way out.
 
-**Path 2: the reaper.** The problem with _only_ doing expire-on-read is that if nobody reads a reservation — the user stopped logging in, the account was deleted, the request never happens — the row stays `active` forever. Worse, the catalog's `available_copies` never gets incremented back, so the book is permanently marked as held. To close this gap the Reservation Service runs a background goroutine that periodically finds and expires overdue rows:
+**Path 2: the reaper.** The problem with _only_ doing expire-on-read is that if nobody reads a reservation—the user stopped logging in, the account was deleted, the request never happens—the row stays `active` forever. Worse, the catalog's `available_copies` never gets incremented back, so the book is permanently marked as held. To close this gap the Reservation Service runs a background goroutine that periodically finds and expires overdue rows:
 
 ```go
 func (s *ReservationService) RunExpirationReaper(ctx context.Context, interval time.Duration) {
@@ -332,7 +332,7 @@ The reaper is wired into `cmd/main.go` as a goroutine that shares the service's 
 go reservationSvc.RunExpirationReaper(ctx, reaperInterval)
 ```
 
-`REAPER_INTERVAL` defaults to 5 minutes. That is a deliberate trade-off: the window during which a book can be stale on the catalog is roughly (`DueAt` to `DueAt + 5 minutes`), which is plenty for a library but would not suffice for, say, seat inventory on a flight. Tune it via the environment variable if you need tighter bounds — the cost is one full-table scan for active rows per tick.
+`REAPER_INTERVAL` defaults to 5 minutes. That is a deliberate trade-off: the window during which a book can be stale on the catalog is roughly (`DueAt` to `DueAt + 5 minutes`), which is plenty for a library but would not suffice for, say, seat inventory on a flight. Tune it via the environment variable if you need tighter bounds—the cost is one full-table scan for active rows per tick.
 
 **Why both, not just the reaper?** The reaper fires on a timer, so between ticks a user could reload their reservations page and briefly see an overdue row still listed as active. That is a small but visible inconsistency that expire-on-read eliminates without needing a ≤ 1-second timer. The two mechanisms are complementary: read-triggered for user-facing freshness, time-triggered for catalog reconciliation and unread rows.
 
@@ -477,7 +477,7 @@ This consistency is the payoff of a well-chosen architecture. Once you understan
 
 4. **Alternatives to decrement-then-reserve.** The main text explains why we decrement availability first and compensate on failure. What other approaches could close the same TOCTOU gap? Sketch the pros and cons of (a) a full two-phase commit across catalog and reservation, (b) a Saga pattern with explicit compensating transactions, (c) optimistic concurrency with a version column on `books`, and (d) a single cross-service transactional outbox. For each, identify a scenario where it would outperform the current design.
 
-5. **Reaper durability.** The reaper in `RunExpirationReaper` runs in-process: if the only reservation replica crashes between ticks, overdue rows linger until it restarts. Sketch two ways to make expiration durable against crashes — (a) moving the reaper into a dedicated cron pod / Kubernetes `CronJob`, and (b) pushing expiration into PostgreSQL itself via a scheduled `UPDATE` in `pg_cron`. What are the operational trade-offs? Consider visibility, retries, and who owns the compensation logic when the expire event fails to publish.
+5. **Reaper durability.** The reaper in `RunExpirationReaper` runs in-process: if the only reservation replica crashes between ticks, overdue rows linger until it restarts. Sketch two ways to make expiration durable against crashes—(a) moving the reaper into a dedicated cron pod / Kubernetes `CronJob`, and (b) pushing expiration into PostgreSQL itself via a scheduled `UPDATE` in `pg_cron`. What are the operational trade-offs? Consider visibility, retries, and who owns the compensation logic when the expire event fails to publish.
 
 ---
 

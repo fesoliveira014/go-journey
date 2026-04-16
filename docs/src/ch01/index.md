@@ -14,9 +14,9 @@ By the end of this chapter, you will have:
 
 Before starting, install:
 
-- **Go 1.22+** — [go.dev/dl](https://go.dev/dl/)
-- **Earthly** — [earthly.dev/get-earthly](https://earthly.dev/get-earthly)
-- **Git** — [git-scm.com](https://git-scm.com/)
+- **Go 1.22+**—[go.dev/dl](https://go.dev/dl/)
+- **Earthly**—[earthly.dev/get-earthly](https://earthly.dev/get-earthly)
+- **Git**—[git-scm.com](https://git-scm.com/)
 - A code editor—VS Code with the official Go extension is recommended.
 
 Verify your installations:
@@ -29,7 +29,7 @@ git --version
 
 ## Sections
 
-1. [Project Setup](./project-setup.md) — monorepo structure, Go modules, and workspaces
-2. [Go Language Essentials](./go-basics.md) — types, structs, interfaces, error handling, slices, maps
-3. [Building an HTTP Server](./http-server.md) — net/http, handlers, JSON responses, routing
-4. [Testing in Go](./testing.md) — table-driven tests, httptest, test coverage, running with Earthly
+1. [Project Setup](./project-setup.md)—monorepo structure, Go modules, and workspaces
+2. [Go Language Essentials](./go-basics.md)—types, structs, interfaces, error handling, slices, maps
+3. [Building an HTTP Server](./http-server.md)—net/http, handlers, JSON responses, routing
+4. [Testing in Go](./testing.md)—table-driven tests, httptest, test coverage, running with Earthly
