@@ -343,7 +343,28 @@ spec:
         property: key
 ```
 
-Note that the Meilisearch ExternalSecret targets the `data` namespace — not `library` — because the Meilisearch StatefulSet runs in the `data` namespace. This also requires a SecretStore in the `data` namespace; create an identical SecretStore in the `data` namespace, changing only the `metadata.namespace` field.
+Note that the Meilisearch ExternalSecret targets the `data` namespace — not `library` — because the Meilisearch StatefulSet runs in the `data` namespace. This also requires a SecretStore in the `data` namespace. The YAML is identical to the `library`-namespace SecretStore, with only the namespace changed:
+
+```yaml
+# deploy/k8s/overlays/production/secret-store-data.yaml
+apiVersion: external-secrets.io/v1beta1
+kind: SecretStore
+metadata:
+  name: aws-secrets-manager
+  namespace: data
+spec:
+  provider:
+    aws:
+      service: SecretsManager
+      region: us-east-1
+      auth:
+        jwt:
+          serviceAccountRef:
+            name: external-secrets
+            namespace: external-secrets
+```
+
+Add this file to the `resources` list in the production overlay's `kustomization.yaml`.
 
 Each `ExternalSecret` maps a single field from a Secrets Manager secret to a single key in a Kubernetes Secret. The `target.name` matches exactly the name used in the StatefulSet or Deployment's `secretKeyRef.name` — `postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `jwt-secret`, and `meilisearch-secret`. No application manifest changes are required.
 

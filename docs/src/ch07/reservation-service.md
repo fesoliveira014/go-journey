@@ -127,18 +127,21 @@ The service layer is where the domain logic lives. Its dependencies:
 type ReservationService struct {
     repo      ReservationRepository
     catalog   catalogv1.CatalogServiceClient
+    auth      authv1.AuthServiceClient
     publisher EventPublisher
     maxActive int
 }
 ```
 
-Three things to call out:
+Four things to call out:
 
 1. **`repo` is an interface**, not a concrete type. The service defines the interface it needs (`ReservationRepository`), and the repository satisfies it. This is Go's implicit interface satisfaction—the repository never declares `implements ReservationRepository`. If it has the right methods, it fits.
 
 2. **`catalog` is a gRPC client.** The Reservation Service calls the Catalog Service synchronously to check book availability before creating a reservation. This is a cross-service read—the Reservation Service does not own the book data, so it asks the service that does.
 
-3. **`publisher` is an interface.** The `EventPublisher` interface has one method: `Publish(ctx, event) error`. The Kafka publisher implements it, but in tests you can substitute a mock. This is the same dependency inversion pattern used throughout the codebase.
+3. **`auth` is a gRPC client.** Added in Chapter 6 for the admin dashboard, the Auth Service client lets the reservation service look up user details when an admin lists or manages reservations.
+
+4. **`publisher` is an interface.** The `EventPublisher` interface has one method: `Publish(ctx, event) error`. The Kafka publisher implements it, but in tests you can substitute a mock. This is the same dependency inversion pattern used throughout the codebase.
 
 ### Creating a Reservation
 
@@ -427,11 +430,11 @@ The `main` function in `main.go` follows the same pattern as every other service
 // services/reservation/cmd/main.go
 
 repo := repository.NewReservationRepository(db)
-reservationSvc := service.NewReservationService(repo, catalogClient, publisher, maxActive)
+reservationSvc := service.NewReservationService(repo, catalogClient, authClient, publisher, maxActive)
 reservationHandler := handler.NewReservationHandler(reservationSvc)
 ```
 
-Three lines to wire the domain stack: create the repository, create the service (injecting the repo, catalog client, event publisher, and config), create the handler (injecting the service). Every dependency is explicit. Compare this to Spring Boot, where the equivalent would be three `@Component` classes with `@Autowired` constructors, and the wiring would happen invisibly through component scanning.
+Three lines to wire the domain stack: create the repository, create the service (injecting the repo, catalog client, auth client, event publisher, and config), create the handler (injecting the service). Every dependency is explicit. Compare this to Spring Boot, where the equivalent would be three `@Component` classes with `@Autowired` constructors, and the wiring would happen invisibly through component scanning.
 
 The service also creates a gRPC connection to the Catalog Service, since it needs to reserve copies through the catalog:
 

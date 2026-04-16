@@ -177,7 +177,7 @@ func (p *Publisher) Publish(ctx context.Context, event service.ReservationEvent)
 
 In production systems with high throughput or strict schema evolution requirements, you would use **Avro** or **Protobuf** with a Schema Registry. The Schema Registry enforces backward/forward compatibility rules, preventing a producer from publishing events that consumers cannot deserialize. For a learning project, JSON is fine—just know that it offers no schema enforcement and no built-in evolution guarantees.
 
-Section 7.3 covers the consumer side—how the Reservation Service reads and routes these events.
+Section 7.3 covers the consumer side—how the Search Service reads and indexes these events.
 
 ---
 

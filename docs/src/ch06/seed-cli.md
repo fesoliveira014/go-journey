@@ -166,7 +166,7 @@ if kafkaBrokers != "" {
 This means:
 
 - **Without Kafka:** Books are created in the catalog database. No events are published. The Search Service will not be updated (it relies on Kafka events to index books). This is fine for basic development and testing.
-- **With Kafka:** Books are created and `book.created` events are published to the `catalog.books.changed` topic. The Search Service picks them up and indexes the books. This is the full production flow, covered in Chapter 7.
+- **With Kafka:** Books are created and `book.created` events are published to the `catalog.books.changed` topic. The Search Service picks them up and indexes the books. This is the full production flow, covered in Chapter 8.
 
 The seed CLI works identically in both cases — it has no knowledge of whether Kafka is running.
 

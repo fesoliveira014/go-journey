@@ -70,7 +70,7 @@ Connect your local `kubectl` to the new EKS cluster:
 ```bash
 aws eks update-kubeconfig \
   --region us-east-1 \
-  --name library-production
+  --name library-system
 ```
 
 This writes a new context to `~/.kube/config` and sets it as the active context. Verify the connection:
@@ -316,11 +316,11 @@ The result should contain the book you just created. If the catalog write succee
 | Symptom | Likely Cause | Fix |
 |---------|--------------|-----|
 | `ImagePullBackOff` | ECR permissions or wrong image URI | Verify the node IAM role has `AmazonEC2ContainerRegistryReadOnly`. Check `kubectl describe pod <pod>` for the exact URI Kubernetes tried to pull. Compare with `aws ecr describe-repositories`. |
-| `CrashLoopBackOff` | RDS or MSK unreachable at startup | Check security group rules: the EKS node security group must be allowed inbound on port 5432 (RDS) and 9094 (MSK TLS). Run `kubectl logs <pod> -n library --previous` for the actual error. |
+| `CrashLoopBackOff` | RDS or MSK unreachable at startup | Check security group rules: the EKS node security group must be allowed inbound on port 5432 (RDS) and 9092 (MSK plaintext). Run `kubectl logs <pod> -n library --previous` for the actual error. |
 | Ingress no ADDRESS | ALB controller not running or subnet tags missing | Check `kubectl get pods -n kube-system | grep aws-load-balancer`. Public subnets need `kubernetes.io/role/elb: 1` tag; private subnets need `kubernetes.io/role/internal-elb: 1`. |
 | Pods `Pending` | Node capacity exhausted | Check `kubectl describe pod <pod>` for `Insufficient cpu` or `Insufficient memory`. Review the node group scaling limits in `terraform/eks.tf` and increase `max_size`. |
 | RDS connection refused | RDS security group misconfigured | Verify the RDS security group has an inbound rule allowing the EKS node security group on port 5432. Check with `aws ec2 describe-security-groups --group-ids <rds-sg-id>`. |
-| MSK timeout on startup | Wrong bootstrap string in ConfigMap | Run `terraform output msk_bootstrap_brokers_tls` and compare with the value in `kubectl get configmap library-config -n library -o yaml`. Update and re-apply if they differ. |
+| MSK timeout on startup | Wrong bootstrap string in ConfigMap | Run `terraform output msk_bootstrap_brokers` and compare with the value in `kubectl get configmap library-config -n library -o yaml`. Update and re-apply if they differ. |
 
 For deeper inspection use the standard describe commands:
 
@@ -372,9 +372,9 @@ Destroy complete! Resources: 47 destroyed.
 # Confirm no EKS clusters remain
 aws eks list-clusters
 
-# Confirm no RDS clusters remain
-aws rds describe-db-clusters \
-  --query 'DBClusters[*].DBClusterIdentifier'
+# Confirm no RDS instances remain
+aws rds describe-db-instances \
+  --query 'DBInstances[*].DBInstanceIdentifier'
 
 # Confirm no MSK clusters remain
 aws kafka list-clusters \
@@ -390,7 +390,7 @@ EBS volumes provisioned by the EKS storage driver (for PersistentVolumeClaims) a
 ```bash
 aws ec2 describe-volumes \
   --filters "Name=status,Values=available" \
-            "Name=tag-key,Values=kubernetes.io/cluster/library-production" \
+            "Name=tag-key,Values=kubernetes.io/cluster/library-system" \
   --query 'Volumes[*].{ID:VolumeId,Size:Size,AZ:AvailabilityZone}' \
   --output table
 ```
@@ -412,7 +412,7 @@ If you are following along without running the infrastructure, here is a summary
 | Step | Expected terminal output |
 |------|--------------------------|
 | `terraform apply` complete | `Apply complete! Resources: 47 added, 0 changed, 0 destroyed.` |
-| `aws eks update-kubeconfig` | `Updated context arn:aws:eks:us-east-1:...:cluster/library-production in ~/.kube/config` |
+| `aws eks update-kubeconfig` | `Updated context arn:aws:eks:us-east-1:...:cluster/library-system in ~/.kube/config` |
 | `kubectl get pods -A` | All `library` pods `Running 1/1`, restarts 0 |
 | `kubectl get ingress -n library` | ADDRESS column populated with an ELB hostname |
 | `curl .../healthz` | `{"status":"ok"}` with HTTP 200 |

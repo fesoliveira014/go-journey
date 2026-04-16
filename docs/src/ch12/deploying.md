@@ -37,7 +37,7 @@ Each `kind load` command copies the image tarball from the host Docker daemon in
 **Confirm the images are visible inside the node:**
 
 ```bash
-docker exec library-control-plane crictl images | grep library-system
+docker exec library-control-plane crictl images | grep library/
 ```
 
 `crictl` is the `containerd` CLI bundled inside kind nodes. You should see all five images listed. If one is missing, re-run the corresponding `kind load` command before proceeding. Attempting to deploy with a missing image results in `ImagePullBackOff`, because Kubernetes will attempt a registry pull that will fail.

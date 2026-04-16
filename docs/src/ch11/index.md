@@ -57,7 +57,7 @@ The testing pyramid[^1] describes a recommended distribution of tests across thr
 
 **End-to-end (E2E) tests** sit at the top. In a microservices system, a full end-to-end test might start all five services and exercise a user-facing scenario through the gateway's HTTP API. They give the highest confidence but cost the most: tens of seconds to start containers, complex setup and teardown, and fragile dependencies on network timing. You keep them few and focused on critical user paths.
 
-If you are coming from a Java/Spring background, think of unit tests as JUnit tests with Mockito, integration tests as `@SpringBootTest` with an in-memory or Testcontainers-backed data source, and e2e tests as RestAssured or Playwright suites that drive a fully deployed application. The taxonomy is identical; Go's tooling just looks different.
+If you are coming from a Java/Spring background, think of unit tests as JUnit tests with Mockito, integration tests as `@SpringBootTest` with an in-memory or Testcontainers-backed data source, and e2e tests as REST Assured or Playwright suites that drive a fully deployed application. The taxonomy is identical; Go's tooling just looks different.
 
 ---
 

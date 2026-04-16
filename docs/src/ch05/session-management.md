@@ -253,7 +253,7 @@ The key must be at least 32 random bytes, read from the `FLASH_COOKIE_KEY` envir
 openssl rand -hex 32
 ```
 
-The codec is wired into the `Server` via a functional option so tests can spin up a server with a random per-process key without touching more than thirty constructor call sites:
+The codec is wired into the `Server` via a functional option so tests can spin up a server with a random per-process key without modifying the existing constructor call in `main.go`:
 
 ```go
 srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl,

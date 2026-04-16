@@ -28,7 +28,8 @@ reservationConn, err := grpc.NewClient(reservationAddr,
 // ...
 reservationClient := reservationv1.NewReservationServiceClient(reservationConn)
 
-srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl)
+srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl,
+    handler.WithFlashKey(flashKey))
 ```
 
 The `Server` struct now holds four gRPC clients:
@@ -83,7 +84,7 @@ func (s *Server) ReserveBook(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    setFlash(w, "Book reserved successfully")
+    s.setFlash(w, "Book reserved successfully")
     http.Redirect(w, r, "/reservations", http.StatusSeeOther)
 }
 ```
@@ -99,10 +100,15 @@ The pattern is: authenticate, extract path parameters, call gRPC, handle errors,
 `setFlash` stores a success message in a short-lived cookie:
 
 ```go
-func setFlash(w http.ResponseWriter, message string) {
+func (s *Server) setFlash(w http.ResponseWriter, message string) {
+    encoded, err := s.flash.Encode("flash", message)
+    if err != nil {
+        slog.Error("failed to encode flash cookie", "error", err)
+        return
+    }
     http.SetCookie(w, &http.Cookie{
         Name:     "flash",
-        Value:    message,
+        Value:    encoded,
         Path:     "/",
         MaxAge:   10,
         HttpOnly: true,
@@ -110,7 +116,7 @@ func setFlash(w http.ResponseWriter, message string) {
 }
 ```
 
-The `MaxAge: 10` (seconds) means the cookie expires after 10 seconds—long enough for the redirect to complete and the next page to read it, short enough that it does not linger. The `consumeFlash` function reads the cookie and immediately deletes it (by setting `MaxAge: -1`), ensuring each flash message is shown exactly once.
+This is the same HMAC-signed flash cookie pattern introduced in Section 5.3. The `s.flash` field is a `*securecookie.SecureCookie` instance wired through the `WithFlashKey` functional option. The server encodes the message with an HMAC signature before writing it to the cookie; `consumeFlash` verifies the signature and immediately deletes the cookie (by setting `MaxAge: -1`), ensuring each flash message is shown exactly once and cannot be tampered with by the client.
 
 This is a standard server-rendered application pattern. In Spring MVC, the equivalent is `RedirectAttributes.addFlashAttribute()`, which uses the session instead of a cookie.
 
@@ -215,7 +221,7 @@ func (s *Server) ReturnBook(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    setFlash(w, "Book returned successfully")
+    s.setFlash(w, "Book returned successfully")
     http.Redirect(w, r, "/reservations", http.StatusSeeOther)
 }
 ```

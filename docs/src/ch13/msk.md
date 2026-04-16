@@ -185,7 +185,7 @@ In Chapter 12, every service that produces or consumes Kafka events read its bro
 KAFKA_BROKERS: kafka-0.kafka.messaging.svc.cluster.local:9092
 ```
 
-The production overlay must patch this value. The Kustomize production overlay you built in Section 12.4 is the right place. Add a strategic merge patch for each service that uses Kafka:
+The production overlay must patch this value. The Kustomize production overlay you built in Section 12.5 is the right place. Add a strategic merge patch for each service that uses Kafka:
 
 ```yaml
 # deploy/k8s/overlays/production/catalog-configmap-patch.yaml

@@ -95,7 +95,7 @@ Walk through each resource:
 
 ## Updating the ALB Annotations
 
-The production Kustomize overlay contains an Ingress patch for the ALB. Section 14.1 added the Route 53 alias annotation. Now add three more annotations to the same patch:
+The production Kustomize overlay contains an Ingress patch for the ALB. Section 13.7 defined the base ALB annotations, and Section 14.1 added the Route 53 DNS record that points to it. Now add three more annotations to the same Ingress patch:
 
 ```yaml
 # Ingress patch in deploy/k8s/overlays/production/kustomization.yaml

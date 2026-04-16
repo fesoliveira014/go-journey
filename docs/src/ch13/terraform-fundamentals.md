@@ -173,7 +173,7 @@ The backend configuration goes in a `backend.tf` file. The resources it referenc
 # }
 ```
 
-While working through this chapter, leave the backend block commented out. The local state file is sufficient, and it avoids the prerequisite of creating AWS resources just to store Terraform's bookkeeping. Section 13.7 revisits remote state when discussing production hardening.
+While working through this chapter, leave the backend block commented out. The local state file is sufficient, and it avoids the prerequisite of creating AWS resources just to store Terraform's bookkeeping. When you are ready for production, uncomment the block and run `terraform init -migrate-state` to move the local state file into S3.
 
 ---
 

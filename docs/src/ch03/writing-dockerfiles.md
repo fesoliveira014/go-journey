@@ -325,7 +325,7 @@ This demonstrates why multi-container orchestration (Docker Compose) is necessar
 - The build context must be the repository root in a monorepo so that all required directories (`gen/`, `services/catalog/`) are accessible.
 - `.dockerignore` excludes large and sensitive files from the build context.
 - The Gateway Dockerfile follows the same pattern with additional runtime-stage copies for templates and static assets.
-- Multi-stage builds produce final images under 25MB for Go services.
+- Multi-stage builds produce final images under 25 MB for Go services.
 
 ---
 

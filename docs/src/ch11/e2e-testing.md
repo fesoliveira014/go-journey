@@ -42,7 +42,7 @@ Test client (bufconn)
 
 Compare this to the bufconn test from section 11.3. That test also ran through the interceptor and gRPC server. The difference is in the repository layer. section 11.3's bufconn test could use either a real or a mocked repository—the test goal was to verify the gRPC wiring, so a mock was sufficient. Here the repository is always real. The test goal is to verify that the full vertical slice works end-to-end within a single service.
 
-This is the Go equivalent of a Spring Boot `@SpringBootTest` with `DEFINED_PORT` and a Testcontainers datasource — the full application context, real database, real request/response cycle.
+This is the Go equivalent of a Spring Boot `@SpringBootTest` with `DEFINED_PORT` and a Testcontainers data source — the full application context, real database, real request/response cycle.
 
 Critically, this is **not** a multi-service test. The Reservation Service does not know about the Catalog Service's database, and the Catalog Service does not call the Reservation Service. Each service is tested in its own test binary, in its own directory, with its own containers. Cross-service flows — a reservation triggering a catalog stock update — are discussed at the end of this section under "what we are not testing."
 
@@ -196,7 +196,7 @@ The return value is a `[]string` of broker addresses — the same type that `sar
 The server setup function wires the real dependency graph and starts a bufconn gRPC server, identical to the approach in section 11.3 except it uses a real repository and a real publisher rather than mocks.
 
 ```go
-func startCatalogServer(t *testing.T, svc catalogpb.CatalogServiceServer, jwtSecret string) catalogpb.CatalogServiceClient {
+func startCatalogServer(t *testing.T, svc catalogv1.CatalogServiceServer, jwtSecret string) catalogv1.CatalogServiceClient {
     t.Helper()
 
     lis := bufconn.Listen(1024 * 1024)
@@ -206,7 +206,7 @@ func startCatalogServer(t *testing.T, svc catalogpb.CatalogServiceServer, jwtSec
     srv := grpc.NewServer(
         grpc.UnaryInterceptor(authInterceptor.Unary()),
     )
-    catalogpb.RegisterCatalogServiceServer(srv, svc)
+    catalogv1.RegisterCatalogServiceServer(srv, svc)
 
     go func() {
         if err := srv.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
@@ -227,7 +227,7 @@ func startCatalogServer(t *testing.T, svc catalogpb.CatalogServiceServer, jwtSec
     }
     t.Cleanup(func() { _ = conn.Close() })
 
-    return catalogpb.NewCatalogServiceClient(conn)
+    return catalogv1.NewCatalogServiceClient(conn)
 }
 ```
 
@@ -254,7 +254,7 @@ import (
 
     pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
     kafkapkg "github.com/fesoliveira014/library-system/pkg/kafka"
-    catalogpb "github.com/fesoliveira014/library-system/proto/gen/catalog/v1"
+    catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
     "github.com/fesoliveira014/library-system/services/catalog/internal/repository"
     "github.com/fesoliveira014/library-system/services/catalog/internal/service"
 )
@@ -283,7 +283,7 @@ func TestCatalog_E2E(t *testing.T) {
         metadata.Pairs("authorization", "Bearer "+token))
 
     // --- Step 1: Create a book ---
-    createResp, err := client.CreateBook(ctx, &catalogpb.CreateBookRequest{
+    createResp, err := client.CreateBook(ctx, &catalogv1.CreateBookRequest{
         Title:  "The Go Programming Language",
         Author: "Donovan & Kernighan",
         Isbn:   "978-0134190440",
@@ -297,7 +297,7 @@ func TestCatalog_E2E(t *testing.T) {
     bookID := createResp.Book.Id
 
     // --- Step 2: Get the book back ---
-    getResp, err := client.GetBook(ctx, &catalogpb.GetBookRequest{Id: bookID})
+    getResp, err := client.GetBook(ctx, &catalogv1.GetBookRequest{Id: bookID})
     if err != nil {
         t.Fatalf("GetBook failed: %v", err)
     }
@@ -309,7 +309,7 @@ func TestCatalog_E2E(t *testing.T) {
     }
 
     // --- Step 3: List books — should contain our new entry ---
-    listResp, err := client.ListBooks(ctx, &catalogpb.ListBooksRequest{PageSize: 10})
+    listResp, err := client.ListBooks(ctx, &catalogv1.ListBooksRequest{PageSize: 10})
     if err != nil {
         t.Fatalf("ListBooks failed: %v", err)
     }
@@ -328,7 +328,7 @@ func TestCatalog_E2E(t *testing.T) {
     }
 
     // --- Step 4: Update the book ---
-    _, err = client.UpdateBook(ctx, &catalogpb.UpdateBookRequest{
+    _, err = client.UpdateBook(ctx, &catalogv1.UpdateBookRequest{
         Id:     bookID,
         Title:  "The Go Programming Language (2nd Ed.)",
         Author: "Donovan & Kernighan",
@@ -339,7 +339,7 @@ func TestCatalog_E2E(t *testing.T) {
     }
 
     // Verify the update persisted.
-    updatedResp, err := client.GetBook(ctx, &catalogpb.GetBookRequest{Id: bookID})
+    updatedResp, err := client.GetBook(ctx, &catalogv1.GetBookRequest{Id: bookID})
     if err != nil {
         t.Fatalf("GetBook after update failed: %v", err)
     }
@@ -348,13 +348,13 @@ func TestCatalog_E2E(t *testing.T) {
     }
 
     // --- Step 5: Delete the book ---
-    _, err = client.DeleteBook(ctx, &catalogpb.DeleteBookRequest{Id: bookID})
+    _, err = client.DeleteBook(ctx, &catalogv1.DeleteBookRequest{Id: bookID})
     if err != nil {
         t.Fatalf("DeleteBook failed: %v", err)
     }
 
     // --- Step 6: Get after delete should return NotFound ---
-    _, err = client.GetBook(ctx, &catalogpb.GetBookRequest{Id: bookID})
+    _, err = client.GetBook(ctx, &catalogv1.GetBookRequest{Id: bookID})
     if err == nil {
         t.Fatal("GetBook after delete: expected error, got nil")
     }
@@ -364,7 +364,7 @@ func TestCatalog_E2E(t *testing.T) {
 
     // --- Step 7: Unauthenticated request should be rejected ---
     unauthCtx := context.Background() // no metadata
-    _, err = client.ListBooks(unauthCtx, &catalogpb.ListBooksRequest{})
+    _, err = client.ListBooks(unauthCtx, &catalogv1.ListBooksRequest{})
     if err == nil {
         t.Fatal("ListBooks unauthenticated: expected error, got nil")
     }
@@ -410,21 +410,21 @@ import (
 
     pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
     kafkapkg "github.com/fesoliveira014/library-system/pkg/kafka"
-    catalogpb "github.com/fesoliveira014/library-system/proto/gen/catalog/v1"
-    reservationpb "github.com/fesoliveira014/library-system/proto/gen/reservation/v1"
+    catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
+    reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
     "github.com/fesoliveira014/library-system/services/reservation/internal/repository"
     "github.com/fesoliveira014/library-system/services/reservation/internal/service"
 )
 
-// mockCatalogClient satisfies the catalogpb.CatalogServiceClient interface
+// mockCatalogClient satisfies the catalogv1.CatalogServiceClient interface
 // by implementing only the methods the reservation service actually calls.
 // No embedding is needed — the compiler will catch any missing methods at
 // the call site where *mockCatalogClient is passed as CatalogServiceClient.
 type mockCatalogClient struct{}
 
-func (m *mockCatalogClient) GetBook(_ context.Context, req *catalogpb.GetBookRequest, _ ...grpc.CallOption) (*catalogpb.GetBookResponse, error) {
-    return &catalogpb.GetBookResponse{
-        Book: &catalogpb.Book{
+func (m *mockCatalogClient) GetBook(_ context.Context, req *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.GetBookResponse, error) {
+    return &catalogv1.GetBookResponse{
+        Book: &catalogv1.Book{
             Id:    req.Id,
             Title: "Test Book",
         },
@@ -457,7 +457,7 @@ func TestReservation_E2E(t *testing.T) {
     bookID := uuid.New().String()
 
     // --- Step 1: Create a reservation ---
-    createResp, err := client.CreateReservation(ctx, &reservationpb.CreateReservationRequest{
+    createResp, err := client.CreateReservation(ctx, &reservationv1.CreateReservationRequest{
         BookId: bookID,
     })
     if err != nil {
@@ -467,7 +467,7 @@ func TestReservation_E2E(t *testing.T) {
         t.Fatal("CreateReservation: expected non-empty reservation ID")
     }
     reservationID := createResp.Reservation.Id
-    if createResp.Reservation.Status != reservationpb.ReservationStatus_ACTIVE {
+    if createResp.Reservation.Status != reservationv1.ReservationStatus_ACTIVE {
         t.Errorf("CreateReservation: expected status ACTIVE, got %v", createResp.Reservation.Status)
     }
 
@@ -495,7 +495,7 @@ func TestReservation_E2E(t *testing.T) {
     }
 
     // --- Step 4: Return the book ---
-    _, err = client.ReturnReservation(ctx, &reservationpb.ReturnReservationRequest{
+    _, err = client.ReturnReservation(ctx, &reservationv1.ReturnReservationRequest{
         ReservationId: reservationID,
     })
     if err != nil {
@@ -503,13 +503,13 @@ func TestReservation_E2E(t *testing.T) {
     }
 
     // --- Step 5: Verify status changed to returned ---
-    getResp, err := client.GetReservation(ctx, &reservationpb.GetReservationRequest{
+    getResp, err := client.GetReservation(ctx, &reservationv1.GetReservationRequest{
         ReservationId: reservationID,
     })
     if err != nil {
         t.Fatalf("GetReservation failed: %v", err)
     }
-    if getResp.Reservation.Status != reservationpb.ReservationStatus_RETURNED {
+    if getResp.Reservation.Status != reservationv1.ReservationStatus_RETURNED {
         t.Errorf("expected status RETURNED, got %v", getResp.Reservation.Status)
     }
 
@@ -527,7 +527,7 @@ func TestReservation_E2E(t *testing.T) {
         metadata.Pairs("authorization", "Bearer "+limitedToken))
 
     for i := 0; i < maxActive; i++ {
-        _, err = client.CreateReservation(limitedCtx, &reservationpb.CreateReservationRequest{
+        _, err = client.CreateReservation(limitedCtx, &reservationv1.CreateReservationRequest{
             BookId: uuid.New().String(),
         })
         if err != nil {
@@ -536,7 +536,7 @@ func TestReservation_E2E(t *testing.T) {
     }
 
     // One more should be rejected.
-    _, err = client.CreateReservation(limitedCtx, &reservationpb.CreateReservationRequest{
+    _, err = client.CreateReservation(limitedCtx, &reservationv1.CreateReservationRequest{
         BookId: uuid.New().String(),
     })
     if err == nil {
@@ -573,7 +573,7 @@ import (
     "google.golang.org/grpc/status"
 
     pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
-    authpb "github.com/fesoliveira014/library-system/proto/gen/auth/v1"
+    authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
     "github.com/fesoliveira014/library-system/services/auth/internal/repository"
     "github.com/fesoliveira014/library-system/services/auth/internal/service"
 )
@@ -588,7 +588,7 @@ func TestAuth_E2E(t *testing.T) {
     ctx := context.Background()
 
     // --- Step 1: Register a new user ---
-    registerResp, err := client.Register(ctx, &authpb.RegisterRequest{
+    registerResp, err := client.Register(ctx, &authv1.RegisterRequest{
         Email:    "alice@example.com",
         Password: "correct-horse-battery-staple",
     })
@@ -600,7 +600,7 @@ func TestAuth_E2E(t *testing.T) {
     }
 
     // --- Step 2: Log in with correct credentials ---
-    loginResp, err := client.Login(ctx, &authpb.LoginRequest{
+    loginResp, err := client.Login(ctx, &authv1.LoginRequest{
         Email:    "alice@example.com",
         Password: "correct-horse-battery-staple",
     })
@@ -613,7 +613,7 @@ func TestAuth_E2E(t *testing.T) {
 
     // --- Step 3: Validate the token ---
     // The token returned by Login should be verifiable by the same service.
-    validateResp, err := client.ValidateToken(ctx, &authpb.ValidateTokenRequest{
+    validateResp, err := client.ValidateToken(ctx, &authv1.ValidateTokenRequest{
         Token: loginResp.Token,
     })
     if err != nil {
@@ -630,7 +630,7 @@ func TestAuth_E2E(t *testing.T) {
     }
 
     // --- Step 4: Duplicate email should be rejected ---
-    _, err = client.Register(ctx, &authpb.RegisterRequest{
+    _, err = client.Register(ctx, &authv1.RegisterRequest{
         Email:    "alice@example.com",
         Password: "different-password",
     })
@@ -642,7 +642,7 @@ func TestAuth_E2E(t *testing.T) {
     }
 
     // --- Step 5: Wrong password should be rejected ---
-    _, err = client.Login(ctx, &authpb.LoginRequest{
+    _, err = client.Login(ctx, &authv1.LoginRequest{
         Email:    "alice@example.com",
         Password: "wrong-password",
     })
@@ -659,7 +659,7 @@ func TestAuth_E2E(t *testing.T) {
         t.Fatalf("failed to generate expired token: %v", err)
     }
     // The negative duration produces a token that is already expired — useful for testing rejection of expired tokens.
-    validateExpiredResp, err := client.ValidateToken(ctx, &authpb.ValidateTokenRequest{
+    validateExpiredResp, err := client.ValidateToken(ctx, &authv1.ValidateTokenRequest{
         Token: expiredToken,
     })
     // Depending on your API design, ValidateToken may return a response with

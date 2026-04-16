@@ -54,7 +54,7 @@ err = bcrypt.CompareHashAndPassword(hash, []byte("plaintext"))
 // err == nil means match; err != nil means mismatch
 ```
 
-`bcrypt.DefaultCost` is 10. This takes roughly 100ms on modern hardware—fast enough that users don't notice, slow enough to make brute-force attacks impractical. Our Auth Service uses `DefaultCost` in the `Register` method:
+`bcrypt.DefaultCost` is 10. This takes roughly 100 ms on modern hardware—fast enough that users don't notice, slow enough to make brute-force attacks impractical. Our Auth Service uses `DefaultCost` in the `Register` method:
 
 ```go
 hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)

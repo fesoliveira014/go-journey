@@ -288,7 +288,7 @@ The gateway handles this gracefully: the catalog browse page (`/books`) always r
 
 3. **Add keyboard navigation to suggestions.** Using HTMX's `hx-on` attribute or a small script, let the user press arrow keys to highlight suggestions and Enter to navigate to the selected one. This is a common autocomplete UX pattern.
 
-4. **Display Meilisearch query time.** The search response includes `QueryTimeMs`. Show it in the results header (e.g., "42 results in 3ms"). This is already partially implemented in the template—verify it works end-to-end.
+4. **Display Meilisearch query time.** The search response includes `QueryTimeMs`. Show it in the results header (e.g., "42 results in 3 ms"). This is already partially implemented in the template—verify it works end-to-end.
 
 5. **Compare HTMX autocomplete to a React implementation.** Sketch (on paper or in pseudocode) how you would implement the same autocomplete with React: a `useState` hook for the input, a `useEffect` with debounce for the fetch, a JSON response, and a component to render suggestions. Compare the amount of code, the number of concepts involved, and where the rendering happens (client vs. server).
 

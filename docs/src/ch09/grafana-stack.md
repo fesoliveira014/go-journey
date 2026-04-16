@@ -222,7 +222,7 @@ And Loki will efficiently find all error logs from the Catalog Service without s
 
 ## Grafana: Unified Visualization
 
-Grafana ties everything together. We auto-provision[^6] datasources and a dashboard so the stack is ready to use immediately after `docker compose up`.
+Grafana ties everything together. We auto-provision[^6] data sources and a dashboard so the stack is ready to use immediately after `docker compose up`.
 
 ### Datasource Provisioning
 
@@ -296,7 +296,7 @@ This shows how many HTTP requests per second the gateway is handling, broken dow
 ```promql
 histogram_quantile(0.95, rate(http_server_request_duration_seconds_bucket[5m]))
 ```
-This computes the 95th percentile latency from the histogram buckets. If p95 is 200ms, it means 95% of requests completed in under 200ms. This is the standard SLI (Service Level Indicator) for latency.
+This computes the 95th percentile latency from the histogram buckets. If p95 is 200 ms, it means 95% of requests completed in under 200 ms. This is the standard SLI (Service Level Indicator) for latency.
 
 **gRPC Server Latency by Method**—A time series panel using:
 ```promql

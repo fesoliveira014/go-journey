@@ -156,7 +156,7 @@ OpenTelemetry is the second most active CNCF project after Kubernetes[^2]. OTel 
 - **Grafana Loki**—a log aggregation system inspired by Prometheus's label model
 - **Grafana**—the visualization layer that ties them all together
 
-Our stack uses the Grafana family (Tempo, Loki, Grafana) plus Prometheus — a common open-source choice. In production, you might use managed equivalents: AWS X-Ray for traces, CloudWatch for metrics, or a commercial platform like Datadog or Honeycomb. The point of OTel is that switching backends does not require changing your application code—you change the Collector configuration.
+Our stack uses the Grafana family (Tempo, Loki, Grafana) plus Prometheus—a common open-source choice. In production, you might use managed equivalents: AWS X-Ray for traces, CloudWatch for metrics, or a commercial platform like Datadog or Honeycomb. The point of OTel is that switching backends does not require changing your application code—you change the Collector configuration.
 
 OTel's defining feature is that it is vendor-neutral. Before OTel, you chose a vendor (Datadog, New Relic, Honeycomb) and instrumented with their proprietary SDK. Switching vendors meant re-instrumenting your entire codebase. With OTel, your instrumentation is permanent. The export destination is a configuration change.
 

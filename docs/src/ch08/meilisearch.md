@@ -509,7 +509,7 @@ This is the advantage of extracting `handleEvent` as a standalone function: you 
 
 ## Async Indexing and Meilisearch Task IDs
 
-One subtlety worth understanding: Meilisearch operations are **asynchronous**. When you call `AddDocuments` or `DeleteDocument`, Meilisearch enqueues the operation and returns a task ID immediately. The document is not searchable until the task completes (typically under 100ms for single-document operations, longer for bulk imports).
+One subtlety worth understanding: Meilisearch operations are **asynchronous**. When you call `AddDocuments` or `DeleteDocument`, Meilisearch enqueues the operation and returns a task ID immediately. The document is not searchable until the task completes (typically under 100 ms for single-document operations, longer for bulk imports).
 
 Our code ignores the task ID—we call `AddDocuments` and move on without waiting for completion. This is acceptable for a real-time index fed by Kafka events: the latency between a catalog change and it appearing in search results is already measured in seconds (Kafka delivery + consumer processing). Adding a few more milliseconds of Meilisearch task processing does not meaningfully change the user experience.
 

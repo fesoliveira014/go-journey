@@ -121,7 +121,7 @@ The green layer is the key—it is expensive (network + disk I/O) but cached acr
 
 ## Multi-Stage Builds
 
-A naive Dockerfile produces an image that contains the Go toolchain (~300 MB), all source code, all downloaded modules, *and* the compiled binary. For a Go service that compiles to a ~15MB static binary, this is wasteful and creates a larger attack surface.
+A naive Dockerfile produces an image that contains the Go toolchain (~300 MB), all source code, all downloaded modules, *and* the compiled binary. For a Go service that compiles to a ~15 MB static binary, this is wasteful and creates a larger attack surface.
 
 Multi-stage builds solve this. You use one stage (the "builder") to compile your code and a second stage (the "runtime") that contains only the final binary:
 
@@ -142,7 +142,7 @@ USER app
 ENTRYPOINT ["/usr/local/bin/server"]
 ```
 
-The `COPY --from=builder` instruction reaches into the builder stage and extracts only the compiled binary. The final image is based on `alpine:3.19` (~5MB), not `golang:1.22-alpine` (~300MB). The total image size ends up around 15–20 MB instead of more than 300 MB.
+The `COPY --from=builder` instruction reaches into the builder stage and extracts only the compiled binary. The final image is based on `alpine:3.19` (~5 MB), not `golang:1.22-alpine` (~300 MB). The total image size ends up around 15–20 MB instead of more than 300 MB.
 
 The `USER app` instruction switches to a non-root user. Running containers as root is a security risk: if the process is compromised, the attacker has root inside the container. Our Go binary is statically linked and needs no elevated privileges, so there is no reason to run as root.
 
@@ -152,7 +152,7 @@ The `USER app` instruction switches to a non-root user. Running containers as ro
 
 | Metric | Single-stage | Multi-stage |
 |---|---|---|
-| Image size | ~350MB | ~20MB |
+| Image size | ~350 MB | ~20 MB |
 | Attack surface | Go toolchain, source code, build tools | Binary + Alpine base |
 | Pull time (deploy) | Slow | Fast |
 | Layer cache reuse | Poor (source changes invalidate everything) | Good (dependency layer is stable) |

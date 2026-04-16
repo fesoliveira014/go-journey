@@ -455,7 +455,7 @@ volumeClaimTemplates:
           storage: 5Gi
 ```
 
-This is storage-class agnostic. It requests `ReadWriteOnce` access and 5 GiB. On kind it binds to a local path. On EKS it binds to a `gp2` EBS volume. No patch is needed.
+The production overlay increases the Meilisearch volume from 1 Gi (the base manifest value in Chapter 12) to 5 Gi to accommodate index growth under sustained catalog updates. This is storage-class agnostic. It requests `ReadWriteOnce` access. On kind it binds to a local path. On EKS it binds to a `gp2` EBS volume. No further patch is needed.
 
 If you want `gp3` instead — lower cost per GiB, better baseline throughput than `gp2` — add a StorageClass resource to the production overlay and mark it as the cluster default:
 

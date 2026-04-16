@@ -287,7 +287,7 @@ The overlay model introduces four Kustomize primitives worth knowing explicitly.
 
 **Strategic merge patches** apply a partial YAML document on top of an existing resource, using the Kubernetes API schema to decide how to merge fields. A patch for a Deployment that specifies only `spec.replicas: 3` leaves all other fields unchanged. A patch that specifies a container by name merges into that container without affecting others. This is the most readable patching mechanism for simple changes.
 
-**JSON Patch (RFC 6902) operations** are precise surgical operations using RFC 6902 patch operations (`add`, `remove`, `replace`, `move`, `copy`). They address fields by JSON pointer path (`/spec/template/spec/containers/0/imagePullPolicy`). Use these when a strategic merge patch cannot express what you need — for example, changing a single element in a list identified by index.
+**JSON Patch (RFC 6902) operations** use `add`, `remove`, `replace`, `move`, and `copy` verbs to modify resources. They address fields by JSON pointer path (`/spec/template/spec/containers/0/imagePullPolicy`). Use these when a strategic merge patch cannot express what you need — for example, changing a single element in a list identified by index.
 
 **`secretGenerator` and `configMapGenerator`** create Kubernetes Secrets and ConfigMaps from literal values, files, or environment files. They keep credential values out of base manifests and provide the hash-suffix rollout mechanism described earlier.
 

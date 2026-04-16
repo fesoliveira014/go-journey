@@ -561,8 +561,17 @@ spec:
         app: search
     spec:
       terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: search
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
           image: library/search:latest
           imagePullPolicy: IfNotPresent
           ports:

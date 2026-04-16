@@ -281,7 +281,7 @@ docker:
     SAVE IMAGE gateway:latest
 ```
 
-The gateway's `test` target differs from the other services. The `-race` flag enables the Go race detector, which requires CGO. On Alpine, CGO needs `gcc` and `musl-dev` installed, plus `CGO_ENABLED=1` explicitly set. The other services skip the race detector and run with `CGO_ENABLED=0` by default.
+The gateway's `test` target differs from the other services. The `-race` flag enables the Go race detector, which requires cgo. On Alpine, cgo needs `gcc` and `musl-dev` installed, plus `CGO_ENABLED=1` explicitly set. The other services skip the race detector and run with `CGO_ENABLED=0` by default.
 
 The gateway image exposes port 8080 instead of a gRPC port. It also sets `WORKDIR /app` so that the templates and static directories are at predictable relative paths when the binary looks for them at runtime.
 

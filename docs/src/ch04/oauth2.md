@@ -83,7 +83,7 @@ func NewAuthHandlerWithOAuth(svc *service.AuthService, clientID, clientSecret, r
 }
 ```
 
-The `oauth2.Config` struct is from `golang.org/x/oauth2`, and `google.Endpoint` (from `golang.org/x/oauth2/google`) provides Google's authorization and token URLs. The import block for this file includes both packages — the listing above omits it for brevity. The scopes request the user's OpenID identity, email address, and profile name.
+The `oauth2.Config` struct is from `golang.org/x/oauth2`, and `google.Endpoint` (from `golang.org/x/oauth2/google`) provides Google's authorization and token URLs. The import block for this file includes both packages—the listing above omits it for brevity. The scopes request the user's OpenID identity, email address, and profile name.
 
 ---
 
