@@ -452,10 +452,36 @@ volumeClaimTemplates:
       accessModes: ["ReadWriteOnce"]
       resources:
         requests:
-          storage: 5Gi
+          storage: 1Gi
 ```
 
-The production overlay increases the Meilisearch volume from 1 Gi (the base manifest value in Chapter 12) to 5 Gi to accommodate index growth under sustained catalog updates. This is storage-class agnostic. It requests `ReadWriteOnce` access. On kind it binds to a local path. On EKS it binds to a `gp2` EBS volume. No further patch is needed.
+The base manifest from Chapter 12 sizes the PVC at 1 Gi, which is enough for the small development dataset but tight for production under sustained catalog updates. Patch the overlay to bump the request to 5 Gi:
+
+```yaml
+# deploy/k8s/overlays/production/patches/meilisearch-storage.yaml
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: meilisearch
+  namespace: data
+spec:
+  volumeClaimTemplates:
+    - metadata:
+        name: meilisearch-data
+      spec:
+        resources:
+          requests:
+            storage: 5Gi
+```
+
+Reference it from `kustomization.yaml` under `patches`:
+
+```yaml
+patches:
+  - path: patches/meilisearch-storage.yaml
+```
+
+Strategic merge matches the `volumeClaimTemplates` entry by `metadata.name` (`meilisearch-data`) and overrides only `storage`. Everything else—`ReadWriteOnce` access, storage class binding—inherits from the base. On kind the volume still binds to a local path. On EKS the default StorageClass (backed by the EBS CSI driver) provisions a `gp2` EBS volume of the requested size. Note that `volumeClaimTemplates` is immutable once a StatefulSet is deployed, so this patch must be in place before the first production apply; resizing an existing PVC requires a different flow (delete the StatefulSet with `--cascade=orphan`, edit the PVC, recreate the StatefulSet).
 
 If you want `gp3` instead—lower cost per GiB, better baseline throughput than `gp2`—add a StorageClass resource to the production overlay and mark it as the cluster default:
 
