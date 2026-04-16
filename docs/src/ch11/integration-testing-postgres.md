@@ -65,7 +65,7 @@ Testcontainers is a library (available for Go, Java, Python, .NET, and others) t
 4. Returns a handle from which you retrieve the container's mapped host port and connection string.
 5. Registers a cleanup hook that terminates and removes the container when the test finishes.
 
-The container runs on the same Docker daemon you use for development. No separate service, no CI environment variable, no `docker-compose up` step. The only prerequisite is that the Docker daemon is reachable when the test runs.
+The container runs on the same Docker daemon you use for development. No separate service, no CI environment variable, no `docker compose up` step. The only prerequisite is that the Docker daemon is reachable when the test runs.
 
 If you have used Spring Boot's `@Testcontainers` + `@Container` annotations, the Go approach is equivalent but explicit: there is no annotation magic. You call functions, receive values, and register cleanup with `t.Cleanup`. This is a good fit for Go's philosophy of making control flow visible.
 
@@ -80,9 +80,9 @@ go get github.com/testcontainers/testcontainers-go
 go get github.com/testcontainers/testcontainers-go/modules/postgres
 ```
 
-The `testcontainers-go` module provides the core container API and wait strategies. The `modules/postgres` sub-module wraps it with Postgres-specific convenience functions: it knows the right wait log pattern, sets `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` environment variables, and exposes `ConnectionString`.
+The `testcontainers-go` module provides the core container API and wait strategies. The `modules/postgres` submodule wraps it with Postgres-specific convenience functions: it knows the right wait log pattern, sets `POSTGRES_DB`, `POSTGRES_USER`, and `POSTGRES_PASSWORD` environment variables, and exposes `ConnectionString`.
 
-These are test-only dependencies, but Go does not have a separate test-scope in `go.mod` (unlike Gradle's `testImplementation`). The packages will be imported only in files with `_test.go` suffixes or behind build tags, so they will not be included in your production binary.
+These are test-only dependencies, but Go does not have a separate test scope in `go.mod` (unlike Gradle's `testImplementation`). The packages will be imported only in files with `_test.go` suffixes or behind build tags, so they will not be included in your production binary.
 
 ---
 
@@ -160,7 +160,7 @@ func setupPostgres(t *testing.T) *gorm.DB {
 
 This is a build constraint. Go's toolchain evaluates it before compiling. Without `-tags integration`, the file is invisible to `go test`, `go build`, and `go vet`. This keeps the fast unit-test loop untouched: `go test ./...` runs in seconds because it never pulls a Docker image.
 
-The line immediately below — `package repository_test` — is the package declaration. The build constraint must be on the very first line, before any blank lines or comments. If you place it after the package declaration or after an import, it is treated as a regular comment and has no effect.
+The line immediately below — `package repository_test` — is the package declaration. The build constraint must be on the first line, before any blank lines or comments. If you place it after the package declaration or after an import, it is treated as a regular comment and has no effect.
 
 **`postgres.Run`**
 
@@ -170,17 +170,17 @@ The image tag `postgres:16-alpine` is pinned to a major version. Using `postgres
 
 **`testcontainers.WithWaitStrategy`**
 
-The wait strategy solves a common race condition. Docker reports a container as "started" once its process has been launched, but "started" does not mean "ready to accept connections". Without a wait strategy, your first `gorm.Open` call might fail because Postgres is still initialising the data directory. The log-based wait strategy polls the container's stdout until the phrase `"database system is ready to accept connections"` appears twice. The phrase appears once when Postgres completes initialisation and once more after the server enters normal operation — the `.WithOccurrence(2)` requirement ensures both messages have been emitted. `WithStartupTimeout(30*time.Second)` causes the test to fail loudly if Postgres has not started within 30 seconds rather than hanging indefinitely.
+The wait strategy solves a common race condition. Docker reports a container as "started" once its process has been launched, but "started" does not mean "ready to accept connections". Without a wait strategy, your first `gorm.Open` call might fail because Postgres is still initializing the data directory. The log-based wait strategy polls the container's stdout until the phrase `"database system is ready to accept connections"` appears twice. The phrase appears once when Postgres completes initialization and once more after the server enters normal operation — the `.WithOccurrence(2)` requirement ensures both messages have been emitted. `WithStartupTimeout(30*time.Second)` causes the test to fail loudly if Postgres has not started within 30 seconds rather than hanging indefinitely.
 
 **`t.Cleanup`**
 
 `t.Cleanup` registers a function that runs when the test (or subtest) that called it finishes, regardless of whether it passed or failed. It is the testing package's equivalent of `defer` but scoped to the test's lifetime rather than the function call stack. Using `t.Cleanup` here means you never need to remember to call `container.Terminate` at the end of each test — it happens automatically, even if the test panics or calls `t.Fatal`.
 
-Note that `container.Terminate` takes a fresh `context.Background()` rather than `ctx`. This is intentional: `ctx` was created at the start of `setupPostgres` and is no longer in scope when the cleanup runs. Using a fresh context ensures that a cancelled parent context does not prevent the container from being cleaned up.
+Note that `container.Terminate` takes a fresh `context.Background()` rather than `ctx`. This is intentional. By the time cleanup runs the original `ctx` may be canceled; a fresh context ensures the container is always torn down.
 
 **`gormpostgres.Open`**
 
-The import alias `gormpostgres` is used because both the `modules/postgres` import and the GORM Postgres driver would otherwise both be referred to as `postgres` in their package identifiers. GORM's driver is imported from `gorm.io/driver/postgres` — not `gorm.io/driver/pg`, which does not exist. The alias avoids a name collision with the `postgres` identifier already in scope from the `modules/postgres` import.
+The import alias `gormpostgres` is used because the `modules/postgres` import and the GORM Postgres driver would otherwise both use `postgres` as their package identifier. GORM's driver is imported from `gorm.io/driver/postgres`. The alias avoids a name collision with the `postgres` identifier already in scope from the `modules/postgres` import.
 
 **Running real migrations**
 
@@ -262,15 +262,15 @@ func TestBookRepository_Create_DuplicateISBN(t *testing.T) {
 }
 ```
 
-A mock repository can simulate this by checking an in-memory map of ISBNs and returning `model.ErrDuplicateISBN`. But that simulation encodes an assumption: that the production `Create` method actually checks for duplicates and translates the database error correctly. If the error translation code in the repository has a bug — for example, if it only catches `pq.Error` but the driver returns a different type — the mock test passes while the real system silently inserts a duplicate.
+A mock repository can simulate this by checking an in-memory map of ISBNs and returning `model.ErrDuplicateISBN`. But that simulation encodes an assumption: that the production `Create` method actually checks for duplicates and translates the database error correctly. If the error-translation code in the repository has a bug — for example, if it only catches `pq.Error` but the driver returns a different type — the mock test passes while the real system silently inserts a duplicate.
 
-The integration test uses the actual `UNIQUE` index on the `isbn` column defined in `000001_create_books.up.sql`. The database enforces the constraint unconditionally. If `repository.Create` does not correctly translate the Postgres `23505` unique violation error code into `model.ErrDuplicateISBN`, the integration test fails. The mock test would have passed regardless.
+The integration test uses the actual `UNIQUE` index on the `isbn` column defined in `000001_create_books.up.sql`. The database enforces the constraint unconditionally. If `repository.Create` does not correctly translate the Postgres `23505` unique-violation error code into `model.ErrDuplicateISBN`, the integration test fails. The mock test would have passed regardless.
 
 Other behaviors that only appear with a real database:
 
 - **`CHECK` constraint violations**: if a migration adds `CHECK (total_copies >= 0)`, only an integration test exercises the rejection path.
-- **Transaction isolation**: two concurrent goroutines operating on the same row have defined behaviour in Postgres (row-level locking, serialisation failures) that an in-memory mock cannot reproduce.
-- **Pagination correctness**: `LIMIT` and `OFFSET` interact with `ORDER BY` in ways that depend on how Postgres plans the query. Sorting without `ORDER BY` produces non-deterministic results that only manifest at scale or with specific data layouts.
+- **Transaction isolation**: two concurrent goroutines operating on the same row have defined behavior in Postgres (row-level locking, serialization failures) that an in-memory mock cannot reproduce.
+- **Pagination correctness**: `LIMIT` and `OFFSET` interact with `ORDER BY` in ways that depend on how Postgres plans the query. Sorting without `ORDER BY` produces nondeterministic results that only manifest at scale or with specific data layouts.
 - **Index-dependent query plans**: a query that performs adequately on ten rows in a mock may be slow or incorrect on large data because the mock does not exercise the query planner.
 
 ---

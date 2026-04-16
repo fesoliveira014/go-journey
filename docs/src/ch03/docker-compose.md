@@ -1,6 +1,6 @@
 # 3.3 Docker Compose
 
-Running one container manually is manageable. Running three containers -- each with specific environment variables, network connections, port mappings, and startup dependencies -- gets tedious fast. Docker Compose solves this by defining the entire stack in a single YAML file.
+Running one container manually is manageable. Running three containers—each with specific environment variables, network connections, port mappings, and startup dependencies—gets tedious fast. Docker Compose solves this by defining the entire stack in a single YAML file.
 
 ---
 
@@ -37,7 +37,7 @@ docker run -d --name gateway \
   gateway:latest
 ```
 
-That is six commands, error-prone, and doesn't handle startup ordering. With Compose:
+That's six error-prone commands with no startup ordering. With Compose:
 
 ```bash
 docker compose -f deploy/docker-compose.yml up --build
@@ -105,7 +105,7 @@ networks:
     driver: bridge
 ```
 
-Let's walk through each section.
+Walk through it:
 
 ---
 
@@ -118,7 +118,7 @@ postgres-catalog:
   image: postgres:16-alpine
 ```
 
-This service uses a pre-built image from Docker Hub rather than building from a Dockerfile. `postgres:16-alpine` is the official PostgreSQL 16 image on Alpine Linux -- small and production-tested.
+This service uses a pre-built image from Docker Hub rather than building from a Dockerfile. `postgres:16-alpine` is the official PostgreSQL 16 image on Alpine Linux—small and production-tested.
 
 ### Environment Variables and Defaults
 
@@ -129,7 +129,7 @@ environment:
   POSTGRES_DB: ${POSTGRES_CATALOG_DB:-catalog}
 ```
 
-The `${VAR:-default}` syntax is shell parameter expansion, and Compose supports it natively. If `POSTGRES_CATALOG_USER` is set in the environment (or in a `.env` file), its value is used. Otherwise, the default (`postgres`) applies.
+The `${VAR:-default}` syntax is shell parameter expansion, and Compose supports it natively. If `POSTGRES_CATALOG_USER` is set in the environment (or in a `.env` file), Compose uses its value. Otherwise, the default (`postgres`) applies.
 
 The `.env` file at `deploy/.env` provides these values:
 
@@ -143,7 +143,7 @@ GATEWAY_PORT=8080
 CATALOG_GRPC_PORT=50052
 ```
 
-Compose automatically loads `.env` from the same directory as the Compose file. You never need to `source` it -- Compose reads it directly. This separation keeps credentials out of `docker-compose.yml` (which is committed) and in `.env` (which is gitignored in production, though our learning project commits it for convenience).
+Compose automatically loads `.env` from the same directory as the Compose file. You never need to `source` it—Compose reads it directly. This separation keeps credentials out of `docker-compose.yml` (which is committed) and in `.env` (which is gitignored in production, though our learning project commits it for convenience).
 
 ### Healthchecks and `depends_on`
 
@@ -164,7 +164,7 @@ catalog:
       condition: service_healthy
 ```
 
-Without `condition: service_healthy`, Compose would start the Catalog service as soon as PostgreSQL's *container* is running -- which is not the same as PostgreSQL being *ready to accept connections*. PostgreSQL needs a few seconds to initialize, especially on first run when it creates the database. The `service_healthy` condition makes Compose wait until the healthcheck passes.
+Without `condition: service_healthy`, Compose would start the Catalog service as soon as PostgreSQL's *container* is running—which is not the same as PostgreSQL being *ready to accept connections*. PostgreSQL needs a few seconds to initialize, especially on first run when it creates the database. The `service_healthy` condition makes Compose wait until the healthcheck passes.
 
 This is a common source of startup failures. If your service crashes with "connection refused" on startup, the database probably wasn't ready. Always use healthchecks for database dependencies.
 
@@ -189,7 +189,7 @@ networks:
     driver: bridge
 ```
 
-A bridge network creates an isolated virtual network. All services attached to `library-net` can reach each other by **service name** as a DNS hostname. The Catalog service connects to PostgreSQL using `host=postgres-catalog` -- that hostname resolves to the PostgreSQL container's IP address on the bridge network.
+A bridge network creates an isolated virtual network. All services attached to `library-net` can reach each other by **service name** as a DNS hostname. The Catalog service connects to PostgreSQL using `host=postgres-catalog`—that hostname resolves to the PostgreSQL container's IP address on the bridge network.
 
 This is container DNS at work. You never hardcode IP addresses. When Compose creates the network, it also runs an embedded DNS server that maps service names to container IPs. If a container is restarted and gets a new IP, the DNS updates automatically.
 
@@ -205,7 +205,7 @@ graph LR
     GW -.->|"(future: catalog:50052)"| CAT
 ```
 
-Services that are *not* on the same network cannot reach each other. This provides isolation -- in a larger system, you might put frontend services on one network and backend services on another.
+Services that are *not* on the same network cannot reach each other. This provides isolation—in a larger system, you might put frontend services on one network and backend services on another.
 
 ### Port Mapping
 
@@ -231,17 +231,17 @@ volumes:
   - catalog-data:/var/lib/postgresql/data
 ```
 
-A **named volume** (`catalog-data`) persists data across container restarts. Without it, stopping and removing the PostgreSQL container would delete all your data. The volume maps to `/var/lib/postgresql/data` inside the container -- this is where PostgreSQL stores its data files.
+A **named volume** (`catalog-data`) persists data across container restarts. Without it, stopping and removing the PostgreSQL container would delete all your data. The volume maps to `/var/lib/postgresql/data` inside the container—this is where PostgreSQL stores its data files.
 
 Named volumes are managed by Docker and stored in Docker's internal storage area. You can inspect them with `docker volume ls` and `docker volume inspect catalog-data`.
 
-To completely reset the database (useful during development):
+To reset the database (useful during development):
 
 ```bash
 docker compose -f deploy/docker-compose.yml down -v
 ```
 
-The `-v` flag removes named volumes. Without it, `down` only stops and removes containers and networks -- the data survives.
+The `-v` flag removes named volumes. Without it, `down` only stops and removes containers and networks—the data survives.
 
 ---
 
@@ -276,7 +276,7 @@ The `--build` flag ensures images are rebuilt if Dockerfiles or source code have
    docker compose up --build
    ```
 
-2. Wait for all services to report healthy. You should see PostgreSQL's healthcheck pass and the Catalog service connect to the database.
+2. Wait for all services to report healthy. Expect to see PostgreSQL's healthcheck pass and the Catalog service connect to the database.
 
 3. In a separate terminal, use `grpcurl` to create a book:
    ```bash
@@ -297,14 +297,14 @@ The `--build` flag ensures images are rebuilt if Dockerfiles or source code have
    grpcurl -plaintext localhost:50052 catalog.v1.CatalogService/ListBooks
    ```
 
-5. Stop the stack with `Ctrl+C`, then start it again. List books again -- the data should still be there because of the named volume.
+5. Stop the stack with `Ctrl+C`, then start it again. List books again—the data should still be there because of the named volume.
 
-6. Now stop with `docker compose down -v` and start again. List books -- the data is gone.
+6. Stop with `docker compose down -v` and start again. List books—the data is gone.
 
 <details>
 <summary>Solution</summary>
 
-After step 3, `grpcurl` returns the created book with a generated `id`, `created_at`, and `updated_at` timestamp.
+After step 3, `grpcurl` returns the created book with a generated `id` and `created_at`/`updated_at` timestamps.
 
 After step 5 (restart without `-v`), `ListBooks` still returns the book. The `catalog-data` volume preserved PostgreSQL's data directory.
 
@@ -328,7 +328,7 @@ If you see "connection refused" on port 50052, the Catalog service may not have 
 - Docker Compose defines multi-container stacks in a single YAML file, handling networks, volumes, build contexts, and startup ordering.
 - The `${VAR:-default}` syntax enables environment-driven configuration with sensible defaults.
 - Healthchecks with `condition: service_healthy` prevent services from starting before their dependencies are ready.
-- Bridge networks provide DNS-based service discovery -- services reference each other by name, not IP.
+- Bridge networks provide DNS-based service discovery—services reference each other by name, not IP.
 - Port mapping (`host:container`) is for host access; inter-container communication uses internal ports.
 - Named volumes persist data across container restarts; `down -v` removes them for a full reset.
 
@@ -336,7 +336,7 @@ If you see "connection refused" on port 50052, the Catalog service may not have 
 
 ## References
 
-[^1]: [Docker Compose overview](https://docs.docker.com/compose/) -- official Compose documentation and specification.
-[^2]: [Compose file reference](https://docs.docker.com/reference/compose-file/) -- complete reference for all Compose YAML options.
-[^3]: [Networking in Compose](https://docs.docker.com/compose/how-tos/networking/) -- how Compose handles networks and DNS.
-[^4]: [Environment variables in Compose](https://docs.docker.com/compose/how-tos/environment-variables/) -- `.env` files, variable substitution, and precedence rules.
+[^1]: [Docker Compose overview](https://docs.docker.com/compose/)—official Compose documentation and specification.
+[^2]: [Compose file reference](https://docs.docker.com/reference/compose-file/)—complete reference for all Compose YAML options.
+[^3]: [Networking in Compose](https://docs.docker.com/compose/how-tos/networking/)—how Compose handles networks and DNS.
+[^4]: [Environment variables in Compose](https://docs.docker.com/compose/how-tos/environment-variables/)—`.env` files, variable substitution, and precedence rules.

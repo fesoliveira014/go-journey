@@ -1,6 +1,6 @@
 # 2.3 Repository Pattern with GORM
 
-Raw SQL migrations give you precise control over the database schema. But for day-to-day CRUD operations — inserting a record, fetching one by ID, running paginated queries — writing SQL strings by hand gets tedious fast. This is where an ORM earns its keep.
+Raw SQL migrations give you precise control over the database schema. But for day-to-day CRUD operations — inserting a record, fetching one by ID, running paginated queries — writing SQL strings by hand becomes tedious quickly. This is where an ORM earns its keep.
 
 This section introduces GORM (Go's dominant ORM), explains the repository pattern as a clean boundary around data access, and walks through every method in the Catalog service's `BookRepository`. You'll also see how to write integration tests against a real PostgreSQL database — not mocks, not in-memory fakes, the real thing.
 
@@ -22,7 +22,7 @@ GORM's mental model will feel familiar if you've used JPA/Hibernate. You annotat
 | `EntityManager.merge()` | `db.Updates(...)` |
 | `EntityManager.remove()` | `db.Delete(...)` |
 
-The surface-level difference is Go's lack of generics at GORM's level of maturity — you pass `&record` pointers instead of type parameters, and the ORM uses reflection to figure out which table to target. This feels awkward at first but becomes second nature quickly.
+The surface-level difference is that GORM predates Go generics — you pass `&record` pointers and the ORM uses reflection to locate the target table. This feels awkward at first but becomes second nature.
 
 ### The Book Model
 
@@ -94,7 +94,7 @@ In this project the three services share a small `pkg/db.Open` helper that appli
 
 ## The Repository Pattern
 
-The repository pattern puts a named interface between your business logic and your data access code.[^3] Instead of calling `db.Where(...).Find(...)` directly inside a handler or service method, you define a contract:
+The repository pattern puts a named interface between your business logic and your data-access code.[^3] Instead of calling `db.Where(...).Find(...)` directly inside a handler or service method, you define a contract:
 
 ```go
 // In services/catalog/internal/service/catalog.go
@@ -114,11 +114,11 @@ The service layer only knows about this interface. It doesn't know about GORM, P
 
 1. **Testability.** The service layer can be tested with a mock or stub `BookRepository` — no database needed. You test business logic in isolation, at unit-test speed.
 2. **Swappability.** If you ever needed to swap PostgreSQL for a different store (unlikely but not impossible), you'd write a new implementation of the interface. The service layer wouldn't change.
-3. **Readability.** `repo.GetByID(ctx, id)` tells you what's happening. `db.WithContext(ctx).First(&book, "id = ?", id)` also tells you, but you have to decode GORM's API first. The abstraction raises the vocabulary of the call site.
+3. **Readability.** `repo.GetByID(ctx, id)` communicates intent immediately. `db.WithContext(ctx).First(&book, "id = ?", id)` also tells you, but you have to decode GORM's API first. The abstraction raises the vocabulary of the call site.
 
 **Compare to using GORM directly in handlers:**
 
-If a gRPC handler calls `db.Where(...).Find(...)` directly, testing that handler requires either a real database or a mock of `*gorm.DB` (which is painful — GORM's interface is large). With the repository pattern, the handler calls `service.ListBooks(...)`, the service calls `repo.List(...)`, and each layer can be tested independently.
+If a gRPC handler calls `db.Where(...).Find(...)` directly, testing that handler requires either a real database or a mock of `*gorm.DB` (which is impractical — GORM's API is large). With the repository pattern, the handler calls `service.ListBooks(...)`, the service calls `repo.List(...)`, and each layer can be tested independently.
 
 ---
 
@@ -138,7 +138,7 @@ func NewBookRepository(db *gorm.DB) *BookRepository {
 }
 ```
 
-The repository holds one field: the `*gorm.DB` handle. This is dependency injection Go-style — no framework, just a constructor that accepts the dependency. The `*gorm.DB` is shared across all repository method calls; GORM manages connection pooling internally.
+The repository holds one field: the `*gorm.DB` handle. This is dependency injection Go-style — no framework, a constructor that accepts the dependency and nothing more. The `*gorm.DB` is shared across all repository method calls; GORM manages connection pooling internally.
 
 ### Create
 
@@ -244,9 +244,9 @@ func (r *BookRepository) UpdateAvailability(ctx context.Context, id uuid.UUID, d
 }
 ```
 
-This method is special. Rather than reading the current value into Go, incrementing it, and writing it back — which would introduce a race condition — it uses a SQL expression: `UPDATE books SET available_copies = available_copies + ? WHERE id = ?`. The increment happens atomically in the database. `gorm.Expr(...)` injects a raw SQL fragment into the query.
+This method is the race-condition trap — implemented incorrectly, it corrupts availability counts under concurrency. Rather than reading the current value into Go, incrementing it, and writing it back — which would introduce a race condition — it uses a SQL expression: `UPDATE books SET available_copies = available_copies + ? WHERE id = ?`. The increment happens atomically in the database. `gorm.Expr(...)` injects a raw SQL fragment into the query.
 
-The `WHERE` clause includes `available_copies + ? >= 0` as a guard to prevent negative availability — the database will reject an update that would underflow, and `RowsAffected == 0` signals the error to the caller.
+The `WHERE` clause includes `available_copies + ? >= 0` as a guard to prevent negative availability — the WHERE clause filters out rows that would go negative — so an underflow simply matches zero rows, and `RowsAffected == 0` signals the error to the caller.
 
 ---
 
@@ -293,7 +293,7 @@ func (r *BookRepository) List(ctx context.Context, filter model.BookFilter, page
 
 **Key points:**
 
-- **`query` is immutable per call.** Each chainable method (`Where`, `Order`, etc.) returns a new `*gorm.DB` with the added clause. Reassigning `query = query.Where(...)` is the standard idiom. There are no side-effects on the original handle.
+- **`query` is immutable.** Each chainable method (`Where`, `Order`, etc.) returns a new `*gorm.DB` with the added clause. Reassigning `query = query.Where(...)` is the standard idiom. There are no side effects on the original handle.
 - **`Count` before `Limit`.** Running `Count` on the filtered-but-not-yet-paginated query gives the total number of matching records — which the caller needs to compute total pages. `Limit` and `Offset` are added afterward for the actual row fetch.
 - **`ILIKE` for case-insensitive search.** PostgreSQL's `ILIKE` is the case-insensitive version of `LIKE`. The `%` wildcards match any characters on either side of the author string. This is a simple substring search — good enough for a catalog UI, though a production system might use PostgreSQL full-text search for more sophisticated matching.
 - **`Find` vs `First`.** `Find` returns zero or more rows into a slice; it does not return `ErrRecordNotFound` when the slice is empty. `First` returns exactly one row and errors if there are none. Use `First` for single-record lookups, `Find` for collections.
@@ -338,7 +338,7 @@ func testDB(t *testing.T) *gorm.DB {
 
 Three design decisions here worth understanding:
 
-1. **`t.Skipf` on connection failure, not `t.Fatalf`.** If the database isn't available (e.g., in a CI environment that didn't start PostgreSQL), the tests skip gracefully rather than failing. This is the right behaviour for optional infrastructure dependencies — the developer is informed, not blocked.
+1. **`t.Skipf` on connection failure, not `t.Fatalf`.** If the database isn't available (e.g., in a CI environment that didn't start PostgreSQL), the tests skip gracefully rather than failing. This is the right behavior for optional infrastructure dependencies — the developer is informed, not blocked.
 
 2. **Real migrations, not `AutoMigrate`.** GORM has an `AutoMigrate` function that creates tables from struct definitions. It's convenient but dangerous in production: it can't drop columns, it won't create indexes you didn't annotate, and it diverges from your real schema over time. This test uses `golang-migrate` with the same `migrations/` SQL files as production — the test database has the exact same schema, including CHECK constraints and unique indexes.
 
@@ -421,7 +421,7 @@ func TestBookRepository_GetByISBN(t *testing.T) {
 
     // Not found: random ISBN
     _, err = repo.GetByISBN(ctx, "000-not-real")
-    if err != model.ErrBookNotFound {
+    if !errors.Is(err, model.ErrBookNotFound) {
         t.Errorf("expected ErrBookNotFound, got %v", err)
     }
 }
@@ -436,7 +436,7 @@ func TestBookRepository_GetByISBN(t *testing.T) {
 - GORM struct tags declare column types, constraints, and indexes — they mirror JPA annotations but use Go's backtick tag syntax.
 - `db.WithContext(ctx)` propagates cancellation and deadlines into every query. Always use it.
 - The repository pattern wraps GORM behind a named interface, isolating data access from business logic and making each layer independently testable.
-- `gorm.ErrRecordNotFound` and PostgreSQL error messages are translated into domain errors at the repository boundary — callers never handle GORM or SQL internals directly.
+- `gorm.ErrRecordNotFound` and PostgreSQL error codes are translated into domain errors at the repository boundary — callers never handle GORM or SQL internals directly.
 - Dynamic queries are built by chaining `Where` calls on a `*gorm.DB` value. `Count` is called before `Offset`/`Limit` to capture the total matching rows for pagination metadata.
 - Integration tests use real migrations and real PostgreSQL, with `TRUNCATE` for isolation between tests. If the database isn't available, tests skip rather than fail.
 

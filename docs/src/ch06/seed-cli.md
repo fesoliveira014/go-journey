@@ -2,7 +2,7 @@
 
 ## The Problem
 
-An empty catalog is useless for development. You need books to browse, reserve, and test against. Typing them in through the admin UI one at a time is slow and inconsistent -- every developer on the project would create different test data, making it impossible to reproduce bugs or write meaningful integration tests.
+An empty catalog is useless for development. You need books to browse, reserve, and test against. Typing them in through the admin UI one at a time is slow and inconsistent — every developer on the project would create different test data, making it impossible to reproduce bugs or write meaningful integration tests.
 
 The solution is a **seed CLI**: a tool that loads a predefined set of books from a JSON fixture file and creates them through the catalog service's gRPC API.
 
@@ -10,11 +10,11 @@ The solution is a **seed CLI**: a tool that loads a predefined set of books from
 
 ## Why gRPC Seeding (Not Direct DB Insert)?
 
-The admin CLI from Section 6.1 connects directly to the database. The seed CLI does not -- it authenticates as an admin and calls `CreateBook` through gRPC. This is a deliberate design choice:
+The admin CLI from Section 6.1 connects directly to the database. The seed CLI does not — it authenticates as an admin and calls `CreateBook` through gRPC. This is a deliberate design choice:
 
 - **Exercises the full stack.** The seed process goes through authentication (login via auth service), authorization (the JWT interceptor checks the admin role), validation (the catalog handler rejects missing titles or duplicate ISBNs), and event publishing (if Kafka is configured, `book.created` events are emitted).
-- **Catches integration bugs.** If the auth service is misconfigured, or the catalog's JWT interceptor rejects the token, or a validation rule is wrong, the seed CLI will fail -- giving you early feedback.
-- **Mirrors real usage.** An admin adding books through the UI follows the same code path. The seed CLI is just an automated version of that workflow.
+- **Catches integration bugs.** If the auth service is misconfigured, or the catalog's JWT interceptor rejects the token, or a validation rule is wrong, the seed CLI will fail — giving you early feedback.
+- **Mirrors real usage.** An admin adding books through the UI follows the same code path. The seed CLI is an automated version of that workflow.
 
 The admin CLI bypasses gRPC because no gRPC endpoint exists for its operation. The seed CLI uses gRPC because `CreateBook` already exists and works correctly.
 
@@ -38,7 +38,7 @@ type seedBook struct {
 }
 ```
 
-The `seedBook` struct mirrors the `CreateBookRequest` proto fields. It uses `json` struct tags for deserialization from the fixture file. Note the `int32` types for year and copies -- these match the protobuf field types, avoiding a conversion step.
+The `seedBook` struct mirrors the `CreateBookRequest` proto fields. It uses `json` struct tags for deserialization from the fixture file. Note the `int32` types for year and copies — these match the protobuf field types, avoiding a conversion step.
 
 ### Flag Parsing and JSON Loading
 
@@ -87,7 +87,7 @@ The flags have sensible defaults for the service addresses (`localhost:50051` an
 	fmt.Println("Logged in successfully")
 ```
 
-The seed CLI creates a gRPC connection to the auth service and calls `Login` to get a JWT. If login fails (wrong password, non-existent user, user is not admin), the process exits with a clear error.
+The seed CLI creates a gRPC connection to the auth service and calls `Login` to get a JWT. If login fails (wrong password or non-existent user), or if the user is not admin, the first `CreateBook` call will fail — in either case the process exits with a clear error.
 
 ### Metadata Injection and Book Creation
 
@@ -128,15 +128,15 @@ This is the key line: `metadata.AppendToOutgoingContext` attaches the JWT as gRP
 	fmt.Printf("\nDone: %d created, %d skipped\n", created, skipped)
 ```
 
-The `AlreadyExists` handling makes the seed CLI idempotent -- running it twice will skip all 16 books on the second run instead of failing. This is the same pattern as the admin CLI's upsert logic, but here it leverages the catalog service's own duplicate ISBN check rather than implementing it in the CLI.
+The `AlreadyExists` handling makes the seed CLI idempotent — running it twice will skip all sixteen books on the second run instead of failing. This is the same pattern as the admin CLI's upsert logic, but here it leverages the catalog service's own duplicate ISBN check rather than implementing it in the CLI.
 
-For any other error (e.g., validation failure, network issue), the CLI exits with `log.Fatalf`. This is appropriate for a seeding tool -- partial success is confusing, so fail fast and let the operator fix the issue.
+For any other error (e.g., validation failure, network issue), the CLI exits with `log.Fatalf`. This is appropriate for a seeding tool — partial success is confusing, so fail fast and let the operator fix the issue.
 
 ---
 
 ## The Fixture File
 
-The fixture file (`services/catalog/cmd/seed/books.json`) contains 16 books across five genres:
+The fixture file (`services/catalog/cmd/seed/books.json`) contains sixteen books across five genres:
 
 | Genre | Count | Examples |
 |-------|-------|---------|
@@ -146,13 +146,13 @@ The fixture file (`services/catalog/cmd/seed/books.json`) contains 16 books acro
 | Science | 3 | *A Brief History of Time*, *Cosmos*, *The Selfish Gene* |
 | History | 2 | *Sapiens*, *The Art of War* |
 
-The ISBNs are real ISBN-13 values for these books. This matters for testing -- if you later add ISBN validation (checksum verification), the seed data will still work. Total copies range from 2 to 5, giving you enough variation to test reservation limits and "no copies available" scenarios.
+The ISBNs are real ISBN-13 values for these books. This matters for testing — if you later add ISBN validation (checksum verification), the seed data will still work. Total copies range from two to five, giving you enough variation to test reservation limits and "no copies available" scenarios.
 
 ---
 
 ## How It Works With and Without Kafka
 
-The seed CLI does not interact with Kafka directly -- it calls `CreateBook` via gRPC, and the catalog service handles event publishing internally. The catalog service's `main.go` uses a `noopPublisher` when `KAFKA_BROKERS` is not set:
+The seed CLI does not interact with Kafka directly — it calls `CreateBook` via gRPC, and the catalog service handles event publishing internally. The catalog service's `main.go` uses a `noopPublisher` when `KAFKA_BROKERS` is not set:
 
 ```go
 // services/catalog/cmd/main.go
@@ -168,7 +168,7 @@ This means:
 - **Without Kafka:** Books are created in the catalog database. No events are published. The search service will not be updated (it relies on Kafka events to index books). This is fine for basic development and testing.
 - **With Kafka:** Books are created and `book.created` events are published to the `catalog.books.changed` topic. The search service picks them up and indexes the books. This is the full production flow, covered in Chapter 7.
 
-The seed CLI works identically in both cases -- it has no knowledge of whether Kafka is running.
+The seed CLI works identically in both cases — it has no knowledge of whether Kafka is running.
 
 ---
 
@@ -203,7 +203,7 @@ Logged in successfully
   created: Pride and Prejudice
   created: The Selfish Gene
 
-Done: 16 created, 0 skipped
+Done: sixteen created, 0 skipped
 ```
 
 Running it again:
@@ -214,7 +214,7 @@ Logged in successfully
   skipped (exists): Designing Data-Intensive Applications
   ... (14 more skipped) ...
 
-Done: 0 created, 16 skipped
+Done: 0 created, sixteen skipped
 ```
 
 If the services are running on non-default ports (e.g., when running outside Docker), use the `--auth-addr` and `--catalog-addr` flags:
@@ -231,6 +231,6 @@ go run ./services/catalog/cmd/seed \
 
 ## Key Takeaways
 
-- **Seed through the API, not the database.** This validates the entire stack -- auth, authorization, validation, and event publishing -- with every run.
-- **Idempotent seeding via `AlreadyExists`.** The CLI can be run repeatedly without side effects, which is essential for CI pipelines and shared development databases.
+- **Seed through the API, not the database.** This validates the entire stack — auth, authorization, validation, and event publishing — with every run.
+- **Idempotent seeding via `AlreadyExists`.** The CLI can be run repeatedly without side effects, which is essential for continuous integration (CI) pipelines and shared development databases.
 - **Fixture files are test infrastructure.** Treat `books.json` as you would a test fixture: diverse, realistic, and checked into version control. When you add new features (e.g., ISBN validation), the fixture data should still work.

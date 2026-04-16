@@ -1,8 +1,8 @@
 # 13.6 Kubernetes Cluster: EKS
 
-The Terraform foundation from the previous section gave you a VPC with public and private subnets, an Internet Gateway, NAT Gateways, and route tables. That is the network. What runs on top of it is a Kubernetes cluster — and specifically, Amazon EKS.
+The Terraform foundation from the previous section gave you a VPC with public and private subnets, an Internet Gateway, a NAT Gateway, and route tables. That is the network. What runs on top of it is a Kubernetes cluster — and specifically, Amazon EKS.
 
-EKS is AWS's managed Kubernetes service. "Managed" means AWS owns and operates the control plane: the API server, etcd, the scheduler, and the controller manager. You do not provision those machines, you do not patch them, and you do not pay for them individually — the EKS cluster fee covers all of it. What you do provide are the **worker nodes** where your actual workloads run. You also configure how the cluster integrates with the rest of AWS: IAM roles for service accounts, VPC networking, add-ons for storage and DNS, and the load balancer controller that turns Kubernetes Ingress resources into real AWS Application Load Balancers.
+EKS is AWS's managed Kubernetes service. "Managed" means AWS owns and operates the control plane: the API server, etcd, the scheduler, and the controller manager. You do not provision those machines, you do not patch them, and you do not pay for them individually — the EKS cluster fee covers all of it. What you do provide are the **worker nodes** where your workloads run. You also configure how the cluster integrates with the rest of AWS: IAM roles for service accounts, VPC networking, add-ons for storage and DNS, and the load balancer controller that turns Kubernetes Ingress resources into real AWS Application Load Balancers.
 
 This section builds all of that.
 
@@ -106,7 +106,7 @@ module "eks" {
       max_size     = 3
       desired_size = 2
 
-      # Nodes join the cluster running Amazon Linux 2 with the EKS-optimised
+      # Nodes join the cluster running Amazon Linux 2 with the EKS-optimized
       # AMI. The managed node group handles AMI updates and node rotation.
     }
   }
@@ -137,7 +137,7 @@ You do not need to write these policy attachments yourself. They are part of the
 
 ## IRSA roles
 
-IRSA — IAM Roles for Service Accounts — is how individual Kubernetes workloads assume AWS permissions without sharing credentials with the entire node. The mechanism works through the OIDC provider that the EKS module creates: Kubernetes issues a signed JWT token to a pod's service account, the pod presents that token to the AWS STS `AssumeRoleWithWebIdentity` API, and STS returns temporary credentials scoped to a specific IAM role. The node's instance profile plays no part in this exchange.
+IRSA — IAM Roles for Service Accounts — is how individual Kubernetes workloads assume AWS permissions without sharing credentials with the entire node. The mechanism works through the OIDC provider that the EKS module creates: Kubernetes issues a signed JWT to a pod's service account, the pod presents that token to the AWS STS `AssumeRoleWithWebIdentity` API, and STS returns temporary credentials scoped to a specific IAM role. The node's instance profile plays no part in this exchange.
 
 The result is least-privilege by default: a pod running the EBS CSI driver can create and attach EBS volumes, but cannot access S3, Parameter Store, or anything else. If the pod is compromised, the blast radius is limited to the permissions on that one role.
 
@@ -189,7 +189,7 @@ module "lb_controller_irsa_role" {
 
 The `namespace_service_accounts` field is the binding. It tells STS: only a token issued to the service account named `aws-load-balancer-controller` in the `kube-system` namespace may assume this role. If any other pod presents a token — even from the same cluster — the assumption is denied. The Kubernetes service account and the IAM role are linked by convention: the service account carries an annotation `eks.amazonaws.com/role-arn` with the role ARN, and the EKS Pod Identity webhook injects the signed token into the pod's environment at startup.
 
-One ordering note: `ebs_csi_irsa_role` is referenced inside the `cluster_addons` block of `module.eks`. Terraform resolves this correctly because both modules are in the same configuration — it sees the dependency and creates the IRSA role before finalising the add-on configuration. If you split these into separate Terraform layers (a pattern used in larger teams), you would need to pass the role ARN explicitly.
+One ordering note: `ebs_csi_irsa_role` is referenced inside the `cluster_addons` block of `module.eks`. Terraform resolves this correctly because both modules are in the same configuration — it sees the dependency and creates the IRSA role before finalizing the add-on configuration. If you split these into separate Terraform layers (a pattern used in larger teams), you would need to pass the role ARN explicitly.
 
 ---
 

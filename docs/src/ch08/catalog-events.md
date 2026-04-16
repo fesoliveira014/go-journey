@@ -1,10 +1,10 @@
 # 8.1 Catalog Event Publishing
 
-When the catalog service creates, updates, or deletes a book, other parts of the system need to know about it. The search index needs to stay in sync. Future services -- recommendations, analytics, audit logs -- will want the same information. Rather than coupling every downstream consumer to the catalog's database or API, we publish **domain events** to Kafka and let consumers process them independently.
+When the catalog service creates, updates, or deletes a book, other parts of the system need to know about it. The search index needs to stay in sync. Future services—recommendations, analytics, audit logs—will want the same information. Rather than coupling every downstream consumer to the catalog's database or API, we publish **domain events** to Kafka and let consumers process them independently.
 
 This is the core idea behind event-driven architecture: the producer does not know or care who is listening. It publishes a fact ("book X was created") and moves on. Consumers subscribe to the topic and react on their own schedule. This decoupling is what makes it possible to add the search service without modifying any existing consumer code.
 
-If you have used Spring's `ApplicationEventPublisher` or Kotlin's `Flow`-based event buses, the concept is identical. The difference is that Kafka events cross process boundaries and survive restarts -- they are durable, ordered, and replayable.
+If you have used Spring's `ApplicationEventPublisher` or Kotlin's `Flow`-based event buses, the concept is identical. The difference is that Kafka events cross process boundaries and survive restarts—they are durable, ordered, and replayable.
 
 ---
 
@@ -32,11 +32,11 @@ type BookEvent struct {
 
 A few design decisions to note:
 
-1. **`EventType` is a string, not an enum.** Go does not have sum types. You could use `iota` constants, but JSON serialization makes string values more practical -- consumers can switch on the string without importing a shared constants package. The values we use are `"book.created"`, `"book.updated"`, and `"book.deleted"`.
+1. **`EventType` is a string, not an enum.** Go does not have sum types. You could use `iota` constants, but JSON serialization makes string values more practical—consumers can switch on the string without importing a shared constants package. The values we use are `"book.created"`, `"book.updated"`, and `"book.deleted"`.
 
 2. **`omitempty` on data fields.** A `book.deleted` event only needs the `BookID` and `EventType`. Including the full book data would be wasteful and potentially misleading (what does "title" mean for a deleted book?). The `omitempty` tag ensures those fields are absent from the JSON payload when they carry zero values.
 
-3. **`BookID` is a string, not a `uuid.UUID`.** Events cross service boundaries. The consumer should not need to import Go's UUID package to deserialize a message -- a plain string is universally portable.
+3. **`BookID` is a string, not a `uuid.UUID`.** Events cross service boundaries. The consumer should not need to import Go's UUID package to deserialize a message—a plain string is universally portable.
 
 4. **`Timestamp` records when the event was produced.** This is useful for debugging, ordering heuristics, and consumer-side deduplication. It is the wall-clock time on the producer, not a Kafka-assigned timestamp.
 
@@ -56,7 +56,7 @@ type EventPublisher interface {
 
 This is the same dependency-inversion pattern we use everywhere: the service defines what it needs (an `EventPublisher`), and `main.go` wires in the concrete implementation (Kafka). In tests, you can substitute a mock publisher that records events in a slice.
 
-In Spring, you would achieve this with `@Autowired` on an interface type and a `@Component` on the implementation. In Go, there is no container -- you pass the implementation explicitly through the constructor:
+In Spring, you would achieve this with `@Autowired` on an interface type and a `@Component` on the implementation. In Go, there is no container—you pass the implementation explicitly through the constructor:
 
 ```go
 // services/catalog/internal/service/catalog.go
@@ -103,11 +103,11 @@ func (s *CatalogService) CreateBook(ctx context.Context, book *model.Book) (*mod
 }
 ```
 
-The critical decision here is error handling. The database write succeeded -- the book exists. If the Kafka publish fails (broker is down, network partition), we do not roll back the database. Instead, we log the error and return success to the caller. The search index will be temporarily inconsistent, but the bootstrap mechanism (covered in section 8.3) will catch it up on restart.
+The critical decision here is error handling. The database write succeeded—the book exists. If the Kafka publish fails (broker is down, network partition), we do not roll back the database. Instead, we log the error and return success to the caller. The search index will be temporarily inconsistent, but the bootstrap mechanism (covered in section 8.3) will catch it up on restart.
 
-This is a deliberate tradeoff: **availability over strict consistency**. In a library system, it is acceptable for a newly created book to not appear in search results for a few seconds (or even minutes). It would not be acceptable for the "create book" API to fail because the search infrastructure is having problems.
+This is a deliberate trade-off: **availability over strict consistency**. In a library system, it is acceptable for a newly created book to not appear in search results for a few seconds (or even minutes). It would not be acceptable for the "create book" API to fail because the search infrastructure is having problems.
 
-The alternative -- using a transactional outbox pattern where the event is written to the same database as the book and published later by a separate process -- provides stronger guarantees but adds significant complexity. We keep things simple here.
+The alternative—using a transactional outbox pattern where the event is written to the same database as the book and published later by a separate process—provides stronger guarantees but adds significant complexity. We keep things simple here.
 
 `UpdateBook` and `DeleteBook` follow the same structure:
 
@@ -151,7 +151,7 @@ func (s *CatalogService) DeleteBook(ctx context.Context, id uuid.UUID) error {
 }
 ```
 
-Notice that `DeleteBook` constructs the `BookEvent` inline rather than using `bookToEvent`. The book has already been deleted from the database -- there is no `*model.Book` to convert. The event only needs the ID and the event type.
+Notice that `DeleteBook` constructs the `BookEvent` inline rather than using `bookToEvent`. The book has already been deleted from the database—there is no `*model.Book` to convert. The event only needs the ID and the event type.
 
 The `bookToEvent` helper maps the internal model to the event struct:
 
@@ -181,7 +181,7 @@ There is also `UpdateAvailability`, which publishes a `book.updated` event after
 
 ## The Kafka Publisher
 
-The concrete `EventPublisher` implementation uses **Sarama**, the most widely used Go Kafka client library[^1]. It wraps a `SyncProducer` -- a producer that blocks until the broker acknowledges the message.
+The concrete `EventPublisher` implementation uses **Sarama**, the most widely used Go Kafka client library[^1]. It wraps a `SyncProducer`—a producer that blocks until the broker acknowledges the message.
 
 ```go
 // services/catalog/internal/kafka/publisher.go
@@ -206,9 +206,9 @@ func NewPublisher(brokers []string, topic string) (*Publisher, error) {
 
 Two configuration choices matter here:
 
-- **`Return.Successes = true`** -- Required for `SyncProducer`. The producer waits for the broker to confirm receipt before returning. Without this, you would need an `AsyncProducer` and a goroutine reading from the `Successes()` channel.
+- **`Return.Successes = true`**—Required for `SyncProducer`. The producer waits for the broker to confirm receipt before returning. Without this, you would need an `AsyncProducer` and a goroutine reading from the `Successes()` channel.
 
-- **`RequiredAcks = WaitForAll`** -- The broker does not acknowledge the message until all in-sync replicas have written it. This is the strongest durability guarantee Kafka offers. For a search index that can be rebuilt from scratch, `WaitForLocal` (leader-only ack) would also be fine, but `WaitForAll` is a sensible default.
+- **`RequiredAcks = WaitForAll`**—The broker does not acknowledge the message until all in-sync replicas have written it. This is the strongest durability guarantee Kafka offers. For a search index that can be rebuilt from scratch, `WaitForLocal` (leader-only ack) would also be fine, but `WaitForAll` is a sensible default.
 
 ### Topic Naming
 
@@ -247,7 +247,7 @@ ctx, span := otelgo.Tracer("catalog").Start(ctx, "catalog.publish")
 defer span.End()
 ```
 
-The `headerCarrier` type adapts Sarama's `RecordHeader` slice to the `propagation.TextMapCarrier` interface that OpenTelemetry expects. This is boilerplate, but it is important: it allows a trace that starts with an HTTP request to the gateway to flow through the catalog service, into Kafka, and out to the search consumer -- giving you end-to-end visibility across asynchronous boundaries.
+The `headerCarrier` type adapts Sarama's `RecordHeader` slice to the `propagation.TextMapCarrier` interface that OpenTelemetry expects. This is boilerplate, but it is important: it allows a trace that starts with an HTTP request to the gateway to flow through the catalog service, into Kafka, and out to the search consumer—giving you end-to-end visibility across asynchronous boundaries.
 
 ```go
 // services/catalog/internal/kafka/publisher.go
@@ -281,7 +281,7 @@ func (c *headerCarrier) Keys() []string {
 }
 ```
 
-In Java/Kotlin Kafka clients, trace propagation is typically handled by an interceptor or a library like `opentelemetry-java-instrumentation` that patches the client automatically. In Go, you wire it manually -- more code, but nothing is hidden.
+In Java/Kotlin Kafka clients, trace propagation is typically handled by an interceptor or a library like `opentelemetry-java-instrumentation` that patches the client automatically. In Go, you wire it manually—more code, but nothing is hidden.
 
 ---
 
@@ -299,7 +299,7 @@ In Java/Kotlin Kafka clients, trace propagation is typically handled by an inter
 
 ## References
 
-[^1]: [IBM/sarama -- Go client for Apache Kafka](https://github.com/IBM/sarama) -- The Sarama library, originally by Shopify, now maintained by IBM. It provides both sync and async producers, consumer groups, and admin operations.
-[^2]: [OpenTelemetry Go -- Propagation](https://opentelemetry.io/docs/languages/go/propagation/) -- How to propagate trace context across process boundaries using text map carriers.
-[^3]: [Kafka documentation -- Producer Configs](https://kafka.apache.org/documentation/#producerconfigs) -- Reference for `acks`, `retries`, and other producer configuration knobs.
-[^4]: [Martin Kleppmann -- Designing Data-Intensive Applications, Ch. 11](https://dataintensive.net/) -- The canonical reference on event-driven architectures, log-based messaging, and the tradeoffs between different consistency models.
+[^1]: [IBM/sarama—Go client for Apache Kafka](https://github.com/IBM/sarama)—The Sarama library, originally by Shopify, now maintained by IBM. It provides both sync and async producers, consumer groups, and admin operations.
+[^2]: [OpenTelemetry Go—Propagation](https://opentelemetry.io/docs/languages/go/propagation/)—How to propagate trace context across process boundaries using text map carriers.
+[^3]: [Kafka documentation—Producer Configs](https://kafka.apache.org/documentation/#producerconfigs)—Reference for `acks`, `retries`, and other producer configuration knobs.
+[^4]: [Martin Kleppmann—Designing Data-Intensive Applications, Ch. 11](https://dataintensive.net/)—The canonical reference on event-driven architectures, log-based messaging, and the trade-offs between different consistency models.

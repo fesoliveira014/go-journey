@@ -10,7 +10,7 @@ Infrastructure is different. PostgreSQL stores your data on disk. Kafka stores c
 
 A Deployment gives pods random names (`postgres-catalog-7b4f9-xk2p`) and no guarantees about order. A StatefulSet gives you four things that Deployments do not[^1]:
 
-**Stable network identity.** Pods get predictable, ordinal names: `postgres-catalog-0`, `postgres-catalog-1`, and so on. The name is permanent — if pod-0 is deleted and rescheduled, it comes back as pod-0 with the same DNS identity. This is critical for databases that embed their own hostname in configuration (Kafka's `KAFKA_ADVERTISED_LISTENERS` is the canonical example).
+**Stable network identity.** Pods get predictable, ordinal names: `postgres-catalog-0`, `postgres-catalog-1`, and so on. The name is permanent — if pod-0 is deleted and rescheduled, it comes back as pod-0 with the same DNS identity. This is critical for stateful systems that embed their own hostname in configuration (Kafka's `KAFKA_ADVERTISED_LISTENERS` is the canonical example).
 
 **Ordered startup and shutdown.** Pod-0 must reach the `Ready` state before pod-1 starts. Pod-1 must terminate before pod-0 during scale-down. This matters for Kafka's KRaft controller election and for any leader/follower replication scheme.
 
@@ -22,7 +22,7 @@ A Deployment gives pods random names (`postgres-catalog-7b4f9-xk2p`) and no guar
 
 ## PostgreSQL — Catalog Service
 
-The catalog database lives in the `data` namespace. The manifest set is three objects: a headless Service, a StatefulSet, and a ConfigMap. The Secret is assumed to be pre-created (covered in Section 12.5).
+The catalog database lives in the `data` namespace. The manifest set is three objects: a headless Service, a StatefulSet, and a ConfigMap. The Secret is assumed to be pre-created (covered in section 12.5).
 
 ### Headless Service
 
@@ -360,7 +360,24 @@ spec:
 
 The readiness probe is HTTP rather than `exec`. Kubernetes calls `GET /health` on port 7700 directly — no shell wrapper needed. A `200 OK` response signals the pod is ready. This matches the Docker Compose health check (`wget --spider http://localhost:7700/health`), just expressed in Kubernetes-native syntax.
 
-Meilisearch's headless Service follows the same pattern as the others, with port 7700.
+Meilisearch's headless Service follows the same pattern as the others, with port 7700:
+
+```yaml
+# k8s/data/meilisearch-svc.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: meilisearch
+  namespace: data
+spec:
+  clusterIP: None
+  selector:
+    app: meilisearch
+  ports:
+    - name: http
+      port: 7700
+      targetPort: 7700
+```
 
 ---
 
@@ -443,7 +460,7 @@ Apply just messaging:
 kubectl apply -k k8s/messaging/
 ```
 
-Kustomize processes all listed resources as a single transaction — namespace, ConfigMaps, Services, and StatefulSets are applied together. Ordering within the apply is handled by the Kubernetes API server, which creates namespaced resources after the namespace object exists.
+Kustomize processes all listed resources as a single apply operation — namespace, ConfigMaps, Services, and StatefulSets are applied together. Ordering within the apply is handled by the Kubernetes API server, which creates namespaced resources after the namespace object exists.
 
 ---
 
@@ -458,7 +475,7 @@ Kustomize processes all listed resources as a single transaction — namespace, 
 | ConfigMap | Non-secret environment configuration |
 | Secret reference | Injects passwords and keys without embedding them in manifests |
 
-The next section covers Secrets management — how to create the `postgres-catalog-secret`, `meilisearch-secret`, and similar objects without committing credentials to the repository.
+The next section introduces Kustomize environments — including the overlay that generates these Secrets for local development without committing credentials to the repository.
 
 ---
 

@@ -1,6 +1,6 @@
 # 6.2 Admin Dashboard
 
-The admin can already manage books through the CRUD pages built in Chapter 5. But two questions remain unanswered: who are the users of the system, and what reservations exist? This section adds an admin dashboard with two new gRPC RPCs and three new gateway pages.
+The admin can already manage books through the CRUD pages built in Chapter 5, but two questions remain unanswered: who are the users of the system, and what reservations exist? This section adds an admin dashboard with two new gRPC RPCs and three new gateway pages.
 
 ---
 
@@ -37,7 +37,7 @@ This updates the generated client and server interfaces in `gen/auth/v1/`. The a
 
 ## Auth Service Implementation
 
-The implementation follows the same layered pattern as every other RPC in the project: repository -> service -> handler.
+The implementation follows the same layered pattern as every other RPC in the project: repository → service → handler.
 
 ### Repository: `List()`
 
@@ -53,7 +53,7 @@ func (r *UserRepository) List(ctx context.Context) ([]*model.User, error) {
 }
 ```
 
-Nothing surprising here -- `Find` without a `Where` clause returns all records. We order by `created_at DESC` so the most recently registered users appear first.
+Nothing surprising here — `Find` without a `Where` clause returns all records. We order by `created_at DESC` so the most recently registered users appear first.
 
 ### Service: `ListUsers()`
 
@@ -66,7 +66,7 @@ func (s *AuthService) ListUsers(ctx context.Context) ([]*model.User, error) {
 }
 ```
 
-The service layer is a passthrough here. It exists to maintain the pattern -- if you later need to add filtering, caching, or audit logging, you have a place to put it without touching the handler or repository.
+The service layer is a passthrough here. It exists to maintain the pattern — if you later need to add filtering, caching, or audit logging, you have a place to put it without touching the handler or repository.
 
 ### Handler: `ListUsers()` with `RequireRole`
 
@@ -140,7 +140,7 @@ message ReservationDetail {
 }
 ```
 
-Notice that `ReservationDetail` is a separate message from `Reservation`. The existing `Reservation` message stores raw IDs (`book_id`, `user_id`), which is correct for its use cases -- the user already knows their own email, and the book title is shown on the page where they made the reservation. But the admin dashboard needs to display a table with human-readable columns: **who** reserved **what**. Embedding `book_title` and `user_email` directly in the response avoids forcing the gateway to make additional round trips.
+Notice that `ReservationDetail` is a separate message from `Reservation`. The existing `Reservation` message stores raw IDs (`book_id`, `user_id`), which is correct for its use cases — the user already knows their own email, and the book title is shown on the page where they made the reservation. But the admin dashboard needs to display a table with human-readable columns: **who** reserved **what**. Embedding `book_title` and `user_email` directly in the response avoids forcing the gateway to make additional round trips.
 
 ---
 
@@ -188,7 +188,7 @@ func NewReservationService(
 }
 ```
 
-This requires a corresponding update to `deploy/docker-compose.yml` to pass the auth service address to the reservation container:
+Passing the address requires a matching update to `deploy/docker-compose.yml`:
 
 ```yaml
 # deploy/docker-compose.yml (reservation service section)
@@ -230,13 +230,13 @@ func (s *ReservationService) ListAllReservations(ctx context.Context) ([]Reserva
 }
 ```
 
-This code iterates over every reservation and makes two gRPC calls per reservation: one to the catalog service for the book title, one to the auth service for the user email. This is an **N+1 problem** -- if there are 100 reservations, this makes 200 gRPC calls.
+This code iterates over every reservation and makes two gRPC calls per reservation: one to the catalog service for the book title, one to the auth service for the user email. This is an **N+1 problem** — if there are 100 reservations, this makes 200 gRPC calls.
 
 **Why is this acceptable here?**
 
 - This is a tutorial project with a handful of reservations. Performance is not a concern at this scale.
 - The alternative (a batch RPC like `GetBooks(ids)` or denormalizing into the reservation database) would add complexity that distracts from the core lesson.
-- The fallback behavior is graceful: if a book or user lookup fails, the raw UUID is displayed instead. The admin dashboard still works; it just shows less-readable data.
+- The fallback behavior is graceful: if a book or user lookup fails, the raw UUID is displayed instead. The admin dashboard still works; it shows less-readable data.
 
 **Why would this not scale?**
 
@@ -345,7 +345,7 @@ mux.HandleFunc("GET /admin/reservations", srv.AdminReservationList)
 
 ### Templates
 
-The dashboard landing page (`admin_dashboard.html`) provides card-style navigation to the three admin sections -- users, reservations, and book management:
+The dashboard landing page (`admin_dashboard.html`) provides card-style navigation to the three admin sections — users, reservations, and book management:
 
 ```html
 {{define "content"}}
@@ -361,7 +361,7 @@ The dashboard landing page (`admin_dashboard.html`) provides card-style navigati
 {{end}}
 ```
 
-The users template (`admin_users.html`) renders a table with email, name, role, and join date. The reservations template (`admin_reservations.html`) shows user email, book title, status, reserved date, and returned date -- using the denormalized fields from `ReservationDetail`.
+The users template (`admin_users.html`) renders a table with email, name, role, and join date. The reservations template (`admin_reservations.html`) shows user email, book title, status, reserved date, and returned date — using the denormalized fields from `ReservationDetail`.
 
 ### Navigation Update
 
@@ -402,5 +402,5 @@ Non-admin tokens will receive a `PERMISSION_DENIED` error. Unauthenticated reque
 ## Key Takeaways
 
 - **`RequireRole` at the gRPC layer** provides defense in depth. Even if someone bypasses the gateway, the backend services enforce authorization.
-- **Denormalization trades consistency for convenience.** `ReservationDetail` embeds book titles and user emails so the gateway does not need to join data from three services. The tradeoff is that these values are fetched live (N+1 calls), which is fine at tutorial scale but would need batch RPCs or event-driven sync at production scale.
+- **Denormalization trades consistency for convenience.** `ReservationDetail` embeds book titles and user emails so the gateway does not need to join data from three services. The trade-off is that these values are fetched live (N+1 calls), which is fine at tutorial scale but would need batch RPCs or event-driven sync at production scale.
 - **Separate handler files by domain.** `admin.go` handles cross-service admin views; `catalog.go` handles catalog CRUD. This keeps files focused and navigable.

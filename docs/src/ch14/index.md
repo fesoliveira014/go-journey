@@ -1,6 +1,8 @@
 # Chapter 14: Production Hardening
 
-Chapter 13 deployed the library system to real infrastructure: an EKS cluster running five services, three RDS instances holding persistent state, an MSK cluster brokering Kafka events, and a GitHub Actions pipeline shipping code on every push to `main`. That is a genuine production deployment — the application is reachable, the data survives pod restarts, and nobody has to run `kubectl apply` from a laptop. But "reachable" and "production-ready" are not the same thing. Three gaps remained when Chapter 13 ended, each one deferred in the name of getting the system running before addressing hardening. This chapter closes all three. None of them require changes to application code, Dockerfiles, or Earthfiles — everything that needs to change lives in Terraform and the production Kustomize overlay.
+Chapter 13 deployed the library system to real infrastructure: an EKS cluster running five services, three RDS instances holding persistent state, an MSK cluster brokering Kafka events, and a GitHub Actions pipeline shipping code on every push to `main`. That is a genuine production deployment — the application is reachable, the data survives pod restarts, and nobody has to run `kubectl apply` from a laptop.
+
+But "reachable" and "production-ready" are not the same thing. Three gaps remained when Chapter 13 ended, each one deferred in the name of getting the system running before addressing hardening. This chapter closes all three. None of them require changes to application code, Dockerfiles, or Earthfiles — everything that needs to change lives in Terraform and the production Kustomize overlay.
 
 ---
 
@@ -12,27 +14,27 @@ Chapter 13 deployed the library system to real infrastructure: an EKS cluster ru
 | Secrets | Placeholder values in the production overlay's `secretGenerator` | External Secrets Operator syncing live values from AWS Secrets Manager |
 | Kafka encryption | Plaintext connections on port 9092 | TLS connections on port 9094 |
 
-Each row is a separate concern with its own tools and its own section in this chapter. They are also independent of each other — you can apply them in any order, or apply just one if that is what your situation calls for. The sections below treat them sequentially because that matches the natural dependency order when you are also setting up DNS for the first time.
+Each row is a separate concern with its own tools and its own section in this chapter. They are also independent — apply them in any order, or apply just one. The sections below treat them sequentially because that matches the natural dependency order when you are also setting up DNS for the first time.
 
 ---
 
 ## Why these gaps matter
 
-It is tempting to think of these as polish — things you would fix before a real public launch but can ignore while learning. That framing undersells the risk. Each gap is an audit failure in any environment subject to compliance frameworks, and the risks are concrete even if you are running a personal project.
+It is tempting to think of these as polish: things you would fix before a public launch but can ignore while learning. That framing undersells the risk. Each gap is an audit failure in any environment subject to compliance frameworks, and the risks are concrete even if you are running a personal project.
 
-Serving HTTP without TLS means every request between the browser and your ALB travels in plaintext. That includes session tokens, API responses, and any user data in query strings or response bodies. The ALB terminates TLS at the edge in Chapter 14's target state — traffic inside the VPC between the ALB and the pods can remain HTTP, which is a common and acceptable pattern — but the public-facing leg must be encrypted. Modern browsers actively warn users about non-HTTPS sites; more practically, OAuth2 providers including Google will refuse to complete a login flow if the redirect URI is HTTP.
+Serving HTTP without TLS (Transport Layer Security) means every request between the browser and your ALB travels in plaintext. That includes session tokens, API responses, and any user data in query strings or response bodies. The ALB terminates TLS at the edge in Chapter 14's target state — traffic inside the VPC between the ALB and the pods can remain HTTP, which is a common and acceptable pattern — but the public-facing leg must be encrypted. Modern browsers actively warn users about non-HTTPS sites; more practically, OAuth2 providers, including Google, will refuse to complete a login flow if the redirect URI is HTTP.
 
-Pasting database passwords manually into a Kustomize `secretGenerator` creates several problems at once. The secrets are almost certainly committed to git at some point — either accidentally or because someone thinks "I'll fix it later." Even if you avoid git, the values exist in someone's terminal history, in CI logs if you print them for debugging, and in every K8s Secret object that was ever created with the wrong value and then deleted. Proper secrets management means the application retrieves credentials from a single authoritative source — AWS Secrets Manager in this case — and the Kubernetes Secret is populated automatically and rotated without human intervention.
+Pasting database passwords into a Kustomize `secretGenerator` creates several problems. The secrets are almost certainly committed to git at some point — either accidentally or because someone thinks "I'll fix it later." Even if you avoid git, the values exist in someone's terminal history, in CI logs if you print them for debugging, and in every Kubernetes Secret object that was ever created with the wrong value and then deleted. Proper secrets management means the application retrieves credentials from a single authoritative source — AWS Secrets Manager in this case — and the Kubernetes Secret is populated automatically and rotated without human intervention.
 
-Kafka's plaintext listener (port 9092) transmits all broker traffic unencrypted inside the VPC. VPCs are not the internet, and an attacker who has not already breached your network boundary cannot read that traffic — but that is a weaker guarantee than it sounds. Lateral movement from a compromised pod, misconfigured security groups, or VPC peering arrangements can all expose plaintext traffic to unintended readers. MSK supports TLS-only listener configuration; enabling it costs nothing and closes the exposure entirely.
+Kafka's plaintext listener (port 9092) transmits all broker traffic unencrypted inside the VPC. VPCs are not the internet, and an attacker who hasn't breached your network boundary cannot read it — but that is a weaker guarantee than it sounds. Lateral movement from a compromised pod, misconfigured security groups, or VPC peering arrangements can all expose plaintext traffic to unintended readers. MSK supports TLS-only listener configuration; enabling it costs nothing and closes the exposure entirely.
 
 ---
 
 ## What stays the same
 
-The Kustomize layering from Chapter 12 and the CI/CD pipeline from Chapter 13 are not touched. The base manifests under `k8s/base/` remain unchanged — a deliberate constraint that demonstrates the value of the overlay pattern. Application services do not need to know anything about where TLS terminates, how secrets reach the pod's environment, or what port the Kafka broker is listening on. They connect to hostnames and read environment variables; the infrastructure layer handles everything else.
+The Kustomize layering from Chapter 12 and the CI/CD pipeline from Chapter 13 are untouched. The base manifests under `k8s/base/` remain unchanged — a deliberate constraint that demonstrates the value of the overlay pattern. Application services do not need to know anything about where TLS terminates, how secrets reach the pod's environment, or what port the Kafka broker is listening on. They connect to hostnames and read environment variables; the infrastructure layer handles everything else.
 
-The Earthfile CI targets — `+lint`, `+test`, `+build`, `+integration-test` — run exactly as they did in Chapter 13. The GitHub Actions pipeline that calls them is unchanged. The only files that change in this chapter are:
+The Earthfile CI targets — `+lint`, `+test`, `+build`, `+integration-test` — run as they did in Chapter 13. The GitHub Actions pipeline that calls them is unchanged. The only files that change in this chapter are:
 
 - Terraform files under `terraform/` — for the Route 53 hosted zone, ACM certificate, and MSK listener configuration
 - The production Kustomize overlay under `k8s/overlays/production/` — for the External Secrets Operator configuration and the updated Kafka broker address
@@ -53,9 +55,9 @@ All three changes are either free or negligible.
 | MSK TLS listener | No additional cost |
 | External Secrets Operator | No additional cost (open-source operator running on existing nodes) |
 
-The only new line item is the Route 53 hosted zone, which is billed at fifty cents per month regardless of query volume up to one billion queries. ACM certificates for domains managed in Route 53 are issued and renewed automatically at no charge. MSK supports TLS as a configuration flag on the existing brokers — there is no separate TLS broker tier. External Secrets Operator runs as a Deployment in your EKS cluster, consuming a small amount of CPU and memory on nodes you are already paying for.
+The only new line item is the Route 53 hosted zone, which is billed at $0.50 per month, which includes standard query volumes typical of this project. ACM certificates for domains managed in Route 53 are issued and renewed automatically at no charge. MSK supports TLS as a configuration flag on the existing brokers — there is no separate TLS broker tier. External Secrets Operator runs as a Deployment in your EKS cluster, consuming a small amount of CPU and memory on nodes you are already paying for.
 
-If you already own a domain and it is managed elsewhere — GoDaddy, Namecheap, Cloudflare — you have two options: transfer the domain to Route 53 (a one-time process that preserves your existing records) or keep the domain where it is and create an NS delegation for a subdomain. The sections below assume you are creating a new hosted zone; the delegation path is noted where it matters.
+If you already own a domain and it is managed elsewhere — GoDaddy, Namecheap, or Cloudflare — you have two options: transfer the domain to Route 53 (a one-time process that preserves your existing records) or keep the domain where it is and create a name server (NS) delegation for a subdomain. The sections below assume you are creating a new hosted zone; the delegation path is noted where it matters.
 
 ---
 
@@ -122,9 +124,9 @@ The changes touch three edges in this diagram: the public entry point gains TLS 
 
 ---
 
-By the end of this chapter, the library system will pass a basic security review: encrypted traffic on every public-facing edge, secrets sourced from a managed store rather than committed configuration, and encrypted broker connections inside the cluster. These are not exotic hardening measures — they are the baseline that any production system deployed to a regulated environment is expected to meet, and they are the baseline that a careful engineer expects even in environments that are not formally regulated. Getting comfortable applying them in a learning project means they will not be unfamiliar when the stakes are higher.
+By the end of this chapter, the library system will pass a basic security review: encrypted traffic on every public-facing edge, secrets sourced from a managed store rather than committed configuration, and encrypted broker connections inside the cluster. These are not exotic hardening measures. They are the baseline that any production system in a regulated environment must meet — and that a careful engineer expects everywhere else too. Getting comfortable applying them in a learning project means they will not be unfamiliar when the stakes are higher.
 
-Before moving to section 14.1, confirm that your Chapter 13 cluster is still running and healthy: `kubectl get pods -n library` should show all pods in the `Running` state. If you have run `terraform destroy` since Chapter 13, re-apply the Chapter 13 Terraform before continuing — the changes in this chapter build on top of the existing infrastructure rather than replacing it.
+Before section 14.1, confirm your Chapter 13 cluster is running and healthy: `kubectl get pods -n library` should show all pods in the `Running` state. If you have run `terraform destroy` since Chapter 13, re-apply the Chapter 13 Terraform before continuing — the changes in this chapter build on top of the existing infrastructure rather than replacing it.
 
 ---
 

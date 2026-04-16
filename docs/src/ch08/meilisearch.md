@@ -1,8 +1,8 @@
 # 8.3 Meilisearch Integration
 
-Meilisearch is a lightweight, open-source search engine written in Rust. It is designed for end-user-facing search: fast typo-tolerant queries, faceted filtering, and instant suggestions out of the box. It ships as a single binary, requires no JVM, and runs comfortably in a Docker container with 256MB of RAM.
+Meilisearch is a lightweight, open-source search engine written in Rust. It is designed for end-user-facing search: fast typo-tolerant queries, faceted filtering, and instant suggestions by default. It ships as a single binary, requires no JVM, and runs comfortably in a Docker container with 256MB of RAM.
 
-**Why not Elasticsearch?** Elasticsearch is the industry standard, but it is also a complex distributed system. It needs a JVM, consumes significant resources at rest, and requires careful tuning for production use. For a learning project with a modest dataset, Meilisearch gives us the same search concepts (indexes, documents, filterable attributes, relevance ranking) with a fraction of the operational overhead. The Go client library (`meilisearch-go`) is well-maintained and straightforward.
+**Why not Elasticsearch?** Elasticsearch is the industry standard, but it is also a complex distributed system. It needs a JVM, consumes significant resources at rest, and requires careful tuning for production use. For a learning project with a modest dataset, Meilisearch gives us the same search concepts (indexes, documents, filterable attributes, relevance ranking) by default. The Go client library (`meilisearch-go`) is well-maintained and straightforward.
 
 If you have used Elasticsearch with Spring Data, the conceptual mapping is:
 
@@ -85,13 +85,13 @@ func (m *MeilisearchIndex) EnsureIndex(_ context.Context) error {
 
 Three categories of attributes are configured:
 
-- **Searchable attributes** (`title`, `author`, `isbn`, `description`, `genre`) -- These are the fields Meilisearch will scan when a user types a query. Order matters: Meilisearch ranks matches in earlier fields higher. A match in `title` scores higher than a match in `description`.
+- **Searchable attributes** (`title`, `author`, `isbn`, `description`, `genre`)—These are the fields Meilisearch will scan when a user types a query. Order matters: Meilisearch ranks matches in earlier fields higher. A match in `title` scores higher than a match in `description`.
 
-- **Filterable attributes** (`genre`, `author`, `available_copies`) -- These enable exact-match filtering. Without declaring a field as filterable, you cannot use it in filter expressions. The `available_copies` field is filterable so we can implement "available only" searches with `available_copies > 0`.
+- **Filterable attributes** (`genre`, `author`, `available_copies`)—These enable exact-match filtering. Without declaring a field as filterable, you cannot use it in filter expressions. The `available_copies` field is filterable so we can implement "available only" searches with `available_copies > 0`.
 
-- **Sortable attributes** (`title`, `published_year`) -- These enable explicit sort ordering in queries.
+- **Sortable attributes** (`title`, `published_year`)—These enable explicit sort ordering in queries.
 
-The `index_already_exists` error is handled with a type assertion on the Meilisearch error type. This is Go's pattern for typed errors -- there is no exception hierarchy to catch, so you assert the error to a concrete type and inspect its fields. The attribute updates are always re-applied even if the index exists, making the method idempotent.
+The `index_already_exists` error is handled with a type assertion on the Meilisearch error type. This is Go's pattern for typed errors—there is no exception hierarchy to catch, so you assert the error to a concrete type and inspect its fields. The attribute updates are always re-applied even if the index exists, making the method idempotent.
 
 ---
 
@@ -161,7 +161,7 @@ func buildFilterString(filters SearchFilters) []string {
 }
 ```
 
-The `%q` format verb produces a quoted string, which is what Meilisearch's filter syntax requires for string comparisons. The `available_copies > 0` filter uses numeric comparison -- this only works because `available_copies` was declared as a filterable attribute in `EnsureIndex`.
+The `%q` format verb produces a quoted string, which is what Meilisearch's filter syntax requires for string comparisons. The `available_copies > 0` filter uses numeric comparison—this only works because `available_copies` was declared as a filterable attribute in `EnsureIndex`.
 
 ### Suggest (Autocomplete)
 
@@ -194,7 +194,7 @@ func (m *MeilisearchIndex) Suggest(_ context.Context, prefix string, limit int) 
 }
 ```
 
-The key optimization is `AttributesToRetrieve`. By requesting only `id`, `title`, and `author`, Meilisearch sends less data over the wire -- important for autocomplete where you are making requests on every keystroke.
+The key optimization is `AttributesToRetrieve`. By requesting only `id`, `title`, and `author`, Meilisearch sends less data over the wire—important for autocomplete where you are making requests on every keystroke.
 
 ### Hit Parsing
 
@@ -298,10 +298,10 @@ func Run(ctx context.Context, catalog catalogv1.CatalogServiceClient, svc IndexB
 The logic is straightforward:
 
 1. **Ensure the index exists** with the correct attribute configuration.
-2. **Check if the index already has documents.** If so, skip -- the index was already populated, either by a previous bootstrap or by Kafka events.
+2. **Check if the index already has documents.** If so, skip—the index was already populated, either by a previous bootstrap or by Kafka events.
 3. **Page through the catalog via gRPC**, upserting each book into Meilisearch.
 
-The `IndexBootstrapper` interface is another example of interface segregation. The bootstrap code needs `EnsureIndex`, `Count`, and `Upsert` -- it does not need `Search` or `Suggest`. Defining a narrow interface makes the mock trivial and the dependency explicit.
+The `IndexBootstrapper` interface is another example of interface segregation. The bootstrap code needs `EnsureIndex`, `Count`, and `Upsert`—it does not need `Search` or `Suggest`. Defining a narrow interface makes the mock trivial and the dependency explicit.
 
 Notice that bootstrap errors on individual books are logged but do not stop the process. If one book fails to index (maybe it has unusual characters that Meilisearch rejects), we continue with the rest. The missing book will appear in the index the next time it is updated in the catalog.
 
@@ -386,11 +386,11 @@ func Run(ctx context.Context, brokers []string, topic string, idx Indexer) error
 
 Several configuration choices are significant:
 
-- **Consumer group: `"search-indexer"`** -- This is the Kafka consumer group ID. Kafka tracks which messages each group has consumed. If the search service restarts, it picks up where it left off. If you add a second consumer with a different group ID, both receive all messages independently.
+- **Consumer group: `"search-indexer"`**—This is the Kafka consumer group ID. Kafka tracks which messages each group has consumed. If the search service restarts, it picks up where it left off. If you add a second consumer with a different group ID, both receive all messages independently.
 
-- **`OffsetOldest`** -- When the consumer group starts for the first time (no committed offsets), begin from the oldest available message. Combined with bootstrap, this is belt-and-suspenders: bootstrap loads the current state, and `OffsetOldest` catches any events published between bootstrap completion and consumer start.
+- **`OffsetOldest`**—When the consumer group starts for the first time (no committed offsets), begin from the oldest available message. Combined with bootstrap, this is defense-in-depth: bootstrap loads the current state, and `OffsetOldest` catches any events published between bootstrap completion and consumer start.
 
-- **`NewBalanceStrategyRoundRobin()`** -- If you scale the search service to multiple instances, this strategy distributes Kafka partitions evenly across them.
+- **`NewBalanceStrategyRoundRobin()`**—If you scale the search service to multiple instances, this strategy distributes Kafka partitions evenly across them.
 
 The `Consume` call blocks until the context is cancelled or an error occurs. The outer `for` loop retries after transient errors (broker rebalancing, temporary network issues). When the context is cancelled (shutdown signal), the function returns cleanly.
 
@@ -415,7 +415,7 @@ func (h *consumerHandler) ConsumeClaim(session sarama.ConsumerGroupSession,
 }
 ```
 
-For each message, we attempt to process it. On success, `MarkMessage` commits the offset -- Kafka will not deliver this message again. On failure, we log the error and **move on**. The message offset is not committed, so it would be redelivered on the next rebalance. In practice, for a search index, skipping a failed message is acceptable -- the next update to the same book will overwrite the stale data.
+For each message, we attempt to process it. On success, `MarkMessage` commits the offset—Kafka will not deliver this message again. On failure, we log the error and **move on**. The message offset is not committed, so it would be redelivered on the next rebalance. In practice, for a search index, skipping a failed message is acceptable—the next update to the same book will overwrite the stale data.
 
 The `handleEvent` function deserializes the JSON and dispatches by event type:
 
@@ -451,7 +451,7 @@ func handleEvent(ctx context.Context, idx Indexer, data []byte) error {
 }
 ```
 
-Both `book.created` and `book.updated` map to `Upsert` -- Meilisearch's `AddDocuments` method is an upsert (insert or replace) based on the primary key. There is no need to distinguish between creating a new document and updating an existing one.
+Both `book.created` and `book.updated` map to `Upsert`—Meilisearch's `AddDocuments` method is an upsert (insert or replace) based on the primary key. There is no need to distinguish between creating a new document and updating an existing one.
 
 Unknown event types are logged and ignored. This is forward-compatible: if a future version of the catalog service publishes a new event type (say, `book.archived`), the current consumer will not crash.
 
@@ -511,7 +511,7 @@ This is the advantage of extracting `handleEvent` as a standalone function: you 
 
 One subtlety worth understanding: Meilisearch operations are **asynchronous**. When you call `AddDocuments` or `DeleteDocument`, Meilisearch enqueues the operation and returns a task ID immediately. The document is not searchable until the task completes (typically under 100ms for single-document operations, longer for bulk imports).
 
-Our code ignores the task ID -- we call `AddDocuments` and move on without waiting for completion. This is acceptable for a real-time index fed by Kafka events: the latency between a catalog change and it appearing in search results is already measured in seconds (Kafka delivery + consumer processing). Adding a few more milliseconds of Meilisearch task processing does not meaningfully change the user experience.
+Our code ignores the task ID—we call `AddDocuments` and move on without waiting for completion. This is acceptable for a real-time index fed by Kafka events: the latency between a catalog change and it appearing in search results is already measured in seconds (Kafka delivery + consumer processing). Adding a few more milliseconds of Meilisearch task processing does not meaningfully change the user experience.
 
 If you needed stronger guarantees (for example, in a test that indexes a document and immediately searches for it), you would use `WaitForTask`:
 
@@ -528,7 +528,7 @@ task, err := client.WaitForTask(taskInfo.TaskUID)
 
 1. **Add a year range filter.** Extend `SearchFilters` with `MinYear` and `MaxYear` fields. Update `buildFilterString` to generate Meilisearch filter expressions like `published_year >= 2020 AND published_year <= 2025`. Remember to add `published_year` to the filterable attributes in `EnsureIndex`.
 
-2. **Write an integration test with Meilisearch.** Using Docker Compose or `testcontainers-go`, start a Meilisearch instance, call `EnsureIndex`, upsert a few documents, and verify that `Search` returns the expected results. This requires waiting for Meilisearch tasks to complete -- use `WaitForTask`.
+2. **Write an integration test with Meilisearch.** Using Docker Compose or `testcontainers-go`, start a Meilisearch instance, call `EnsureIndex`, upsert a few documents, and verify that `Search` returns the expected results. This requires waiting for Meilisearch tasks to complete—use `WaitForTask`.
 
 3. **Handle malformed JSON in the consumer.** Currently, if the Kafka message contains invalid JSON, `handleEvent` returns an error and the message is not acknowledged. Over time, the consumer will be stuck retrying the same bad message. Implement a dead-letter strategy: after N failures, log the raw message and commit the offset.
 
@@ -538,8 +538,8 @@ task, err := client.WaitForTask(taskInfo.TaskUID)
 
 ## References
 
-[^1]: [Meilisearch documentation](https://www.meilisearch.com/docs) -- Official reference for indexes, search parameters, filtering, and the REST API.
-[^2]: [meilisearch-go -- GitHub](https://github.com/meilisearch/meilisearch-go) -- The official Go client library for Meilisearch.
-[^3]: [Meilisearch -- Filtering](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_expression_reference) -- Filter expression syntax, including comparison operators and boolean combinators.
-[^4]: [IBM/sarama -- ConsumerGroup](https://pkg.go.dev/github.com/IBM/sarama#ConsumerGroup) -- Sarama consumer group documentation, including rebalancing strategies and offset management.
-[^5]: [Meilisearch -- Asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations) -- How Meilisearch task queuing works and when to use `WaitForTask`.
+[^1]: [Meilisearch documentation](https://www.meilisearch.com/docs)—Official reference for indexes, search parameters, filtering, and the REST API.
+[^2]: [meilisearch-go—GitHub](https://github.com/meilisearch/meilisearch-go)—The official Go client library for Meilisearch.
+[^3]: [Meilisearch—Filtering](https://www.meilisearch.com/docs/learn/filtering_and_sorting/filter_expression_reference)—Filter expression syntax, including comparison operators and boolean combinators.
+[^4]: [IBM/sarama—ConsumerGroup](https://pkg.go.dev/github.com/IBM/sarama#ConsumerGroup)—Sarama consumer group documentation, including rebalancing strategies and offset management.
+[^5]: [Meilisearch—Asynchronous operations](https://www.meilisearch.com/docs/learn/async/asynchronous_operations)—How Meilisearch task queuing works and when to use `WaitForTask`.

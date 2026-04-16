@@ -1,6 +1,6 @@
 ## 1.3 Building an HTTP Server
 
-Go ships with a production-capable HTTP server in its standard library. No framework required, no servlet container to configure, no application server to deploy into — `net/http` handles all of it. This section covers the core abstractions, builds the gateway's health and books endpoints line by line, and shows you how the server is wired together in `main`.
+Go ships with a production-capable HTTP server in its standard library. No framework required, no servlet container to configure, no application server to deploy to — `net/http` handles all of it. This section covers the core abstractions, builds the gateway's health and books endpoints line by line, and shows you how the server is wired together in `main`.
 
 ---
 
@@ -55,7 +55,7 @@ A handler reads from `*http.Request` and writes to `http.ResponseWriter`. Here i
 3. Write the status code (`w.WriteHeader(statusCode)`).
 4. Write the body (`w.Write(...)` or via an encoder).
 
-One important rule: **`WriteHeader` must be called before any call to `Write`**. Once you call `Write`, Go automatically sends a `200 OK` if you have not called `WriteHeader` yet. Calling `WriteHeader` after `Write` has no effect and produces a warning in the logs.
+One important rule: **`WriteHeader` must be called before any call to `Write`**. Once you call `Write`, Go automatically sends `200 OK` if `WriteHeader` has not already been called; calling it afterwards is a no-op that logs a warning.
 
 Reading from the request:
 
@@ -91,7 +91,7 @@ type Book struct {
 }
 ```
 
-The backtick syntax is Go's raw string literal for struct tags. The `json:"id"` tag tells the encoder to use `"id"` as the JSON key instead of `"ID"`. Without the tag, Go uses the exact field name — so `ID` would serialize as `"ID"`, and `Title` as `"Title"`. Tags are the Go equivalent of Jackson's `@JsonProperty` annotation in Java, but they live inline on the struct field rather than as a separate annotation.
+Struct tags live inside Go's raw-string literal (backticks), which is why backslashes in them are literal rather than escaped. The `json:"id"` tag tells the encoder to use `"id"` as the JSON key instead of `"ID"`. Without the tag, Go uses the exact field name — so `ID` would serialize as `"ID"`, and `Title` as `"Title"`. Tags are the Go equivalent of Jackson's `@JsonProperty` annotation in Java, but they live inline on the struct field rather than as a separate annotation.
 
 Additional options: `json:"name,omitempty"` skips the field when it holds its zero value. `json:"-"` excludes the field from serialization entirely.
 
@@ -169,7 +169,7 @@ func Books(w http.ResponseWriter, r *http.Request) {
 
 `sampleBooks` is a package-level variable — a slice of `Book` structs initialized with composite literals. The `var` keyword at package scope is the Go equivalent of a static field. This is in-memory stub data; later chapters replace it with real database queries.
 
-`json.NewEncoder(w).Encode(sampleBooks)` serializes the entire slice as a JSON array. The encoder handles slices, structs, maps, and primitives — no configuration needed.
+`json.NewEncoder(w).Encode(sampleBooks)` serializes the entire slice as a JSON array. The encoder handles slices, structs, maps, and primitives out of the box.
 
 ---
 
@@ -213,7 +213,7 @@ if port == "" {
 }
 ```
 
-`os.Getenv` returns an empty string when the variable is not set — never an error, never a panic. The explicit fallback to `"8080"` is the standard Go idiom for optional environment configuration. You will see this pattern throughout the project for every configurable value (database URL, Kafka brokers, gRPC addresses). It makes the service runnable locally without any environment setup while remaining configurable in containers.
+`os.Getenv` returns an empty string when the variable is not set — never an error, never a panic. The explicit fallback to `"8080"` is a common Go idiom for optional environment configuration. You will see this pattern throughout the project for every configurable value (database URL, Kafka brokers, gRPC addresses). It makes the service runnable locally without any environment setup while remaining configurable in containers.
 
 #### Starting the Server
 
@@ -223,7 +223,7 @@ if err := http.ListenAndServe(addr, mux); err != nil {
 }
 ```
 
-`http.ListenAndServe` starts a TCP listener and begins accepting connections. It only returns if an error occurs (e.g., the port is already in use). `log.Fatalf` logs the message and calls `os.Exit(1)`. The `:=` in the `if` initializer is idiomatic Go — it declares `err` scoped to the `if` block and checks it in one line, equivalent to Java's try-with-resources pattern for the variable scoping benefit.
+`http.ListenAndServe` starts a TCP listener and begins accepting connections. It only returns if an error occurs (e.g., the port is already in use). `log.Fatalf` logs the message and calls `os.Exit(1)`. The `:=` in the `if` initializer is idiomatic Go — it declares `err` scoped to the `if` block and checks it in one line. (Java programmers will recognize the scoping idea from try-with-resources, though the purpose is different.)
 
 You can run the server directly:
 

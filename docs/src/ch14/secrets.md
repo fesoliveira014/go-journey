@@ -1,4 +1,4 @@
-# 14.3 Secrets Management with External Secrets Operator
+# 14.3 — Secrets Management with External Secrets Operator
 
 Chapter 13's production overlay left a comment in the `secretGenerator` block that was easy to skim past:
 
@@ -22,9 +22,9 @@ That comment describes a manual process: you run an AWS CLI command to retrieve 
 
 **Rotation without downtime.** AWS Secrets Manager can rotate the RDS master password on a schedule — roughly every 30 days is a common policy. When it does, the old password stops working immediately. If your Kubernetes Secret still holds the old value, every pod that restarts or that reads the credential at connection-establishment time will fail with an authentication error. Manual rotation means someone has to notice the failure, retrieve the new password, update the Secret, and trigger a rolling restart — all while the application is broken.
 
-**Error-prone during re-deployments.** Placeholder values are sticky. If you run `kustomize build overlays/production | kubectl apply -f -` after pulling the latest git state on a fresh machine, the Secrets you created manually are already in the cluster — so nothing breaks immediately. But the day you run `terraform destroy` and `terraform apply` to rebuild the cluster for a new region or disaster recovery, you have to reconstruct every Secret by hand. The list of secrets grows over time, documentation for the process drifts, and at least one value gets wrong.
+**Error-prone during re-deployments.** Placeholder values are sticky. If you run `kustomize build overlays/production | kubectl apply -f -` after pulling the latest git state on a fresh machine, the Secrets you created manually are already in the cluster — so nothing breaks immediately. But the day you run `terraform destroy` and `terraform apply` to rebuild the cluster for a new region or disaster recovery, you have to reconstruct every Secret by hand. The list of secrets grows over time, documentation for the process drifts, and at least one value is wrong.
 
-**The principle of least manual intervention.** Infrastructure-as-code exists to make system state reproducible without human memory. A manual secret-pasting step is a gap in that reproducibility — a step that is not captured in any file that `git blame` can show you, not gated by any code review, and not executable by your CI pipeline without introducing its own secret-management problem.
+**The principle of least manual intervention.** Infrastructure as code exists to make system state reproducible without human memory. A manual secret-pasting step is a gap in that reproducibility — a step that is not captured in any file that `git blame` can show you, not gated by any code review, and not executable by your CI pipeline without introducing its own secret-management problem.
 
 The right answer is to treat secrets the same way you treat infrastructure: define them declaratively, let an automated system reconcile the desired state with the actual state, and audit the process rather than the operator.
 
@@ -32,7 +32,7 @@ The right answer is to treat secrets the same way you treat infrastructure: defi
 
 ## How External Secrets Operator works
 
-**External Secrets Operator** (ESO) is a Kubernetes controller that bridges external secret stores — AWS Secrets Manager, HashiCorp Vault, GCP Secret Manager, Azure Key Vault, and others — with native Kubernetes Secrets.[^1] Instead of running a kubectl command, you declare two custom resources:
+**External Secrets Operator** (ESO) is a Kubernetes controller that bridges external secret stores — AWS Secrets Manager, HashiCorp Vault, Google Secret Manager, Azure Key Vault, and others — with native Kubernetes Secrets.[^1] Instead of running a `kubectl` command, you declare two custom resources:
 
 - A **`SecretStore`** that tells ESO how to connect to the external store. For AWS Secrets Manager, this specifies the region and the IAM authentication method.
 - An **`ExternalSecret`** that tells ESO which value to fetch and what Kubernetes Secret to create from it. You specify the remote key name, the field within that key's JSON payload, and the local Secret key to populate.
@@ -343,7 +343,7 @@ spec:
         property: key
 ```
 
-Note that the meilisearch ExternalSecret targets the `data` namespace — not `library` — because the Meilisearch StatefulSet runs in the `data` namespace. This also requires a SecretStore in the `data` namespace; see `secret-store.yaml` for the second SecretStore definition.
+Note that the Meilisearch ExternalSecret targets the `data` namespace — not `library` — because the Meilisearch StatefulSet runs in the `data` namespace. This also requires a SecretStore in the `data` namespace; see `secret-store.yaml` for the second SecretStore definition.
 
 Each `ExternalSecret` maps a single field from a Secrets Manager secret to a single key in a Kubernetes Secret. The `target.name` matches exactly the name used in the StatefulSet or Deployment's `secretKeyRef.name` — `postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `jwt-secret`, and `meilisearch-secret`. No application manifest changes are required.
 

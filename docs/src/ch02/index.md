@@ -1,6 +1,6 @@
 # Chapter 2: First Microservice — Catalog Service
 
-In this chapter, we build the first standalone microservice: the **Catalog service**. It manages the book registry with full CRUD operations, exposes a gRPC API, stores data in PostgreSQL via GORM, and uses versioned SQL migrations.
+In this chapter, we build the first standalone microservice: the **Catalog service**. It manages the book registry with full CRUD operations, exposes a gRPC API, stores data in PostgreSQL via GORM, and manages schema with versioned SQL migrations.
 
 ## What You'll Learn
 
@@ -35,12 +35,12 @@ gRPC Request
     PostgreSQL
 ```
 
-Each layer depends only on the layer below it through interfaces, making the code testable and maintainable.
+Each layer depends on the layer below it only through an interface, which keeps every layer independently testable.
 
 ## Sections
 
 1. **[Protocol Buffers & gRPC](./protobuf-grpc.md)** — Define the service API using protobuf, generate Go code with buf
 2. **[PostgreSQL & Migrations](./postgresql-migrations.md)** — Set up the database, write versioned migrations
-3. **[The Repository Pattern with GORM](./repository-pattern.md)** — Implement data access with GORM
+3. **[Repository Pattern with GORM](./repository-pattern.md)** — Implement data access with GORM
 4. **[Service Layer & Business Logic](./service-layer.md)** — Business rules, validation, interfaces
 5. **[Wiring It All Together](./wiring.md)** — gRPC server setup, dependency injection, testing with grpcurl

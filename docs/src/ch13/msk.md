@@ -1,6 +1,6 @@
 # 13.5 Amazon MSK
 
-Chapter 12 ran Kafka as a StatefulSet in the `messaging` namespace. That approach required you to manage KRaft quorum configuration, ordinal pod naming for stable advertised listeners, and persistent volume sizing yourself. Just as Chapter 13 replaced the self-managed PostgreSQL StatefulSets with RDS, it is time to apply the same trade-off to Kafka: hand off the operational burden to a managed service and keep your focus on application logic.
+Chapter 12 ran Kafka as a StatefulSet in the `messaging` namespace. That approach required you to manage KRaft quorum configuration, ordinal pod naming for stable advertised listeners, and persistent volume sizing yourself. Just as section 13.4 replaced the self-managed PostgreSQL StatefulSets with RDS, it is time to apply the same trade-off to Kafka: hand off the operational burden to a managed service and keep your focus on application logic.
 
 Amazon Managed Streaming for Apache Kafka (MSK) is AWS's hosted Kafka offering. It runs the same Apache Kafka protocol — the same producer and consumer APIs, the same topic and partition model, the same consumer group semantics — so nothing in your application code changes. The difference is entirely operational: AWS provisions the broker nodes, handles KRaft controller elections, applies security patches, manages storage expansion, and exposes CloudWatch metrics without any configuration on your part.
 
@@ -16,7 +16,7 @@ A self-managed Kafka StatefulSet on EKS is viable, but it carries costs that com
 
 **Patching and upgrades.** Upgrading Kafka on a StatefulSet is a rolling-restart exercise with careful coordination between controller and broker nodes. MSK supports in-place rolling upgrades with no manifest changes.
 
-For a learning system, the complexity of a production-quality Kafka StatefulSet exceeds what is worth building. MSK lets this chapter stay focused on what matters: configuring the cluster, connecting the services, and understanding the difference in how the bootstrap address changes.
+For a learning system, the complexity of a production-quality Kafka StatefulSet exceeds what is worth writing yourself. MSK lets this chapter stay focused on what matters: configuring the cluster, connecting the services, and understanding the difference in how the bootstrap address changes.
 
 ---
 
@@ -95,9 +95,8 @@ resource "aws_msk_cluster" "library" {
 }
 ```
 
-A few decisions in this configuration are deliberate and worth noting.
 
-**`kafka.t3.small`** is the smallest available MSK instance type. It provides 2 GiB of memory per broker, which is sufficient for the library system's modest throughput. For a production workload you would size up to `kafka.m5.large` or larger and configure CloudWatch alarms on `KafkaBrokerDiskSpaceUsed` and `MemoryUsed`.
+**`kafka.t3.small`** is the smallest available MSK instance type. It provides 2 GiB of memory per broker, which is sufficient for the library system's modest throughput. For a production workload you would size up to `kafka.m5.large` or larger and configure CloudWatch alarms on `KafkaDataLogsDiskUsed` and `MemoryUsed`.
 
 **`number_of_broker_nodes = 2`** with two private subnets means MSK places one broker in each Availability Zone. This gives AZ-level fault tolerance: if one AZ becomes unavailable, the surviving broker continues serving producers and consumers, and replication catches up once the AZ recovers.
 

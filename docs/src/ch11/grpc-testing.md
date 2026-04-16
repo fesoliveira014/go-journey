@@ -11,17 +11,17 @@ resp, err := h.CreateBook(ctx, req)
 
 This is fast and useful for testing business logic in isolation, but it bypasses a significant part of the system. A real gRPC request travels through several layers before it reaches a handler method:
 
-1. The client serialises the request struct into protobuf wire format.
+1. The client serializes the request struct into protobuf wire format.
 2. The bytes cross a transport (TCP, Unix socket, etc.).
-3. The server deserialises the bytes back into a Go struct.
+3. The server deserializes the bytes back into a Go struct.
 4. Registered server interceptors run — in the library system, that means `UnaryAuthInterceptor`, which reads the `authorization` metadata header, validates the JWT, and either passes the request down the chain or returns `codes.Unauthenticated`.
 5. gRPC metadata (request headers) is propagated from the incoming context.
 6. The handler runs and returns a response or a gRPC `status.Status` error.
-7. The response is serialised and sent back to the client.
+7. The response is serialized and sent back to the client.
 
 When you call `h.CreateBook(ctx, req)` directly, none of steps 1–4 execute. The interceptor is never invoked, so a test that sends no token will still succeed. The gRPC status codes your handler produces are not tested as they appear over the wire. Metadata is whatever you manually put into the context, not what the gRPC runtime would propagate.
 
-For a system where authentication, authorisation, and correct error codes are security properties, that gap matters. The `bufconn` package closes it without requiring any external process or open network port.
+For a system where authentication, authorization, and correct error codes are security properties, that gap matters. The `bufconn` package closes it without requiring any external process or open network port.
 
 ---
 
@@ -41,9 +41,9 @@ For a system where authentication, authorisation, and correct error codes are se
 +------------------------------------------------------------------+
 ```
 
-Because the bytes still flow through the full gRPC stack on both sides — encoding, decoding, header frames, trailers — the behaviour is identical to what you would observe over a real TCP connection. The only thing removed is the OS network stack.
+Because the bytes still flow through the full gRPC stack on both sides — encoding, decoding, header frames, trailers — the behavior is identical to what you would observe over a real TCP connection. The only thing removed is the OS network stack.
 
-To connect a gRPC client to a `bufconn.Listener` you supply a custom dialer via `grpc.WithContextDialer`. Instead of resolving a host name and opening a TCP socket, the dialer calls `lis.DialContext`, which returns an in-memory connection to the server.
+To connect a gRPC client to a `bufconn.Listener` you supply a custom dialer via `grpc.WithContextDialer`. Instead of resolving a hostname and opening a TCP socket, the dialer calls `lis.DialContext`, which returns an in-memory connection to the server.
 
 ---
 
@@ -128,7 +128,7 @@ go test -tags integration ./services/catalog/internal/handler/...
 
 ---
 
-## Testing interceptor behaviour
+## Testing interceptor behavior
 
 With the helper above, testing the authentication interceptor becomes straightforward. Two cases cover the most important paths.
 
@@ -208,7 +208,7 @@ import (
 
 ---
 
-## Combining bufconn with testcontainers
+## Combining bufconn with Testcontainers
 
 The mock repository used above keeps data in memory. For a full integration test you want a real PostgreSQL instance. Testcontainers (covered in Section 11.2) provides one. Combining the two gives you an end-to-end path through every layer:
 
@@ -303,7 +303,7 @@ func startAuthServer(t *testing.T, svc *authservice.AuthService, jwtSecret strin
 }
 ```
 
-With the helper in place, you can write a test that exercises the full register -> login -> validate-token flow in a single test function:
+With the helper in place, you can write a test that exercises the full register → login → validate-token flow in a single test function:
 
 ```go
 func TestAuthFlow(t *testing.T) {
@@ -361,9 +361,9 @@ The `ValidateToken` call also verifies that the token the auth service issues is
 |---|---|---|---|---|
 | `h.CreateBook(ctx, req)` | No | No | Optional | Fast |
 | bufconn + mock repo | Yes | Yes | No | Fast |
-| bufconn + testcontainers | Yes | Yes | Yes | Slow |
+| bufconn + Testcontainers | Yes | Yes | Yes | Slow |
 
-Use direct handler calls for logic-heavy unit tests where you want fast feedback and fine-grained control over inputs. Use bufconn with a mock repository to test authentication, error code mapping, and metadata propagation. Use bufconn with testcontainers for integration tests that verify the full stack before merging.
+Use direct handler calls for logic-heavy unit tests where you want fast feedback and fine-grained control over inputs. Use bufconn with a mock repository to test authentication, error-code mapping, and metadata propagation. Use bufconn with Testcontainers for integration tests that verify the full stack before merging.
 
 ---
 

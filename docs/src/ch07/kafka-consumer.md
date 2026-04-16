@@ -1,8 +1,8 @@
 # 7.3 Kafka Consumer
 
-Section 7.1 covered the theory of event-driven architecture. This section gets into the mechanical details: how the catalog service actually consumes reservation events from Kafka using the Sarama library's consumer group API.
+Section 7.1 covered the theory of event-driven architecture. This section gets into the mechanical details: how the catalog service consumes reservation events from Kafka using the Sarama library's consumer group API.
 
-If you have used Spring Kafka, consumer setup there is a matter of annotating a method with `@KafkaListener` and letting the framework handle group management, deserialization, and offset commits. In Go with Sarama, you implement an interface and manage the consume loop explicitly. More code, but nothing is hidden.
+If you have used Spring Kafka, consumer setup is a matter of annotating a method with `@KafkaListener` and letting the framework handle group management, deserialization, and offset commits. In Go with Sarama, you implement an interface and manage the consume loop explicitly. More code, but nothing is hidden.
 
 ---
 
@@ -20,13 +20,13 @@ type ConsumerGroupHandler interface {
 
 The lifecycle works like this:
 
-1. **Setup** is called at the start of a new consumer group session -- after a rebalance assigns partitions to this consumer. Use it to initialize resources if needed.
+1. **Setup** is called at the start of a new consumer group session—after a rebalance assigns partitions to this consumer. Use it to initialize resources if needed.
 2. **ConsumeClaim** is called once per assigned partition. It runs in its own goroutine. You read messages from the claim's channel and process them.
 3. **Cleanup** is called when the session ends (before the next rebalance). Use it to flush buffers or release resources.
 
 This three-phase lifecycle maps roughly to the `ConsumerRebalanceListener` in the Java Kafka client, where `onPartitionsAssigned` and `onPartitionsRevoked` serve the same purpose as Setup and Cleanup.
 
-Our implementation keeps Setup and Cleanup empty -- we have no session-scoped resources to manage:
+Our implementation keeps Setup and Cleanup empty—we have no session-scoped resources to manage:
 
 ```go
 // services/catalog/internal/consumer/consumer.go
@@ -47,7 +47,7 @@ type AvailabilityUpdater interface {
 }
 ```
 
-This is a **role interface** -- it describes the one capability the consumer needs from the catalog service. The full `CatalogService` has many methods (Create, Update, Delete, List), but the consumer only calls `UpdateAvailability`. Defining a narrow interface means the consumer is decoupled from the rest of the catalog service. In tests, you mock one method, not twenty.
+This is a **role interface**—it describes the one capability the consumer needs from the catalog service. The full `CatalogService` has many methods (Create, Update, Delete, List), but the consumer only calls `UpdateAvailability`. Defining a narrow interface means the consumer is decoupled from the rest of the catalog service. In tests, you mock one method, not twenty.
 
 ---
 
@@ -82,15 +82,15 @@ func Run(ctx context.Context, brokers []string, topic string, svc AvailabilityUp
 }
 ```
 
-Let us unpack the configuration:
+The configuration, piece by piece:
 
 **`BalanceStrategyRoundRobin`** controls how partitions are distributed among consumers in the group during a rebalance. Round-robin assigns them evenly. Other strategies exist (`Range`, `Sticky`), but round-robin is the simplest and works well for most cases.
 
-**`OffsetOldest`** means that when the consumer group has no previously committed offset (first startup, or after offset expiry), it starts reading from the oldest available message. The alternative is `OffsetNewest`, which skips all existing messages and only reads new ones. We use `OffsetOldest` so that if the catalog service was down while reservations were being made, it catches up on all missed events when it restarts.
+**`OffsetOldest`** means that when the consumer group has no previously committed offset (first startup, or after offset expiry), it starts reading from the oldest available message. The alternative is `OffsetNewest`, which skips existing messages and reads only new ones. We use `OffsetOldest` so that if the catalog service was down while reservations were being made, it catches up on all missed events when it restarts.
 
-**The `for` loop.** `group.Consume` blocks until the session ends (due to a rebalance or context cancellation). When it returns, we check if the context is done. If not, we loop back and rejoin -- this handles rebalances gracefully. If the context is cancelled (application shutdown), we return.
+**The `for` loop.** `group.Consume` blocks until the session ends (due to a rebalance or context cancellation). When it returns, we check if the context is done. If not, we loop back and rejoin—this handles rebalances gracefully. If the context is cancelled (application shutdown), we return.
 
-This pattern -- `for { Consume(); if ctx.Err() != nil { return } }` -- is idiomatic Sarama. The `Consume` call manages the entire lifecycle: joining the group, receiving partition assignments, calling Setup/ConsumeClaim/Cleanup, and then returning when the session ends.
+This pattern—`for { Consume(); if ctx.Err() != nil { return } }`—is idiomatic Sarama. The `Consume` call manages the entire lifecycle: joining the group, receiving partition assignments, calling Setup/ConsumeClaim/Cleanup, and then returning when the session ends.
 
 ---
 
@@ -125,17 +125,17 @@ Step by step:
 
 1. **Get the session context.** `session.Context()` returns a context that is cancelled when the session ends (rebalance or shutdown). This is your cancellation signal.
 
-2. **Range over messages.** `claim.Messages()` is a Go channel. The `for range` loop reads messages until the channel closes (session end). This is a clean, idiomatic pattern -- no polling, no sleep loops.
+2. **Range over messages.** `claim.Messages()` is a Go channel. The `for range` loop reads messages until the channel closes (session end). This is a clean, idiomatic pattern—no polling, no sleep loops.
 
 3. **Extract trace context.** The producer injected OpenTelemetry headers into the Kafka message. We extract them here so the consumer's span is linked to the producer's trace. This gives you a single distributed trace from the HTTP request through the reservation service, through Kafka, into the catalog consumer.
 
-4. **Handle the event.** `handleEvent` deserializes and processes the message. If it fails, we log and continue -- we do not retry, and we do not mark the message.
+4. **Handle the event.** `handleEvent` deserializes and processes the message. If it fails, we log and continue—we do not retry, and we do not mark the message.
 
 5. **Mark the message.** `session.MarkMessage(msg, "")` tells Sarama this message has been processed. Sarama periodically commits marked offsets to Kafka in the background (controlled by `Consumer.Offsets.AutoCommit.Interval`, default 1 second).
 
 ### The "Log and Continue" Error Strategy
 
-When `handleEvent` fails, the consumer logs the error and moves on to the next message. The failed message is *not* marked, so it will not be committed -- but it will not be retried either (not until the next rebalance or restart). This is a pragmatic choice:
+When `handleEvent` fails, the consumer logs the error and moves on to the next message. The failed message is *not* marked, so it will not be committed—but it will not be retried either (not until the next rebalance or restart). This is a pragmatic choice:
 
 - **Retrying immediately** could cause an infinite loop if the error is permanent (bad data, schema mismatch).
 - **Dead-letter queues** (DLQs) are the production answer: send failed messages to a separate topic for manual inspection. We skip this to keep the code simple.
@@ -177,7 +177,7 @@ func handleEvent(ctx context.Context, svc AvailabilityUpdater, data []byte) erro
 }
 ```
 
-The `reservationEvent` struct mirrors the producer's `ReservationEvent` -- but it only includes the fields the consumer needs:
+The `reservationEvent` struct mirrors the producer's `ReservationEvent`—but it includes only the fields the consumer needs:
 
 ```go
 type reservationEvent struct {
@@ -186,15 +186,15 @@ type reservationEvent struct {
 }
 ```
 
-This is intentional. The consumer does not need the reservation ID, user ID, or timestamp to update availability. By defining a minimal struct, the consumer is resilient to the producer adding new fields -- `json.Unmarshal` ignores unknown fields by default.
+This is intentional. The consumer does not need the reservation ID, user ID, or timestamp to update availability. By defining a minimal struct, the consumer is resilient to the producer adding new fields—`json.Unmarshal` ignores unknown fields by default.
 
-The routing logic is a simple switch:
+The routing logic is a switch:
 
 - `reservation.created` -> decrement availability (delta = -1)
 - `reservation.returned` or `reservation.expired` -> increment availability (delta = +1)
 - Unknown event types -> log a warning and return nil (no error)
 
-Returning `nil` for unknown events is important. If the reservation service starts publishing a new event type (say, `reservation.extended`), the catalog consumer should not crash -- it should ignore events it does not understand. This is the **tolerant reader** pattern: be liberal in what you accept.
+Returning `nil` for unknown events is important. If the reservation service starts publishing a new event type (say, `reservation.extended`), the catalog consumer should not crash—it should ignore events it does not understand. This is the **tolerant reader** pattern: be liberal in what you accept.
 
 ---
 
@@ -224,9 +224,9 @@ The `WHERE available_copies + ? >= 0` clause is a database-level guard against n
 
 1. **Concurrent decrements.** If two `reservation.created` events for the same book are processed simultaneously (from different partitions, or after a rebalance), the SQL guard ensures one of them is a no-op rather than creating a negative count.
 
-2. **Duplicate events.** Since Kafka provides at-least-once delivery, the same event might be processed twice. For decrements, the guard prevents double-counting below zero. For increments, there is no guard -- a duplicate `reservation.returned` could increment the count beyond `total_copies`. In a production system, you would track processed event IDs to prevent this.
+2. **Duplicate events.** Since Kafka provides at-least-once delivery, the same event might be processed twice. For decrements, the guard prevents double-counting below zero. For increments, there is no guard—a duplicate `reservation.returned` could increment the count beyond `total_copies`. In a production system, you would track processed event IDs to prevent this.
 
-The `delta >= 0 && result.RowsAffected == 0` check returns `ErrBookNotFound` only for positive deltas (returns/expirations). For negative deltas (reservations), zero affected rows could mean either "book not found" or "guard prevented negative count" -- the code treats both the same way (silently does nothing). This is a simplification noted in the code comments.
+The `delta >= 0 && result.RowsAffected == 0` check returns `ErrBookNotFound` only for positive deltas (returns/expirations). For negative deltas (reservations), zero affected rows could mean either "book not found" or "guard prevented negative count"—the code treats both the same way: silently does nothing. This is a simplification noted in the code comments.
 
 ---
 
@@ -310,28 +310,28 @@ public class ReservationEventConsumer {
 }
 ```
 
-Spring handles consumer group creation, the consume loop, offset commits, deserialization, and error handling behind the annotation. The Go version requires you to write all of that. The upside is that every aspect of the behavior is visible in your code -- there are no `@EnableKafka` configuration classes, no `ConsumerFactory` beans, no `ConcurrentKafkaListenerContainerFactory` to customize. If something goes wrong, you debug your code, not the framework.
+Spring handles consumer group creation, the consume loop, offset commits, deserialization, and error handling behind the annotation. The Go version requires you to write all of that. The upside is that every aspect of the behavior lives in your code—there are no `@EnableKafka` configuration classes, no `ConsumerFactory` beans, no `ConcurrentKafkaListenerContainerFactory` to customize. If something goes wrong, you debug your code, not the framework.
 
 ---
 
 ## Exercises
 
-1. **Add retry logic.** Modify `ConsumeClaim` to retry failed messages up to 3 times with exponential backoff (1s, 2s, 4s). After 3 failures, log the message payload and move on. Think about what happens if the backoff blocks the goroutine -- does it affect other messages in the partition?
+1. **Add retry logic.** Modify `ConsumeClaim` to retry failed messages up to 3 times with exponential backoff (1s, 2s, 4s). After 3 failures, log the message payload and move on. Think about what happens if the backoff blocks the goroutine—does it affect other messages in the partition?
 
 2. **Dead-letter topic.** Extend the consumer to publish failed messages to a `reservations.dlq` topic after exhausting retries. You will need a Sarama `SyncProducer` alongside the consumer.
 
 3. **Test handleEvent.** Write a unit test for the `handleEvent` function. Create a mock `AvailabilityUpdater` and verify that: (a) `reservation.created` calls `UpdateAvailability` with delta -1, (b) `reservation.returned` calls with delta +1, (c) an unknown event type returns nil without calling `UpdateAvailability`, (d) malformed JSON returns an error.
 
-4. **Consumer lag monitoring.** Kafka consumer lag is the difference between the latest offset in a partition and the consumer's committed offset. High lag means the consumer is falling behind. Describe how you would expose this metric. (Hint: Sarama's `ConsumerGroupSession` exposes `HighWaterMarkOffset()` per partition.)
+4. **Consumer lag monitoring.** Kafka consumer lag is the difference between the latest offset in a partition and the consumer's committed offset. High lag means the consumer is falling behind. Describe how you would expose this metric. (Hint: Sarama's `ConsumerGroupClaim` exposes `HighWaterMarkOffset()` per partition.)
 
-5. **Multiple event types on one topic.** Our `reservations` topic carries three event types. An alternative is one topic per event type (`reservation-created`, `reservation-returned`, `reservation-expired`). What are the tradeoffs? Consider ordering guarantees, consumer simplicity, and topic proliferation.
+5. **Multiple event types on one topic.** Our `reservations` topic carries three event types. An alternative is one topic per event type (`reservation-created`, `reservation-returned`, `reservation-expired`). What are the trade-offs? Consider ordering guarantees, consumer simplicity, and topic proliferation.
 
 ---
 
 ## References
 
-[^1]: [IBM/sarama ConsumerGroup example](https://github.com/IBM/sarama/blob/main/examples/consumergroup/main.go) -- Official Sarama example for consumer groups.
-[^2]: [Kafka Consumer Group Protocol](https://kafka.apache.org/documentation/#consumerconfigs) -- Kafka documentation on consumer group configuration and rebalancing.
-[^3]: [Martin Fowler -- Tolerant Reader](https://martinfowler.com/bliki/TolerantReader.html) -- The pattern of ignoring unknown fields and event types.
-[^4]: [OpenTelemetry Go -- Propagation](https://opentelemetry.io/docs/languages/go/propagation/) -- How to propagate trace context across process boundaries.
-[^5]: [Confluent -- Dead Letter Queue](https://www.confluent.io/blog/kafka-connect-deep-dive-error-handling-dead-letter-queues/) -- Pattern for handling unprocessable messages.
+[^1]: [IBM/sarama ConsumerGroup example](https://github.com/IBM/sarama/blob/main/examples/consumergroup/main.go)—Official Sarama example for consumer groups.
+[^2]: [Kafka Consumer Group Protocol](https://kafka.apache.org/documentation/#consumerconfigs)—Kafka documentation on consumer group configuration and rebalancing.
+[^3]: [Martin Fowler—Tolerant Reader](https://martinfowler.com/bliki/TolerantReader.html)—The pattern of ignoring unknown fields and event types.
+[^4]: [OpenTelemetry Go—Propagation](https://opentelemetry.io/docs/languages/go/propagation/)—How to propagate trace context across process boundaries.
+[^5]: [Confluent—Dead Letter Queue](https://www.confluent.io/blog/kafka-connect-deep-dive-error-handling-dead-letter-queues/)—Pattern for handling unprocessable messages.

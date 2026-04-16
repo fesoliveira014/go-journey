@@ -1,12 +1,12 @@
 # 12.1 Local Cluster with kind
 
-Before writing a single Kubernetes manifest, you need somewhere to run it. Cloud clusters (EKS, GKE, AKE) are the eventual target, but spinning one up just to test a YAML change is slow and expensive. kind solves this by running a full Kubernetes cluster entirely inside Docker containers on your laptop.
+Before writing a single Kubernetes manifest, you need somewhere to run it. Cloud clusters (EKS, GKE, AKS) are the eventual target, but spinning one up to test a YAML change is slow and expensive. kind solves this by running a full Kubernetes cluster entirely inside Docker containers on your laptop.
 
 ---
 
 ## What kind Is
 
-kind stands for **Kubernetes IN Docker**. Each Kubernetes node — control plane or worker — is a Docker container running `containerd` and `kubelet` inside it. The cluster looks and behaves like a real Kubernetes cluster from the outside: you interact with it through `kubectl`, pods schedule and run normally, Services and Ingresses work. But it takes seconds to create and seconds to destroy.
+kind stands for **Kubernetes IN Docker**. Each Kubernetes node — control plane or worker — is a Docker container running `containerd` and `kubelet`. The cluster looks and behaves like a real Kubernetes cluster from the outside: you interact with it through `kubectl`, pods schedule and run normally, Services and Ingresses work. But it takes seconds to create and seconds to destroy.
 
 This makes kind the right tool for:
 

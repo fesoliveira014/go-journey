@@ -1,8 +1,8 @@
 # 8.4 Search UI
 
-The search feature surfaces in the gateway through two routes: a full search page with filters, and an autocomplete endpoint that powers the nav bar's instant suggestions. Both use HTMX for interactive behavior without writing any JavaScript.
+The search feature surfaces in the gateway through two routes: a full search page with filters, and an autocomplete endpoint that powers the nav bar's instant suggestions. Both use HTMX for interactive behavior with minimal JavaScript.
 
-If you are coming from Spring MVC + Thymeleaf, the architecture is familiar: the gateway renders HTML templates server-side and sends complete (or partial) HTML to the browser. The difference is that HTMX lets us do partial page updates -- fetching and swapping HTML fragments -- without building a single-page application or writing a REST API that returns JSON.
+If you are coming from Spring MVC + Thymeleaf, the architecture is familiar: the gateway renders HTML templates server-side and sends complete (or partial) HTML to the browser. The difference is that HTMX lets us do partial page updates—fetching and swapping HTML fragments—without building a single-page application or writing a REST API that returns JSON.
 
 ---
 
@@ -75,7 +75,7 @@ func (s *Server) SearchPage(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-The handler follows a pattern you have seen throughout the gateway: extract parameters, build a template data map, call a backend service, add response data to the map, render. When the query is empty, it renders the search page without results -- just the form.
+The handler follows a pattern you have seen throughout the gateway: extract parameters, build a template data map, call a backend service, add response data to the map, render. When the query is empty, it renders the search page without results—just the form.
 
 Notice `available == "on"`. HTML checkboxes send the value `"on"` when checked and send nothing when unchecked. This is a web platform quirk that every server-rendered application must handle.
 
@@ -130,12 +130,12 @@ The template renders both the search form and the results:
 {{end}}
 ```
 
-The form uses `GET` -- search is a read operation, and using GET means the URL contains the full query state (`/search?q=golang&genre=programming`). Users can bookmark, share, and use browser back/forward to navigate search results. This is standard web practice and something you lose when building search as a POST-based SPA.
+The form uses `GET`—search is a read operation, and using GET means the URL contains the full query state (`/search?q=golang&genre=programming`). Users can bookmark, share, and use browser back/forward to navigate search results. This is standard web practice and something you lose when building search as a POST-based SPA.
 
 The template has three states:
-1. **No query** -- just the form.
-2. **Query with results** -- form + result count + table.
-3. **Query with no results** -- form + "no results" message.
+1. **No query**—just the form.
+2. **Query with results**—form + result count + table.
+3. **Query with no results**—form + "no results" message.
 
 The `{{range .Data.Books}}` iterates over the protobuf `BookResult` messages directly. Go's `html/template` can access protobuf message fields by name, just like any other struct. The `.Id`, `.Title`, `.Author` etc. are the generated Go field names from the proto definition.
 
@@ -143,7 +143,7 @@ The `{{range .Data.Books}}` iterates over the protobuf `BookResult` messages dir
 
 ## HTMX-Powered Autocomplete
 
-The nav bar contains a search input that provides instant suggestions as the user types. This is powered by HTMX -- no JavaScript handlers, no fetch calls, no JSON parsing:
+The nav bar contains a search input that provides instant suggestions as the user types. This is powered by HTMX—no JavaScript handlers, no fetch calls, no JSON parsing:
 
 ```html
 <!-- services/gateway/templates/partials/nav.html -->
@@ -176,16 +176,16 @@ When triggered, HTMX sends a GET request to `/search/suggest`. It automatically 
 
 This is a compound trigger with several modifiers:
 
-- **`keyup`** -- Fire on key release.
-- **`changed`** -- Only if the value actually changed (ignores arrow keys, shift, etc.).
-- **`delay:300ms`** -- Debounce: wait 300ms after the last keyup before firing. If the user types another character within 300ms, the timer resets. This prevents flooding the server with requests on fast typing.
-- **`[this.value.length >= 2]`** -- A JavaScript condition: only fire if the input has at least 2 characters. Single-character searches are too broad to be useful and expensive to run.
+- **`keyup`**—Fire on key release.
+- **`changed`**—Only if the value actually changed (ignores arrow keys, shift, etc.).
+- **`delay:300ms`**—Debounce: wait 300ms after the last keyup before firing. If the user types another character within 300ms, the timer resets. This prevents flooding the server with requests on fast typing.
+- **`[this.value.length >= 2]`**—A JavaScript condition: only fire if the input has at least 2 characters. Single-character searches are too broad to be useful and expensive to run.
 
 In a React or Angular application, you would implement this debounce with `rxjs` operators (`debounceTime`, `filter`, `switchMap`) or a custom hook. HTMX packs the same behavior into a declarative attribute string.
 
 ### `hx-target="#suggestions"` and `hx-swap="innerHTML"`
 
-The server's response (an HTML fragment) replaces the innerHTML of the `#suggestions` div. HTMX does not parse JSON or render templates on the client -- the server sends ready-to-display HTML.
+The server's response (an HTML fragment) replaces the innerHTML of the `#suggestions` div. HTMX does not parse JSON or render templates on the client—the server sends ready-to-display HTML.
 
 ### The Form Submission Trick
 
@@ -224,7 +224,7 @@ Two things to note:
 
 1. **Short-circuit for short prefixes.** If the prefix is less than 2 characters, the handler returns an empty response with the correct content type. This renders as empty HTML in the suggestions div, effectively clearing any previous suggestions. The HTMX trigger already filters these out, but the server-side check is defense in depth.
 
-2. **Error handling returns empty HTML.** If the search service is down, the user sees no suggestions -- not an error message. This is appropriate for autocomplete: it is a progressive enhancement, not a critical feature. The user can still type their query and press Enter to use the full search page.
+2. **Error handling returns empty HTML.** If the search service is down, the user sees no suggestions—not an error message. This is appropriate for autocomplete: it is a progressive enhancement, not a critical feature. The user can still type their query and press Enter to use the full search page.
 
 The `renderPartial` method renders a named template without the full page layout (no `<html>`, no nav, no footer). The suggestions template is a list of links:
 
@@ -261,7 +261,7 @@ Here is the complete path of a search query, from keypress to rendered suggestio
 10. User sees a dropdown with clickable book links
 ```
 
-The entire round trip -- gateway to search service to Meilisearch and back -- typically completes in under 50ms. The 300ms debounce is the dominant latency from the user's perspective.
+The entire round trip—gateway to search service to Meilisearch and back—typically completes in under 50ms. The 300ms debounce is the dominant latency from the user's perspective.
 
 ---
 
@@ -284,11 +284,11 @@ The gateway handles this gracefully: the catalog browse page (`/books`) always r
 
 1. **Add pagination to search results.** The handler already reads a `page` parameter. Add "Previous" and "Next" links below the results table that link to `/search?q=...&page=2` etc. Use the `TotalHits` value to calculate whether a next page exists.
 
-2. **Clear suggestions on blur.** Currently, clicking outside the suggestions dropdown does not hide it. Add a small inline script or HTMX attribute that clears the `#suggestions` div when the input loses focus. Consider the timing: if the user clicks a suggestion link, the blur fires before the click -- how do you handle that?
+2. **Clear suggestions on blur.** Currently, clicking outside the suggestions dropdown does not hide it. Add a small inline script or HTMX attribute that clears the `#suggestions` div when the input loses focus. Consider the timing: if the user clicks a suggestion link, the blur fires before the click—how do you handle that?
 
 3. **Add keyboard navigation to suggestions.** Using HTMX's `hx-on` attribute or a small script, let the user press arrow keys to highlight suggestions and Enter to navigate to the selected one. This is a common autocomplete UX pattern.
 
-4. **Display Meilisearch query time.** The search response includes `QueryTimeMs`. Show it in the results header (e.g., "42 results in 3ms"). This is already partially implemented in the template -- verify it works end-to-end.
+4. **Display Meilisearch query time.** The search response includes `QueryTimeMs`. Show it in the results header (e.g., "42 results in 3ms"). This is already partially implemented in the template—verify it works end-to-end.
 
 5. **Compare HTMX autocomplete to a React implementation.** Sketch (on paper or in pseudocode) how you would implement the same autocomplete with React: a `useState` hook for the input, a `useEffect` with debounce for the fetch, a JSON response, and a component to render suggestions. Compare the amount of code, the number of concepts involved, and where the rendering happens (client vs. server).
 
@@ -296,8 +296,8 @@ The gateway handles this gracefully: the catalog browse page (`/books`) always r
 
 ## References
 
-[^1]: [HTMX documentation -- Triggers](https://htmx.org/docs/#triggers) -- Full reference for `hx-trigger` syntax, including debounce, conditions, and event filters.
-[^2]: [HTMX documentation -- Swapping](https://htmx.org/docs/#swapping) -- How `hx-swap` controls where and how the server response is inserted into the DOM.
-[^3]: [Go html/template package](https://pkg.go.dev/html/template) -- Reference for Go's template engine, including context-aware escaping and the `{{range}}` action.
-[^4]: [HTMX -- Active Search pattern](https://htmx.org/examples/active-search/) -- The official HTMX example for live search, which our implementation closely follows.
-[^5]: [Carson Gross -- Hypermedia Systems](https://hypermedia.systems/) -- The book by the HTMX author that explains the philosophy behind server-rendered HTML with hypermedia controls, and why it is a viable alternative to JSON APIs + SPAs.
+[^1]: [HTMX documentation—Triggers](https://htmx.org/docs/#triggers)—Full reference for `hx-trigger` syntax, including debounce, conditions, and event filters.
+[^2]: [HTMX documentation—Swapping](https://htmx.org/docs/#swapping)—How `hx-swap` controls where and how the server response is inserted into the DOM.
+[^3]: [Go html/template package](https://pkg.go.dev/html/template)—Reference for Go's template engine, including context-aware escaping and the `{{range}}` action.
+[^4]: [HTMX—Active Search pattern](https://htmx.org/examples/active-search/)—The official HTMX example for live search, which our implementation closely follows.
+[^5]: [Carson Gross—Hypermedia Systems](https://hypermedia.systems/)—The book by the HTMX author that explains the philosophy behind server-rendered HTML with hypermedia controls, and why it is a viable alternative to JSON APIs + SPAs.

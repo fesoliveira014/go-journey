@@ -8,7 +8,7 @@ But they leave four things completely untested:
 
 2. **Offset management.** `session.MarkMessage` in `ConsumeClaim` advances the consumer group's committed offset. If you forget to call it — or call it before handling is complete — messages are reprocessed on restart. Unit tests cannot verify commit timing.
 
-3. **Header propagation.** The reservation publisher injects OpenTelemetry trace context into Kafka message headers via `headerCarrier`. The catalog consumer extracts that context in `ConsumeClaim` before starting a new span. If the header key encoding changes — for example, if sarama serializes header keys differently than expected — the trace is broken and monitoring silently degrades. Only a test that goes through the real serialization path can catch this.
+3. **Header propagation.** The reservation publisher injects OpenTelemetry trace context into Kafka headers via `headerCarrier`; the catalog consumer extracts it in `ConsumeClaim`. If sarama ever serializes header keys differently than the consumer expects, traces break and monitoring silently degrades. Only a test through the real serialization path catches this.
 
 4. **Real Kafka interaction.** The serialization contract between producer and consumer is implicit: JSON with specific field names, a specific key encoding, a specific topic name. Both sides can change independently. A test that publishes through the actual `kafka.Publisher` and consumes through the actual `consumer.Run` detects any divergence immediately.
 
@@ -16,9 +16,9 @@ If you are coming from Spring, this is analogous to the difference between testi
 
 ---
 
-## Setting up a Kafka testcontainer
+## Setting up a Kafka container with Testcontainers
 
-The `testcontainers-go` Kafka module[^1] starts a Confluent local Kafka image in Docker. Because Kafka requires a running ZooKeeper (or KRaft controller), starting the container takes roughly 10–15 seconds — noticeably slower than a PostgreSQL container. The standard mitigation is to start Kafka once in `TestMain` and share it across all tests in a suite.
+The `testcontainers-go` Kafka module[^1] starts a Confluent Local Kafka image in Docker. Because Kafka requires a running ZooKeeper (or KRaft controller), starting the container takes roughly 10–15 seconds — noticeably slower than a PostgreSQL container. The standard mitigation is to start Kafka once in `TestMain` and share it across all tests in a suite.
 
 Create a helper file in your integration test package:
 
@@ -96,7 +96,7 @@ One limitation: `t.Cleanup` registered in `setupKafka` is attached to the dummy 
 
 The reservation service's `kafka.Publisher` wraps a `sarama.SyncProducer`. Its `Publish` method serializes a `ReservationEvent` to JSON, sets the message key to `event.BookID`, and injects the OTel trace context into message headers via `headerCarrier`. That is three things to verify.
 
-The verification approach is asymmetric: produce through the real publisher, then read back using sarama's lower-level partition consumer API. A partition consumer is simpler than a consumer group for this purpose — it does not join a group, does not negotiate offsets with a coordinator, and does not require group rebalance. It just reads raw messages from a topic partition. This is the Kafka equivalent of reading a single message off a queue for assertion purposes.
+The verification approach is asymmetric: produce through the real publisher, then read back using sarama's lower-level partition consumer API. A partition consumer is simpler than a consumer group for this purpose — it does not join a group, does not negotiate offsets with a coordinator, and does not require a group rebalance. It just reads raw messages from a topic partition. This is the Kafka equivalent of reading a single message off a queue for assertion purposes.
 
 ```go
 //go:build integration
@@ -466,7 +466,7 @@ func TestSearchConsumer_BookCreated_CallsUpsert(t *testing.T) {
 
 This test exercises the full Kafka path — group join, partition assignment, message deserialization, `ConsumeClaim` loop — without any dependency on Meilisearch. If you later add a `book.deleted` scenario, the same capturing indexer catches calls to `Delete`.
 
-The snapshot pattern (`append([]any(nil), idx.upserted...)`) copies the slice while holding the lock, then releases the lock before doing assertions. This is important: holding a mutex while calling `t.Errorf` is not inherently unsafe in Go, but it is poor practice because `t.Errorf` may trigger housekeeping that takes non-trivial time under the lock.
+The snapshot pattern (`append([]any(nil), idx.upserted...)`) copies the slice while holding the lock, then releases the lock before doing assertions. This is important: holding a mutex while calling `t.Errorf` is not inherently unsafe in Go, but it is poor practice because `t.Errorf` may trigger housekeeping that takes nontrivial time under the lock.
 
 ---
 
@@ -478,7 +478,7 @@ When a new consumer group joins a Kafka cluster for the first time, the broker a
 
 The solution used throughout this section is to set `config.Consumer.Offsets.Initial = sarama.OffsetOldest`. This tells sarama that when there is no committed offset for the group (which is the case for a fresh group), start from the beginning of the topic. Since each test uses a unique group ID, there is never a committed offset, and `OffsetOldest` is always effective.
 
-This is also why tests produce the message *before* starting the consumer: the message sits in the topic waiting at offset 0, and the consumer reads it as soon as partition assignment completes. If you start the consumer first and produce later, you need `OffsetNewest` — but then the test is sensitive to timing between the goroutine that runs the consumer and the goroutine (your test function) that produces the message. The produce-first pattern is simpler.
+This is also why tests produce the message *before* starting the consumer: the message sits in the topic waiting at offset 0, and the consumer reads it as soon as partition assignment completes. If you start the consumer first and produce later, you need `OffsetNewest`. The test is then sensitive to timing between the consumer goroutine and the producer (your test function). The produce-first pattern is simpler.
 
 ### Unique group IDs
 
@@ -519,9 +519,9 @@ Two strategies help:
 
 ### Consumer goroutine lifecycle
 
-`consumer.Run` blocks until the context is cancelled. If you start it in a goroutine and the test returns without cancelling the context, the goroutine leaks. This is not just a theoretical concern: leaked goroutines that hold sarama consumer group sessions can cause the group to remain "active" in Kafka, delaying rebalances in subsequent tests.
+`consumer.Run` blocks until the context is canceled. If you start it in a goroutine and the test returns without canceling the context, the goroutine leaks. This is not just a theoretical concern: leaked goroutines that hold sarama consumer group sessions can cause the group to remain "active" in Kafka, delaying rebalances in subsequent tests.
 
-The `defer cancel()` at the top of each test function is the defense. Even if the test panics or calls `t.Fatal`, deferred functions run, the context is cancelled, and `Run` returns within one consumer group heartbeat interval (default: 3 seconds in sarama). For faster teardown, sarama supports configuring `config.Consumer.Group.Session.Timeout`.
+The `defer cancel()` at the top of each test function is the defense. Even if the test panics or calls `t.Fatal`, deferred functions run, the context is canceled, and `Run` returns within one consumer-group heartbeat interval (default: 3 seconds in sarama). For faster teardown, sarama supports configuring `config.Consumer.Group.Session.Timeout`.
 
 ---
 
@@ -533,7 +533,7 @@ The key patterns introduced here carry over to any Kafka integration test in Go:
 
 - Use testcontainers-go's Kafka module with `confluentinc/confluent-local:7.6.0`.
 - Share a single container across tests with `TestMain`.
-- Use unique group IDs per test to avoid offset state collisions.
+- Use unique group IDs per test to avoid offset-state collisions.
 - Use `sarama.OffsetOldest` for fresh groups; produce before starting the consumer.
 - Poll with a ticker and deadline rather than sleeping.
 - Always `defer cancel()` to ensure consumer goroutine cleanup.

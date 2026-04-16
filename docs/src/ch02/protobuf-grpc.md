@@ -1,6 +1,6 @@
 # 2.1 Protocol Buffers & gRPC
 
-Before writing a single line of service logic, we need to define the contract between services. In this project, internal service-to-service communication uses **gRPC**, and the message format is **Protocol Buffers** (protobuf). This section explains both, walks through the actual proto file for the Catalog service, and introduces the `buf` toolchain that makes protobuf development manageable at scale.
+Before writing a single line of service logic, we need to define the contract between services. In this project, internal service-to-service communication uses **gRPC**, and the message format is **Protocol Buffers** (protobuf). This section explains both, walks through the actual proto file for the Catalog service, and introduces the `buf` toolchain that simplifies protobuf development.
 
 ---
 
@@ -19,7 +19,7 @@ Protocol Buffers is a language-neutral, platform-neutral binary serialization fo
 | Speed | Slower to parse | Faster to serialize/deserialize |
 | Language support | Universal | Generated per language |
 
-The tradeoff is readability. You can't curl a gRPC endpoint and inspect the response with naked eyes the way you can with REST/JSON. This is acceptable for internal service calls — you'll add tooling like gRPC reflection and Postman/Insomnia gRPC support for debugging.
+The trade-off is readability. You can't curl a gRPC endpoint and inspect the response the way you can with REST/JSON. This is acceptable for internal service calls — you'll add tooling like gRPC reflection and Postman/Insomnia gRPC support for debugging.
 
 ### Comparison to Java/Kotlin Serialization
 
@@ -27,7 +27,7 @@ If you've used Java's `Serializable` interface or Kotlin's `kotlinx.serializatio
 
 - **Java `Serializable`** is tied to the JVM, fragile across class changes (serialVersionUID), and produces opaque binary that's hard to evolve. Protobuf's field numbering scheme makes forward/backward compatibility explicit and predictable.
 - **`kotlinx.serialization`** is closer in spirit: it's explicit (you annotate what gets serialized), supports multiple formats (JSON, CBOR, etc.), and is type-safe. The key difference is that protobuf is *cross-language* by design. Your Go service and a future Python client can share the same `.proto` file and generate idiomatic code for each language.
-- **Protobuf's killer feature** is that field identity is based on *numbers*, not names. If you rename `published_year` in your `.proto`, the wire format doesn't change — existing services don't break. Removing a field (but keeping its number reserved) also preserves compatibility. This is what makes it safe to evolve APIs in a microservices system where you can't do a big-bang redeploy.
+- **Protobuf's most significant advantage** is that field identity is based on *numbers*, not names. If you rename `published_year` in your `.proto`, the wire format doesn't change — existing services don't break. Removing a field (but keeping its number reserved) also preserves compatibility. This is what makes it safe to evolve APIs in a microservices system where you can't do a big-bang redeploy.
 
 ---
 
@@ -39,13 +39,13 @@ gRPC is an RPC framework built on top of HTTP/2 that uses protobuf as its defaul
 
 **Use gRPC for service-to-service calls** because:
 
-- **HTTP/2 multiplexing**: Multiple RPC calls can fly over a single TCP connection, reducing connection overhead.
-- **Strong typing end-to-end**: The `.proto` file is the source of truth. Client and server code is generated from it. Type mismatches are caught at compile time, not at 2am in production.
+- **HTTP/2 multiplexing**: Multiple RPC calls share a single TCP connection, reducing connection overhead.
+- **Strong typing end-to-end**: The `.proto` file is the source of truth. Client and server code is generated from it. Type mismatches are caught at compile time, not at 2 a.m. in production.
 - **Code generation**: You don't write HTTP clients, parse response bodies, or build URL paths. You call a method on a generated stub.
 - **Bidirectional streaming**: gRPC supports four call types — unary (standard request/response), server streaming, client streaming, and bidirectional streaming. Most of our service calls are unary, but the option is there if you need to stream a large result set.
 - **Built-in deadlines and cancellation**: gRPC propagates `context.Context` cancellation and deadlines across the network boundary automatically.
 
-In our system, external HTTP requests from the browser hit the API Gateway (or directly the service, depending on routing). Internal calls — like the Reservation service asking the Catalog service to update book availability — use gRPC.
+In our system, external HTTP requests reach the API Gateway (or, for some routes, a service directly). Internal calls — like the Reservation service asking the Catalog service to update book availability — use gRPC.
 
 ---
 
@@ -57,7 +57,7 @@ The full file lives at `proto/catalog/v1/catalog.proto`. Let's go through it pie
 syntax = "proto3";
 ```
 
-This declares proto3 syntax. Proto3 is the current version and the one you should use for new projects. The most notable change from proto2: all fields are optional by default and have zero-value defaults (empty string, 0, false). There's no `required` keyword.
+This declares proto3 syntax. Proto3 is current; use it for new projects. The most notable change from proto2: all fields are optional by default and have zero-value defaults (empty string, 0, false). There's no `required` keyword.
 
 ```protobuf
 package catalog.v1;
@@ -74,7 +74,7 @@ This is a Go-specific option. It tells the code generator two things:
 - The import path for the generated package (`github.com/fesoliveira014/library-system/gen/catalog/v1`)
 - The package name to use in the generated Go file (`catalogv1`, after the semicolon)
 
-Without this, the generated code would be placed in a location that's harder to import correctly.
+Without this, the generator picks a default path that's awkward to import.
 
 ```protobuf
 import "google/protobuf/timestamp.proto";
@@ -95,7 +95,7 @@ service CatalogService {
 }
 ```
 
-A `service` block defines the RPC interface — equivalent to a Java `interface` or a Kotlin `interface` annotated with some RPC framework. Each `rpc` line is one method: its name, request message type, and response message type.
+A `service` block defines the RPC interface — equivalent to a Java or Kotlin interface annotated for an RPC framework (e.g., gRPC's @GrpcService). Each `rpc` line is one method: its name, request message type, and response message type.
 
 Notice that even `DeleteBook` returns a message (`DeleteBookResponse`) instead of nothing. This is a best practice: returning an empty message rather than `void` leaves room to add fields to the response later without a breaking change.
 
@@ -130,13 +130,13 @@ message ListBooksResponse {
 }
 ```
 
-`repeated` is protobuf's equivalent of a list/array. On the wire it encodes as a sequence of values for that field number. In the generated Go code, it becomes a slice: `Books []*Book`.
+`repeated` is protobuf's equivalent of a list/array. On the wire, it encodes as a sequence of values tagged with that field number. In the generated Go code, it becomes a slice: `Books []*Book`.
 
 ---
 
 ## The buf Toolchain
 
-In theory you can use the raw `protoc` compiler with downloaded plugins to generate code. In practice, `protoc` dependency management is painful:
+You can use the raw `protoc` compiler with downloaded plugins. In practice, its dependency management is painful:
 
 - You manually download and version `protoc` itself and each language plugin
 - You manage `.proto` imports by hand (where does `google/protobuf/timestamp.proto` live on your filesystem?)
@@ -163,7 +163,7 @@ breaking:
 ```
 
 - `lint.use: [STANDARD]` enables buf's standard lint ruleset. This catches things like: inconsistent field naming conventions, missing comments on public RPCs, package name mismatches, and more.
-- The two `except` entries suppress rules we've deliberately relaxed. `RPC_RESPONSE_STANDARD_NAME` would require every response type to be named `<RpcName>Response` — we have some RPCs (like `CreateBook`) that return `Book` directly, which is valid design.
+- The two `except` entries suppress rules we've deliberately relaxed. `RPC_RESPONSE_STANDARD_NAME` would require every response type to be named `<RpcName>Response` — we have some RPCs (like `CreateBook`) that return `Book` directly, which is an intentional design choice.
 - `breaking.use: [FILE]` enables file-level breaking change detection. This means buf will error if you remove a field, change a field type, or make any other change that would break existing clients.
 
 ### `buf.gen.yaml`
@@ -229,7 +229,7 @@ type Book struct {
 
 Notice that field names are PascalCase in Go (Go convention) even though they're snake_case in the proto file. The struct tags encode both the wire format information and JSON field names — the generated structs work with `encoding/json` as well as protobuf encoding.
 
-Do not manually edit these files. The `// Code generated by protoc-gen-go. DO NOT EDIT.` header at the top means exactly what it says — any edits you make will be overwritten the next time you run `buf generate`.
+Do not manually edit these files. The `// Code generated...DO NOT EDIT.` header is load-bearing — `buf generate` will overwrite anything you change.
 
 ### `gen/catalog/v1/catalog_grpc.pb.go`
 
@@ -308,7 +308,7 @@ buf lint      # should pass (or show only the suppressed rules)
 buf generate  # regenerates gen/catalog/v1/
 ```
 
-After regeneration, `catalog_grpc.pb.go` will include `SearchBooks` in both the `CatalogServiceServer` interface and the `CatalogServiceClient` interface. The `UnimplementedCatalogServiceServer` will have a default implementation returning `codes.Unimplemented`, so the service compiles without changes.
+After regeneration, `catalog_grpc.pb.go` will include `SearchBooks` in both the server and client interfaces. The `UnimplementedCatalogServiceServer` will have a default implementation returning `codes.Unimplemented`, so the service compiles without changes.
 
 Note: `buf breaking` would flag this as safe — adding a new RPC is not a breaking change. Removing one would be.
 

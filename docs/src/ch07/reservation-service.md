@@ -1,6 +1,6 @@
 # 7.2 Reservation Service
 
-The reservation service is the second microservice we build from scratch. If you followed Chapter 2 (the catalog service), this one will feel familiar -- same layered architecture, same patterns. That repetition is deliberate. The goal is to show that the patterns are general, not specific to any one domain. Once you internalize the model/repository/service/handler stack, you can stand up a new service quickly.
+The reservation service is the second microservice we build from scratch. If you followed Chapter 2 (the catalog service), this one will feel familiar—same layered architecture, same patterns. That repetition is deliberate. The goal is to show that the patterns are general, not specific to any one domain. Once you internalize the model/repository/service/handler stack, you can stand up a new service quickly.
 
 The interesting differences are in the domain logic: state machines, cross-service reads, event publishing, and a two-pronged expiration strategy — lazy expire-on-read for responsiveness plus a background reaper for timeliness.
 
@@ -32,9 +32,9 @@ const (
 
 A few things to note:
 
-**State machine.** The `Status` field has three valid values, and the transitions are strict: `active -> returned` (user returned the book) and `active -> expired` (the due date passed). There is no transition from `returned` to `active` or from `expired` to `returned`. The service enforces these rules in the service layer, not in the database -- though you could add a CHECK constraint for defense in depth.
+**State machine.** The `Status` field has three valid values, and the transitions are strict: `active -> returned` (user returned the book) and `active -> expired` (the due date passed). There is no transition from `returned` to `active` or from `expired` to `returned`. The service enforces these rules in the service layer, not in the database—though you could add a CHECK constraint for defense in depth.
 
-**`ReturnedAt` is a pointer.** A `*time.Time` is Go's way of expressing a nullable timestamp. When the reservation is active, `ReturnedAt` is `nil`. When returned, it is set. GORM understands pointer fields as nullable columns. In Kotlin, you would write `val returnedAt: Instant?` -- same concept, different syntax.
+**`ReturnedAt` is a pointer.** A `*time.Time` is Go's way of expressing a nullable timestamp. When the reservation is active, `ReturnedAt` is `nil`. When returned, it is set. GORM understands pointer fields as nullable columns. In Kotlin, you would write `val returnedAt: Instant?`—same concept, different syntax.
 
 **Sentinel errors.** The model package defines domain-specific errors:
 
@@ -48,7 +48,7 @@ var (
 )
 ```
 
-These are package-level variables (not types) used with `errors.Is()`. This is the same pattern we used in the catalog service. The handler layer maps these to gRPC status codes -- the domain errors stay clean of transport concerns.
+These are package-level variables (not types) used with `errors.Is()`. This is the same pattern we used in the catalog service. The handler layer maps these to gRPC status codes—the domain errors stay clean of transport concerns.
 
 ---
 
@@ -86,7 +86,7 @@ func (r *ReservationRepository) GetByID(ctx context.Context, id uuid.UUID) (*mod
 }
 ```
 
-Notice `CountActive` -- it counts the user's currently active reservations. This powers the "max reservations" business rule:
+Notice `CountActive`—it counts the user's active reservations. This powers the "max reservations" business rule:
 
 ```go
 func (r *ReservationRepository) CountActive(ctx context.Context, userID uuid.UUID) (int64, error) {
@@ -98,7 +98,7 @@ func (r *ReservationRepository) CountActive(ctx context.Context, userID uuid.UUI
 }
 ```
 
-Every method takes a `context.Context` and passes it to GORM via `WithContext(ctx)`. This ensures that request-scoped deadlines, cancellations, and tracing spans propagate through to the database driver. If you forget `WithContext`, the query still works but loses its connection to the calling context -- timeouts will not cancel it, and traces will not include it.
+Every method takes a `context.Context` and passes it to GORM via `WithContext(ctx)`. This ensures that request-scoped deadlines, cancellations, and tracing spans propagate through to the database driver. If you forget `WithContext`, the query still works but loses its connection to the calling context—timeouts will not cancel it, and traces will not include it.
 
 The `ListByUser` method returns all reservations for a user, ordered by most recent first:
 
@@ -113,13 +113,13 @@ func (r *ReservationRepository) ListByUser(ctx context.Context, userID uuid.UUID
 }
 ```
 
-Compared to the catalog repository, this one is simpler -- no pagination, no filtering, no full-text search. A real system would add those, but for learning purposes, this is enough to demonstrate the pattern.
+Compared to the catalog repository, this one is simpler—no pagination, no filtering, no full-text search. A real system would add those, but for learning purposes, this is enough.
 
 ---
 
 ## Service Layer
 
-The service layer is where the interesting logic lives. Let us look at its dependencies:
+The service layer is where the domain logic lives. Its dependencies:
 
 ```go
 // services/reservation/internal/service/service.go
@@ -134,15 +134,15 @@ type ReservationService struct {
 
 Three things to call out:
 
-1. **`repo` is an interface**, not a concrete type. The service defines the interface it needs (`ReservationRepository`), and the repository satisfies it. This is Go's implicit interface satisfaction -- the repository never declares `implements ReservationRepository`. If it has the right methods, it fits.
+1. **`repo` is an interface**, not a concrete type. The service defines the interface it needs (`ReservationRepository`), and the repository satisfies it. This is Go's implicit interface satisfaction—the repository never declares `implements ReservationRepository`. If it has the right methods, it fits.
 
-2. **`catalog` is a gRPC client.** The reservation service calls the catalog service synchronously to check book availability before creating a reservation. This is a cross-service read -- the reservation service does not own the book data, so it asks the service that does.
+2. **`catalog` is a gRPC client.** The reservation service calls the catalog service synchronously to check book availability before creating a reservation. This is a cross-service read—the reservation service does not own the book data, so it asks the service that does.
 
 3. **`publisher` is an interface.** The `EventPublisher` interface has one method: `Publish(ctx, event) error`. The Kafka publisher implements it, but in tests you can substitute a mock. This is the same dependency inversion pattern used throughout the codebase.
 
 ### Creating a Reservation
 
-The `CreateReservation` method enforces all the business rules. The interesting part is the order of operations — we decrement availability **before** creating the reservation row, not after. The next section (_The TOCTOU trap_) explains why.
+The `CreateReservation` method enforces all the business rules. The ordering matters—we decrement availability **before** inserting the reservation row. The next section, *The TOCTOU trap*, explains why.
 
 ```go
 func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.UUID) (*model.Reservation, error) {
@@ -199,11 +199,11 @@ func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.
 }
 ```
 
-The user ID comes from the context via `pkgauth.UserIDFromContext`. The auth middleware (a gRPC interceptor in this case) validates the JWT token and injects the user ID into the context before the handler runs. This is the same pattern the gateway uses -- extract auth info from the context, not from function parameters.
+The user ID comes from the context via `pkgauth.UserIDFromContext`. The auth middleware (a gRPC interceptor in this case) validates the JWT token and injects the user ID into the context before the handler runs. This is the same pattern the gateway uses—extract auth info from the context, not from function parameters.
 
-The loan duration is a package-level constant: `const loanDuration = 14 * 24 * time.Hour`. This is idiomatic Go -- constants for configuration that does not change at runtime. If this needed to be configurable per environment, it would move to a constructor parameter (like `maxActive`).
+The loan duration is a package-level constant: `const loanDuration = 14 * 24 * time.Hour`. This is idiomatic Go—constants for configuration that does not change at runtime. If this needed to be configurable per environment, it would move to a constructor parameter (like `maxActive`).
 
-### The TOCTOU trap (and why we decrement first)
+### The TOCTOU Trap (and Why We Decrement First)
 
 An earlier version of `CreateReservation` looked natural:
 
@@ -215,13 +215,13 @@ if book.AvailableCopies <= 0 {
 // ...create reservation, then later somebody decrements availability...
 ```
 
-It is also **wrong** under concurrency. This is a textbook [Time-Of-Check-to-Time-Of-Use][toctou] bug: two requests for the last copy of a book call `GetBook` in parallel, both see `AvailableCopies == 1`, both pass the guard, both create reservations. The catalog ends up with `available_copies = -1` or, worse, two users hold the same physical copy.
+It is also **wrong** under concurrency — this is a textbook [time-of-check-to-time-of-use (TOCTOU)][toctou] bug: two requests for the last copy of a book call `GetBook` in parallel, both see `AvailableCopies == 1`, both pass the guard, both create reservations. The catalog ends up with `available_copies = -1` or, worse, two users hold the same physical copy.
 
 The fix flips the flow so that the **database** is the gate, not the service:
 
-1. `catalog.UpdateAvailability(book, -1)` runs a guarded `UPDATE` that refuses to go below zero (`WHERE available_copies + ? >= 0`). PostgreSQL's row-level locking during `UPDATE` serialises the two racing decrements — one wins, the other gets zero rows affected and returns `FailedPrecondition`.
+1. `catalog.UpdateAvailability(book, -1)` runs a guarded `UPDATE` that refuses to go below zero (`WHERE available_copies + ? >= 0`). PostgreSQL's row-level locking during `UPDATE` serializes the two racing decrements — one wins, the other gets zero rows affected and returns `FailedPrecondition`.
 2. Only after the decrement succeeds do we create the reservation row.
-3. If the reservation insert then fails (DB down, constraint violation, context cancelled), we compensate with `UpdateAvailability(+1)` so catalog's counter does not drift. The compensation is best-effort — if it also fails, the expiration reaper (see _Expiring reservations_) provides a backstop, since an unpaired decrement will eventually be reconciled when other reservations expire and the numbers converge.
+3. If the reservation insert then fails (database down, constraint violation, context cancelled), we compensate with `UpdateAvailability(+1)` so catalog's counter does not drift. The compensation is best-effort — if it also fails, the counter will stay off by one until operator reconciliation or a separate job fixes it. The expiration reaper (see _Expiring reservations_) cannot heal this gap on its own: it only expires existing reservation rows, so an orphaned decrement with no paired row is never reconciled by the reaper.
 
 This pattern is sometimes called "optimistic decrement with compensation" and is the pragmatic middle ground between a full two-phase commit (overkill here) and a distributed saga (useful when the workflow has more than two steps). The underlying principle — *let the database be the arbiter, not the application* — applies to any scarce-resource allocation: seat booking, inventory reservation, rate-limit token issuance.
 
@@ -229,7 +229,7 @@ This pattern is sometimes called "optimistic decrement with compensation" and is
 
 ### Returning a Book
 
-The return flow is simpler -- verify ownership, check status, update, publish:
+The return flow is simpler—verify ownership, check status, update, publish:
 
 ```go
 func (s *ReservationService) ReturnBook(ctx context.Context, reservationID uuid.UUID) (*model.Reservation, error) {
@@ -274,7 +274,7 @@ func (s *ReservationService) ReturnBook(ctx context.Context, reservationID uuid.
 }
 ```
 
-The ownership check (`res.UserID != userID`) is critical. Without it, any authenticated user could return anyone's reservation. This is a common security concern in multi-tenant systems -- always verify that the requesting user owns the resource they are acting on.
+The ownership check (`res.UserID != userID`) is critical. Without it, any authenticated user could return anyone's reservation. This is a common security concern in multi-tenant systems—always verify that the requesting user owns the resource they are acting on.
 
 ### Expiring Reservations: Read Path vs. Background Reaper
 
@@ -291,7 +291,7 @@ func (s *ReservationService) expireIfDue(ctx context.Context, r *model.Reservati
 }
 ```
 
-This is **lazy evaluation**. It keeps what the user sees consistent with what the clock says: users never observe their own overdue reservations still listed as active, because the act of reading fixes the row on the way out.
+This is **lazy evaluation**. It keeps what the user sees consistent with what the clock says: users never see their own overdue reservations still listed as active, because the act of reading fixes the row on the way out.
 
 **Path 2: the reaper.** The problem with _only_ doing expire-on-read is that if nobody reads a reservation — the user stopped logging in, the account was deleted, the request never happens — the row stays `active` forever. Worse, the catalog's `available_copies` never gets incremented back, so the book is permanently marked as held. To close this gap the reservation service runs a background goroutine that periodically finds and expires overdue rows:
 
@@ -329,11 +329,11 @@ The reaper is wired into `cmd/main.go` as a goroutine that shares the service's 
 go reservationSvc.RunExpirationReaper(ctx, reaperInterval)
 ```
 
-`REAPER_INTERVAL` defaults to 5 minutes. That is a deliberate tradeoff: the window during which a book can be stale on the catalog is roughly (`DueAt` to `DueAt + 5 minutes`), which is plenty for a library but would not suffice for, say, seat inventory on a flight. Tune it via the env var if you need tighter bounds — the cost is one full-table scan for active rows per tick.
+`REAPER_INTERVAL` defaults to 5 minutes. That is a deliberate trade-off: the window during which a book can be stale on the catalog is roughly (`DueAt` to `DueAt + 5 minutes`), which is plenty for a library but would not suffice for, say, seat inventory on a flight. Tune it via the environment variable if you need tighter bounds — the cost is one full-table scan for active rows per tick.
 
 **Why both, not just the reaper?** The reaper fires on a timer, so between ticks a user could reload their reservations page and briefly see an overdue row still listed as active. That is a small but visible inconsistency that expire-on-read eliminates without needing a ≤ 1-second timer. The two mechanisms are complementary: read-triggered for user-facing freshness, time-triggered for catalog reconciliation and unread rows.
 
-Note the defensive programming in `expireReservation`: if the database update fails, the method reverts the in-memory status change so the caller does not see stale data. And because the reaper runs with a background context that has no user attached, the helper falls back to the reservation's own `UserID` when publishing the event.
+Note the defensive programming in `expireReservation`: if the database update fails, the method reverts the in-memory status change so the caller does not see stale data. Because the reaper's background context has no user attached, the helper falls back to the reservation's own `UserID` when publishing the event.
 
 ---
 
@@ -350,7 +350,7 @@ type ReservationHandler struct {
 }
 ```
 
-The embedded `UnimplementedReservationServiceServer` provides default implementations for all RPC methods (returning "unimplemented" errors). This ensures forward compatibility -- if you add a new RPC to the proto file, the service compiles without implementing it immediately.
+The embedded `UnimplementedReservationServiceServer` provides default implementations for all RPC methods (returning "unimplemented" errors). This ensures forward compatibility—if you add a new RPC to the proto file, the service compiles without implementing it immediately.
 
 The `Service` interface defines what the handler needs:
 
@@ -363,7 +363,7 @@ type Service interface {
 }
 ```
 
-This is a narrower interface than the full `ReservationService` struct -- it only exposes the methods the handler uses. In Go, it is idiomatic to define interfaces at the point of use, not at the point of implementation. The handler says "I need something that can do these four things" and does not care whether it is a real service, a mock, or a decorator.
+This is a narrower interface than the full `ReservationService` struct—it only exposes the methods the handler uses. In Go, it is idiomatic to define interfaces at the point of use, not at the point of implementation. The handler says "I need something that can do these four things" and does not care whether it is a real service, a mock, or a decorator.
 
 ### Protobuf Mapping
 
@@ -386,7 +386,7 @@ func reservationToProto(r *model.Reservation) *reservationv1.Reservation {
 }
 ```
 
-UUIDs become strings, `time.Time` becomes `google.protobuf.Timestamp` (via `timestamppb.New`), and the nullable `ReturnedAt` is only set when non-nil. This boilerplate is the cost of keeping the domain model separate from the transport model -- but it means the domain model never depends on protobuf.
+UUIDs become strings, `time.Time` becomes `google.protobuf.Timestamp` (via `timestamppb.New`), and the nullable `ReturnedAt` is only set when non-nil. This boilerplate is the cost of keeping the domain model separate from the transport model—but it means the domain model never depends on protobuf.
 
 ### Error Mapping
 
@@ -411,15 +411,15 @@ func toGRPCError(err error) error {
 }
 ```
 
-This is a switch on sentinel errors using `errors.Is()`, which works correctly with wrapped errors (the `%w` verb in `fmt.Errorf`). The choice of gRPC codes matters for the gateway -- it maps them to HTTP status codes for the user. `ResourceExhausted` becomes 429, `FailedPrecondition` becomes 412, `PermissionDenied` becomes 403.
+This is a switch on sentinel errors using `errors.Is()`, which works correctly with wrapped errors (the `%w` verb in `fmt.Errorf`). The choice of gRPC codes matters for the gateway—it maps them to HTTP status codes for the user. `ResourceExhausted` becomes 429, `FailedPrecondition` becomes 412, `PermissionDenied` becomes 403.
 
-The `default` case returns `codes.Internal` with a generic message. Never leak internal error details to clients -- they are a security risk and useless to end users. Log the full error server-side.
+The `default` case returns `codes.Internal` with a generic message. Never leak internal error details to clients—they are a security risk and useless to end users. Log the full error server-side.
 
 ---
 
 ## Wiring in main.go
 
-The `main.go` function follows the same pattern as every other service:
+The `main` function in `main.go` follows the same pattern as every other service:
 
 ```go
 // services/reservation/cmd/main.go
@@ -429,9 +429,9 @@ reservationSvc := service.NewReservationService(repo, catalogClient, publisher, 
 reservationHandler := handler.NewReservationHandler(reservationSvc)
 ```
 
-Three lines to wire the entire application: create the repository, create the service (injecting the repo, catalog client, event publisher, and config), create the handler (injecting the service). Every dependency is explicit. Compare this to Spring Boot, where the equivalent would be three `@Component` classes with `@Autowired` constructors, and the wiring would happen invisibly through component scanning.
+Three lines to wire the domain stack: create the repository, create the service (injecting the repo, catalog client, event publisher, and config), create the handler (injecting the service). Every dependency is explicit. Compare this to Spring Boot, where the equivalent would be three `@Component` classes with `@Autowired` constructors, and the wiring would happen invisibly through component scanning.
 
-The service also creates a gRPC connection to the catalog service, since it needs to check availability:
+The service also creates a gRPC connection to the catalog service, since it needs to reserve copies through the catalog:
 
 ```go
 catalogConn, err := grpc.NewClient(catalogAddr,
@@ -440,7 +440,7 @@ catalogConn, err := grpc.NewClient(catalogAddr,
 )
 ```
 
-The `otelgrpc.NewClientHandler()` adds OpenTelemetry instrumentation to outgoing gRPC calls, so the synchronous catalog lookup appears in the distributed trace.
+The `otelgrpc.NewClientHandler()` adds OpenTelemetry instrumentation to outgoing gRPC calls, so the synchronous catalog call appears in the distributed trace.
 
 ---
 
@@ -456,9 +456,9 @@ If you compare the reservation service to the catalog service from Chapter 2, th
 | Handler | `CatalogHandler` with proto mapping | `ReservationHandler` with proto mapping |
 | main.go | Wire everything, start gRPC server | Wire everything, start gRPC server |
 
-The reservation service adds two things the catalog service did not have: a gRPC client dependency (calling catalog for availability checks) and an event publisher (sending events to Kafka). But the layering is the same. Each layer depends only on the layer below it (via interfaces), and the handler never touches the database directly.
+The reservation service adds two things the catalog service did not have: a gRPC client dependency (reserving copies against the catalog) and an event publisher (sending events to Kafka). But the layering is the same. Each layer depends only on the layer below it (via interfaces), and the handler never touches the database directly.
 
-This consistency is the payoff of a well-chosen architecture. Once you understand one service, you understand them all. New team members can navigate unfamiliar services because the structure is predictable. This is not exciting -- it is the point.
+This consistency is the payoff of a well-chosen architecture. Once you understand one service, you understand them all. New team members can navigate unfamiliar services because the structure is predictable. This is not exciting—it is the point.
 
 ---
 
@@ -472,14 +472,14 @@ This consistency is the payoff of a well-chosen architecture. Once you understan
 
 4. **Alternatives to decrement-then-reserve.** The main text explains why we decrement availability first and compensate on failure. What other approaches could close the same TOCTOU gap? Sketch the pros and cons of (a) a full two-phase commit across catalog and reservation, (b) a Saga pattern with explicit compensating transactions, (c) optimistic concurrency with a version column on `books`, and (d) a single cross-service transactional outbox. For each, identify a scenario where it would outperform the current design.
 
-5. **Reaper durability.** The reaper in `RunExpirationReaper` runs in-process: if the only reservation replica crashes between ticks, overdue rows linger until it restarts. Sketch two ways to make expiration durable against crashes — (a) moving the reaper into a dedicated cron pod / Kubernetes `CronJob`, and (b) pushing expiration into PostgreSQL itself via a scheduled `UPDATE` in `pg_cron`. What are the operational tradeoffs? Consider visibility, retries, and who owns the compensation logic when the expire event fails to publish.
+5. **Reaper durability.** The reaper in `RunExpirationReaper` runs in-process: if the only reservation replica crashes between ticks, overdue rows linger until it restarts. Sketch two ways to make expiration durable against crashes — (a) moving the reaper into a dedicated cron pod / Kubernetes `CronJob`, and (b) pushing expiration into PostgreSQL itself via a scheduled `UPDATE` in `pg_cron`. What are the operational trade-offs? Consider visibility, retries, and who owns the compensation logic when the expire event fails to publish.
 
 ---
 
 ## References
 
-[^1]: [GORM documentation](https://gorm.io/docs/) -- Official documentation for the GORM ORM library.
-[^2]: [gRPC Go quickstart](https://grpc.io/docs/languages/go/quickstart/) -- Getting started with gRPC in Go.
-[^3]: [google.golang.org/protobuf/types/known/timestamppb](https://pkg.go.dev/google.golang.org/protobuf/types/known/timestamppb) -- Protobuf Timestamp helper for Go.
-[^4]: [Go interfaces: implicit satisfaction](https://go.dev/tour/methods/10) -- How Go interfaces work without explicit `implements` declarations.
-[^5]: [errors.Is and errors.As](https://pkg.go.dev/errors#Is) -- Go standard library error matching, used for sentinel error checks.
+[^1]: [GORM documentation](https://gorm.io/docs/)—Official documentation for the GORM ORM library.
+[^2]: [gRPC Go quickstart](https://grpc.io/docs/languages/go/quickstart/)—Getting started with gRPC in Go.
+[^3]: [google.golang.org/protobuf/types/known/timestamppb](https://pkg.go.dev/google.golang.org/protobuf/types/known/timestamppb)—Protobuf Timestamp helper for Go.
+[^4]: [Go interfaces: implicit satisfaction](https://go.dev/tour/methods/10)—How Go interfaces work without explicit `implements` declarations.
+[^5]: [errors.Is and errors.As](https://pkg.go.dev/errors#Is)—Go standard library error matching, used for sentinel error checks.

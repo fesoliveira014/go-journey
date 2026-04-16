@@ -2,7 +2,7 @@
 
 Chapter 10 built a CI pipeline that publishes five Docker images to the GitHub Container Registry (GHCR) on every push to `main`. GHCR is the right choice for a project hosted on GitHub — authentication is automatic via `GITHUB_TOKEN`, and the registry lives next to the source. When running on EKS, though, GHCR is an external registry. Every node that pulls an image needs credentials, and those credentials need to be rotated, distributed, and kept out of your manifests.
 
-Amazon Elastic Container Registry (ECR) is the AWS-native alternative.[^1] It stores images in the same AWS account as the EKS cluster, and authentication between the two is handled by IAM. A node role with the right policy can pull images from ECR without a `Secret`, without `imagePullSecrets` in every pod spec, and without managing credentials at all. For workloads running inside AWS, ECR is the path of least resistance.
+Amazon Elastic Container Registry (ECR) is the AWS-native alternative.[^1] It stores images in the same AWS account as the EKS cluster, and authentication between the two is handled by IAM. A node role with the right policy can pull images from ECR without a `Secret`, without `imagePullSecrets` in every pod spec, and without managing credentials at all. For workloads running inside AWS, ECR is the simplest integration.
 
 ---
 
@@ -80,7 +80,6 @@ resource "aws_ecr_lifecycle_policy" "services" {
 }
 ```
 
-A few things worth noting in this configuration.
 
 `for_each = toset(local.services)` iterates over the services list, treating it as a set to guarantee uniqueness. Terraform creates one `aws_ecr_repository` resource per service, accessible as `aws_ecr_repository.services["catalog"]`, `aws_ecr_repository.services["auth"]`, and so on. Adding a new service to `local.services` and running `terraform apply` creates the new repository and its lifecycle policy automatically.
 
@@ -92,7 +91,7 @@ The lifecycle policy has two rules, evaluated in priority order. Rule 1 expires 
 
 ---
 
-## Image Tagging Strategy
+## Image tagging strategy
 
 ECR uses the same two-tag strategy from Chapter 10: `sha-<commit>` and `latest`. The full image URI changes to reflect the ECR endpoint:
 

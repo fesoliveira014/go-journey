@@ -8,7 +8,7 @@ Now you write the production overlay. At this point you have an EKS cluster, thr
 
 ## Restructuring the base for production
 
-There is one structural change to make before writing the overlay: Postgres and Kafka StatefulSets have no place in a production cluster. Production uses RDS and MSK. Including the in-cluster StatefulSets in the base and then having the production overlay try to delete or ignore them creates unnecessary complexity and risk.
+One structural change comes first: Postgres and Kafka StatefulSets have no place in a production cluster. Production uses RDS and MSK. Including the in-cluster StatefulSets in the base and then having the production overlay try to delete or ignore them creates unnecessary complexity and risk.
 
 The clean solution is to move the local infrastructure manifests out of the base and into a `local-infra/` component that only the local overlay includes:
 
@@ -103,7 +103,7 @@ secretGenerator:
   # ... same as before, unchanged ...
 ```
 
-The production overlay references only `../../base`. It never sees a StatefulSet for Postgres or Kafka. Those resources simply do not exist in the production render.
+The production overlay references only `../../base`. It never sees a StatefulSet for Postgres or Kafka. Those resources do not exist in the production render.
 
 ---
 

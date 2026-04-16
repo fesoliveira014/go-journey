@@ -18,7 +18,7 @@ ghcr.io/myorg/library/catalog:latest
 
 `latest` always points to the most recent build. It is what you get when you `docker pull` without specifying a tag. This is convenient during local development — `docker compose pull` fetches the newest image without needing to know a specific identifier.
 
-The problem is that `latest` is not reproducible. If you pull on Monday and a colleague pulls on Wednesday after a new push, you are running different code under the same tag. In production, if a deployment controller reads `imagePullPolicy: Always` and the pod restarts, it may pull a different image than the one running in other replicas. This is a support and debugging nightmare.
+The problem is that `latest` is not reproducible. Pull on Monday, pull on Wednesday after a new push, and you are running different code under the same name. In production, a deployment controller with `imagePullPolicy: Always` may pull a different image than other replicas when a pod restarts — a support and debugging nightmare.
 
 Use `latest` for: local development, demo environments, quick pull-and-run.
 
@@ -108,7 +108,7 @@ Here is the full job from `.github/workflows/main.yml`:
 
 ### `needs: ci`
 
-The job only runs after the `ci` job completes successfully. The `ci` job runs `earthly +ci`, which executes lint and tests for all services (see Section 10.4). If any lint or test fails, `build-and-push` is skipped entirely. You never publish an image from broken code.
+The job only runs after the `ci` job completes successfully. The `ci` job runs `earthly +ci`, which executes lint and tests for all services (see Sections 10.2 and 10.4). If any lint or test fails, `build-and-push` is skipped entirely. You never publish an image from broken code.
 
 In GitHub Actions, `needs` creates a dependency edge in the job graph. Jobs without `needs` run in parallel. Jobs with `needs` wait for all listed jobs to succeed before starting.
 
@@ -122,7 +122,7 @@ In GitHub Actions, `needs` creates a dependency edge in the job graph. Jobs with
 
 GitHub Actions expands this matrix into five parallel jobs, one per service. Each job receives `matrix.service` as a variable available via `${{ matrix.service }}`. The five jobs start concurrently once `ci` passes, so total publish time is the maximum of the five individual build times, not their sum.
 
-If one matrix job fails (e.g., the `search` Dockerfile has a bug), the other four continue. GitHub marks the overall `build-and-push` job as failed when any matrix job fails, but the other images are still pushed. This is the default `fail-fast: true` behavior — GHA will cancel remaining matrix jobs if one fails. You can set `fail-fast: false` if you want all matrix jobs to always run to completion regardless.
+If one matrix job fails (for example, the `search` Dockerfile has a bug), GitHub Actions' default `fail-fast: true` behavior cancels any in-flight matrix jobs that have not yet completed. Jobs that had already finished still pushed their images. GitHub marks the overall `build-and-push` job as failed. Set `fail-fast: false` if you want every matrix job to run to completion regardless of failures.
 
 ### `docker/login-action`
 
@@ -149,7 +149,7 @@ This action authenticates the Docker daemon running in the GHA runner against GH
             ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
 ```
 
-`context: .` sets the Docker build context to the repository root. This is required because the Dockerfiles COPY files from directories outside their own service directory — specifically `gen/` (generated protobuf code) and `pkg/` (shared libraries). If the context were set to `services/catalog/`, the `COPY gen/ ./gen/` instruction would fail with a "file not found" error.
+`context: .` sets the Docker build context to the repository root. It has to be, because the Dockerfiles `COPY` files from outside their service directory — specifically `gen/` (generated protobuf code) and `pkg/` (shared libraries). With a narrower context like `services/catalog/`, `COPY gen/ ./gen/` would fail with "file not found".
 
 `file: services/${{ matrix.service }}/Dockerfile` points to each service's Dockerfile without changing the context root. This is the standard pattern for a monorepo with a shared build context.
 
@@ -169,13 +169,13 @@ The `ci` job uses Earthly (`earthly +ci`) for lint and testing. The `build-and-p
 
 **Build caching** — the action can export and import build cache from GHCR itself (or GitHub Actions cache). Subsequent builds reuse cached layers for unchanged stages, cutting build times significantly on large images.
 
-**Provenance attestation** — by default, the action generates SLSA provenance metadata and pushes it as an attestation alongside the image. This is a supply-chain security feature: it records what runner, what commit, and what workflow produced the image, cryptographically linked to the image digest.
+**Provenance attestation** — by default, the action generates SLSA (Supply-chain Levels for Software Artifacts) provenance metadata and pushes it as an attestation alongside the image. This is a supply-chain security feature: it records what runner, what commit, and what workflow produced the image, cryptographically linked to the image digest.
 
 **Multi-platform support** — combined with `docker/setup-qemu-action`, the same action can build `linux/amd64` and `linux/arm64` images in the same step and push a multi-platform manifest. This matters when deploying to ARM-based Kubernetes nodes (e.g., AWS Graviton).
 
 **OIDC integration** — GHA runners support OpenID Connect tokens for keyless signing with Sigstore/Cosign. `docker/build-push-action` fits naturally into this ecosystem.
 
-Earthly can push images with `earthly --push ./services/catalog+docker`, but it does not (as of writing) participate in GHA's built-in provenance and attestation pipeline. For production publishing, the Docker actions ecosystem is the standard and more feature-complete path.
+Earthly can push images with `earthly --push ./services/catalog+docker`, but it does not (as of early 2026) participate in GHA's built-in provenance and attestation pipeline. For production publishing, the Docker actions ecosystem is the standard and more feature-complete path.
 
 ### Why Earthly for Local Building
 
@@ -190,7 +190,7 @@ docker:
     SAVE IMAGE catalog:latest
 ```
 
-Running `earthly ./services/catalog+docker` locally produces a `catalog:latest` image you can load into Docker and test with `docker compose`. The build logic is identical to what the Dockerfile does, and it benefits from Earthly's layer caching for fast iteration.
+Running `earthly ./services/catalog+docker` locally produces a `catalog:latest` image you can load into Docker and test with Docker Compose. The build logic is identical to what the Dockerfile does, and it benefits from Earthly's layer caching for fast iteration.
 
 The Earthly alternative for publishing is:
 
@@ -205,7 +205,7 @@ This works, but it bypasses GHA's provenance features and requires manual secret
 | Scenario | Tool |
 |---|---|
 | Local development build | `earthly ./services/<svc>+docker` |
-| Local smoke test against docker compose | `earthly ./services/<svc>+docker` |
+| Local smoke test against Docker Compose | `earthly ./services/<svc>+docker` |
 | CI lint + test | `earthly +ci` |
 | Publishing to GHCR | `docker/build-push-action` |
 | Multi-platform release builds | `docker/build-push-action` + QEMU |
@@ -216,13 +216,13 @@ This works, but it bypasses GHA's provenance features and requires manual secret
 
 If you have published artifacts to Maven Central, Artifactory, or Nexus, publishing Docker images to GHCR maps directly to that mental model.
 
-**Registry = Artifact repository.** GHCR is to Docker images what Artifactory is to JARs. Both authenticate callers, store immutable versioned artifacts, and provide a pull endpoint for consumers.
+**Registry = Artifact repository.** GHCR is to Docker images what Artifactory is to JARs. Both authenticate callers, store versioned artifacts (immutable in the case of release versions), and provide a pull endpoint for consumers.
 
-**`sha-<commit>` tag = SNAPSHOT with commit hash.** In Maven, `-SNAPSHOT` artifacts are mutable — every deploy overwrites the previous one. Some teams append commit hashes to snapshot versions: `1.0.0-SNAPSHOT-a3f8c21`. The `sha-<commit>` Docker tag does the same thing but enforces immutability: you cannot overwrite an existing tag if you configure GHCR to prevent it, and in practice no one does.
+**`sha-<commit>` tag = SNAPSHOT with commit hash.** In Maven, `-SNAPSHOT` artifacts are mutable — every deploy overwrites the previous one. Some teams append commit hashes to snapshot versions: `1.0.0-SNAPSHOT-a3f8c21`. The Docker `sha-<commit>` tag does the same, but with a stronger convention of immutability: you cannot overwrite an existing tag (when GHCR is configured to prevent it), and in practice no one does.
 
 **`latest` tag = `-SNAPSHOT`.** Both are mutable, both are convenient for development, and both are dangerous in production for the same reason: you cannot pin a running system to a specific version without checking what "latest" resolved to at deployment time.
 
-**Matrix builds = Gradle multi-module `publishAll`.** In a Gradle multi-module project, `./gradlew publishAll` publishes all submodules to the remote repository. The GHA matrix strategy is the CI equivalent: five parallel jobs, one per service, each publishing its artifact. The parallelism is explicit in the YAML rather than implicit in the build tool.
+**Matrix builds = Gradle multi-module `publish`.** In a Gradle multi-module project, `./gradlew publish` publishes all submodules to the remote repository. The GHA matrix strategy is the CI equivalent: five parallel jobs, one per service, each publishing its artifact. The parallelism is explicit in the YAML rather than implicit in the build tool.
 
 **`GITHUB_TOKEN` = CI machine credentials.** In JVM CI pipelines, you configure Artifactory credentials as environment variables or secrets (`ARTIFACTORY_USERNAME`, `ARTIFACTORY_PASSWORD`). `GITHUB_TOKEN` is the equivalent for GHCR, but GitHub manages the credential lifecycle automatically — you never create or rotate it.
 

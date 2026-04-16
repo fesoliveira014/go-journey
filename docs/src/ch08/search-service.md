@@ -1,6 +1,6 @@
 # 8.2 Search Service
 
-The search service is a standalone microservice with a single responsibility: full-text search over the book catalog. It exposes two gRPC RPCs -- `Search` and `Suggest` -- and delegates all indexing work to an abstracted search engine interface. The service does not own any book data; it maintains a read-optimized projection of the catalog, kept in sync through Kafka events (section 8.1) and a bootstrap mechanism (section 8.3).
+The search service is a standalone microservice with a single responsibility: full-text search over the book catalog. It exposes two gRPC RPCs—`Search` and `Suggest`—and delegates all indexing work to an abstracted search engine interface. The service does not own any book data; it maintains a read-optimized projection of the catalog, kept in sync through Kafka events (section 8.1) and a bootstrap mechanism (section 8.3).
 
 If you are coming from Spring, think of this service as a `@Service` + `@RestController` pair, except the transport layer is gRPC instead of HTTP, and the data store is a search engine instead of a relational database. The layering is the same: handler (transport) -> service (business logic) -> repository (data access).
 
@@ -26,7 +26,7 @@ Each layer depends only on the one below it, and only through an interface. The 
 
 ## The BookDocument Model
 
-The search service defines its own document model, separate from the catalog's `model.Book`. This is intentional -- the search index stores a denormalized, search-optimized view of the data:
+The search service defines its own document model, separate from the catalog's `model.Book`. This is intentional—the search index stores a denormalized, search-optimized view of the data:
 
 ```go
 // services/search/internal/model/model.go
@@ -58,7 +58,7 @@ type Suggestion struct {
 }
 ```
 
-`Suggestion` has no JSON tags because it never gets serialized to JSON directly -- it is used only as an internal transfer type between the service and handler layers.
+`Suggestion` has no JSON tags because it never gets serialized to JSON directly—it is used only as an internal transfer type between the service and handler layers.
 
 ---
 
@@ -172,13 +172,13 @@ func (s *SearchService) Suggest(ctx context.Context, prefix string, limit int) (
 }
 ```
 
-The service also exposes `Upsert`, `Delete`, `EnsureIndex`, and `Count` -- pass-through methods used by the Kafka consumer and bootstrap logic. These do not add business logic; they exist so that the consumer and bootstrap code depend on the service rather than reaching directly into the index layer. This keeps the dependency graph clean: everything flows through `SearchService`.
+The service also exposes `Upsert`, `Delete`, `EnsureIndex`, and `Count`—pass-through methods used by the Kafka consumer and bootstrap logic. These do not add business logic; they exist so that the consumer and bootstrap code depend on the service rather than reaching directly into the index layer. This keeps the dependency graph clean: everything flows through `SearchService`.
 
 ---
 
 ## The gRPC Handler
 
-The handler translates between gRPC (protobuf types) and the service layer (Go domain types). It defines its own `Service` interface -- a subset of what `SearchService` provides:
+The handler translates between gRPC (protobuf types) and the service layer (Go domain types). It defines its own `Service` interface—a subset of what `SearchService` provides:
 
 ```go
 // services/search/internal/handler/handler.go
@@ -199,13 +199,13 @@ func NewSearchHandler(svc Service) *SearchHandler {
 }
 ```
 
-Defining a narrow `Service` interface in the handler package rather than depending on `*service.SearchService` directly is a Go idiom worth highlighting. The handler only needs `Search` and `Suggest` -- it does not need `Upsert`, `Delete`, or `EnsureIndex`. By declaring exactly what it needs, the handler:
+Defining a narrow `Service` interface in the handler package rather than depending on `*service.SearchService` directly is a Go idiom worth highlighting. The handler only needs `Search` and `Suggest`—it does not need `Upsert`, `Delete`, or `EnsureIndex`. By declaring exactly what it needs, the handler:
 
 1. Documents its dependencies precisely (you can read the interface to know what the handler uses).
 2. Makes testing trivial (the mock only needs two methods, not seven).
-3. Follows the **Interface Segregation Principle** -- depend on the smallest interface that satisfies your needs.
+3. Follows the **Interface Segregation Principle**—depend on the smallest interface that satisfies your needs.
 
-In Java, this pattern exists too (you can `@Autowired` an interface instead of a concrete class), but it is less common because Java developers tend to create one interface per implementation class. In Go, interfaces are defined by the consumer, not the provider -- a cultural difference that leads to smaller, more focused interfaces.
+In Java, this pattern exists too (you can `@Autowired` an interface instead of a concrete class), but it is less common because Java developers tend to create one interface per implementation class. In Go, interfaces are defined by the consumer, not the provider—a cultural difference that leads to smaller, more focused interfaces.
 
 ### The Search RPC
 
@@ -312,7 +312,7 @@ func (m *mockService) Suggest(_ context.Context, _ string, _ int) ([]model.Sugge
 }
 ```
 
-Because the `Service` interface only has two methods, the mock is trivial. Compare this to mocking a Spring `@Service` class with Mockito -- conceptually similar, but here there is no framework, no annotation, no proxy generation. The mock is a plain struct that you write by hand.
+Because the `Service` interface only has two methods, the mock is trivial. Compare this to mocking a Spring `@Service` class with Mockito—conceptually similar, but here there is no framework, no annotation, and no proxy generation. The mock is a plain struct that you write by hand.
 
 The tests verify both the happy path and input validation:
 
@@ -333,7 +333,7 @@ func TestSearchHandler_Search_EmptyQuery(t *testing.T) {
 }
 ```
 
-This test calls the handler method directly -- no gRPC server, no network, no dialing. The handler is just a Go struct with methods. You can test it like any other function. This is one of the advantages of the layered architecture: the handler does not depend on the gRPC server infrastructure, only on the generated protobuf types.
+This test calls the handler method directly—no gRPC server, no network, no dialing. The handler is just a Go struct with methods. You can test it like any other function. This is one of the advantages of the layered architecture: the handler does not depend on the gRPC server infrastructure, only on the generated protobuf types.
 
 ---
 
@@ -370,7 +370,7 @@ searchv1.RegisterSearchServiceServer(grpcServer, searchHandler)
 
 Notice the flow: `index.NewMeilisearchIndex` -> `service.NewSearchService` -> `handler.NewSearchHandler`. Each constructor takes exactly the dependencies it needs. The Kafka consumer and bootstrap both depend on `searchSvc` (not on the index directly), maintaining the single entry point for all write operations.
 
-The Kafka consumer runs in a goroutine -- it blocks indefinitely, processing messages until the context is cancelled. The gRPC server runs on the main goroutine. If the consumer crashes, the service continues to serve search requests from whatever is already in the index.
+The Kafka consumer runs in a goroutine—it blocks indefinitely, processing messages until the context is cancelled. The gRPC server runs on the main goroutine. If the consumer crashes, the service continues to serve search requests from whatever is already in the index.
 
 ---
 
@@ -382,13 +382,13 @@ The Kafka consumer runs in a goroutine -- it blocks indefinitely, processing mes
 
 3. **Examine the `UnimplementedSearchServiceServer` embedding.** What happens if you add a new RPC to the proto file, regenerate the code, but forget to implement it in the handler? Try it: add a `GetStats` RPC to the proto, regenerate, and call it with `grpcurl`. What error code do you get?
 
-4. **Compare the interface segregation approach.** The handler defines its own `Service` interface with 2 methods, while `SearchService` has 7. In Java/Kotlin, would you typically create a separate interface for the controller's use? What are the tradeoffs?
+4. **Compare the interface segregation approach.** The handler defines its own `Service` interface with 2 methods, while `SearchService` has 7. In Java/Kotlin, would you typically create a separate interface for the controller's use? What are the trade-offs?
 
 ---
 
 ## References
 
-[^1]: [gRPC Go -- Basics tutorial](https://grpc.io/docs/languages/go/basics/) -- Official guide for implementing gRPC services in Go, including server setup and handler registration.
-[^2]: [Go Wiki -- Interfaces](https://go.dev/wiki/CodeReviewComments#interfaces) -- The Go team's recommendation on where to define interfaces: at the call site, not the implementation site.
-[^3]: [gRPC status codes](https://grpc.github.io/grpc/core/md_doc_statuscodes.html) -- Reference for all gRPC status codes and when to use each one.
-[^4]: [Robert C. Martin -- Interface Segregation Principle](https://web.archive.org/web/2020*/https://drive.google.com/file/d/0BwhCYaYDn8EgOTViYjJhYzMtMzYxMC00MzFjLWJjMzYtOGJiMDc5N2JkYmJi/view) -- The original ISP paper, part of the SOLID principles.
+[^1]: [gRPC Go—Basics tutorial](https://grpc.io/docs/languages/go/basics/)—Official guide for implementing gRPC services in Go, including server setup and handler registration.
+[^2]: [Go Wiki—Interfaces](https://go.dev/wiki/CodeReviewComments#interfaces)—The Go team's recommendation on where to define interfaces: at the call site, not the implementation site.
+[^3]: [gRPC status codes](https://grpc.github.io/grpc/core/md_doc_statuscodes.html)—Reference for all gRPC status codes and when to use each one.
+[^4]: [Robert C. Martin—Interface Segregation Principle](https://web.archive.org/web/2020*/https://drive.google.com/file/d/0BwhCYaYDn8EgOTViYjJhYzMtMzYxMC00MzFjLWJjMzYtOGJiMDc5N2JkYmJi/view)—The original ISP paper, part of the SOLID principles.

@@ -4,7 +4,7 @@ Chapter 12 ended with every service running in a Kubernetes cluster on your lapt
 
 The answer is cloud infrastructure — virtual machines for nodes, a managed control plane, a VPC with subnets and routing tables, a container registry, a managed database, a managed Kafka cluster, IAM roles for service accounts. Assembling all of that by clicking through the AWS console works once, but it does not scale and it does not survive a new team member, a disaster recovery drill, or a cost-cutting experiment in a second region. You need a way to describe infrastructure in files, version-control those files alongside your application code, and apply changes reproducibly.
 
-That is exactly what Infrastructure as Code tools do. Terraform is the most widely adopted of them.
+That is what IaC tools do. Terraform is the most widely adopted of them.
 
 ---
 
@@ -62,7 +62,7 @@ resource "aws_vpc" "main" {
 
 The first argument to `resource` is the type (`aws_vpc`), which is defined by the provider. The second is a local name (`main`) used to reference this resource elsewhere in the configuration. Together they form the address `aws_vpc.main`, which you will see in plan output and in cross-resource references like `aws_vpc.main.id`.
 
-After `terraform apply` runs, Terraform stores the resource's real-world identifiers — the VPC ID AWS assigned, its state, its ARN — in state. On the next `apply`, it compares the configuration to state and to the live resource, and only makes changes if something diverged.
+After `terraform apply` runs, Terraform stores the resource's real-world identifiers — the VPC ID AWS assigned, its state, its ARN — in state. On the next `apply`, it compares the configuration to state and to the live resource, making changes only when something has diverged.
 
 ### Data sources
 
@@ -96,7 +96,7 @@ variable "db_password" {
 }
 ```
 
-The `sensitive = true` flag tells Terraform to redact the value from plan and apply output. Variable values can be supplied on the command line (`-var="region=us-west-2"`), in a `.tfvars` file, or via environment variables prefixed with `TF_VAR_` (e.g., `TF_VAR_db_password`). The `.tfvars` files holding real secrets should be in `.gitignore`.
+The `sensitive = true` flag tells Terraform to redact the value from plan and apply output. Variable values can be supplied on the command line (`-var="region=us-west-2"`), in a `.tfvars` file, or via environment variables prefixed with `TF_VAR_` (e.g., `TF_VAR_db_password`). The `.tfvars` files holding real secrets belong in `.gitignore`.
 
 ### Outputs
 
@@ -179,7 +179,7 @@ While working through this chapter, leave the backend block commented out. The l
 
 ## Project structure
 
-A Terraform project is just a directory of `.tf` files. Terraform loads all files in the directory as a single configuration, so there is no semantic significance to how you split content across files. By convention, the standard split used in this chapter groups resources by concern:
+A Terraform project is a directory of `.tf` files. Terraform loads all files in the directory as a single configuration, so there is no semantic significance to how you split content across files. By convention, the standard split used in this chapter groups resources by concern:
 
 ```
 terraform/
@@ -203,7 +203,7 @@ Each subsequent section in this chapter adds one file to this directory and walk
 
 ## The Terraform workflow
 
-Four commands cover almost everything you will do in this chapter.
+Four commands cover the core of what you will do in this chapter.
 
 **`terraform init`** initializes the working directory. It downloads the providers declared in the `terraform` block, initializes the backend (local or remote), and prepares the `.terraform/` directory. You run this once when setting up a new project, and again whenever you add or change providers or modules.
 

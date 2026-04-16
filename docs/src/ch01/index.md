@@ -1,6 +1,6 @@
 # Chapter 1: Go Foundations
 
-In this chapter, you will set up the project, learn the Go essentials you need for the rest of the tutorial, build a basic HTTP server, and write your first tests.
+This chapter sets up the project, covers the Go essentials you'll need throughout the tutorial, builds a basic HTTP server, and introduces Go's testing conventions.
 
 By the end of this chapter, you will have:
 
@@ -17,7 +17,7 @@ Before starting, install:
 - **Go 1.26+** — [go.dev/dl](https://go.dev/dl/)
 - **Earthly** — [earthly.dev/get-earthly](https://earthly.dev/get-earthly)
 - **Git** — [git-scm.com](https://git-scm.com/)
-- A code editor (VS Code with the Go extension is recommended)
+- A code editor; VS Code with the official Go extension is recommended.
 
 Verify your installations:
 

@@ -1,6 +1,6 @@
 # Chapter 4: Authentication
 
-In this chapter, we build an authentication service from scratch. By the end, your library system will support user registration with bcrypt-hashed passwords, stateless JWT-based sessions, OAuth2 login with Google, and a shared interceptor that protects both the Auth and Catalog services.
+In this chapter, we build an authentication service from scratch. By the end, your library system will support user registration with bcrypt-hashed passwords, stateless JWT-based sessions, and OAuth2 login with Google. A shared interceptor will protect both the Auth and Catalog services.
 
 ## Architecture Overview
 
@@ -33,7 +33,7 @@ graph LR
     CH --> CTX
 ```
 
-The `pkg/auth` module is the linchpin -- it lives outside both services so that any microservice can import it. The interceptor validates JWTs on every request (unless the method is in the skip list), and the context helpers let handlers extract the authenticated user's ID and role.
+The `pkg/auth` module is the linchpin—it lives outside both services so any microservice can import it. The interceptor validates JWTs on every request (unless the method is in the skip list), and the context helpers let handlers extract the authenticated user's ID and role.
 
 ## What You'll Learn
 
@@ -41,12 +41,12 @@ The `pkg/auth` module is the linchpin -- it lives outside both services so that 
 - How JWTs provide stateless authentication for microservices
 - Building a complete gRPC auth service with registration, login, and token validation
 - Implementing OAuth2 authorization code flow with Google
-- Writing gRPC interceptors -- the middleware pattern for gRPC
+- Writing gRPC interceptors—the middleware pattern for gRPC
 - Role-based access control across multiple services
 
 ## Prerequisites
 
-- Chapters 1--3 completed (the Catalog service and Docker Compose stack should build and run)
+- Chapters 1--3 completed (the Catalog service and Docker Compose stack build and run cleanly)
 - Docker Desktop (or Docker Engine + Compose plugin) running
 - Basic understanding of gRPC and Protocol Buffers from Chapter 2
 
@@ -59,7 +59,7 @@ The `pkg/auth` module is the linchpin -- it lives outside both services so that 
 
 ## Sections
 
-1. **[Authentication Fundamentals](./auth-fundamentals.md)** -- Password hashing, JWTs, and when to use each authentication strategy
-2. **[The Auth Service](./auth-service.md)** -- Proto definition, migrations, repository, service, handler, and DI wiring
-3. **[OAuth2 with Google](./oauth2.md)** -- Authorization code flow, state parameters, and the find-or-create pattern
-4. **[Protecting Services with Interceptors](./interceptors.md)** -- gRPC middleware, the shared auth library, and role-based authorization
+1. **[Authentication Fundamentals](./auth-fundamentals.md)**—Password hashing, JWTs, and when to use each authentication strategy
+2. **[The Auth Service](./auth-service.md)**—Proto definition, migrations, repository, service, handler, and DI wiring
+3. **[OAuth2 with Google](./oauth2.md)**—Authorization code flow, state parameters, and the find-or-create pattern
+4. **[Protecting Services with Interceptors](./interceptors.md)**—gRPC middleware, the shared auth library, and role-based authorization

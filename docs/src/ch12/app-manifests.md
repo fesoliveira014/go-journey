@@ -1,6 +1,6 @@
 # 12.3 Application Manifests
 
-With all five services containerized and the infrastructure layer (PostgreSQL, Kafka, Meilisearch) declared in the previous section, we are ready to write the manifests for the application services themselves. Every service needs three resources: a Deployment that runs the container, a Service that gives it a stable DNS name inside the cluster, and a ConfigMap that injects non-sensitive configuration. Secrets are declared separately as placeholder objects that a local overlay will fill in with real values.
+With all five services containerized and the infrastructure layer (PostgreSQL, Kafka, Meilisearch) declared in the next section, we are ready to write the manifests for the application services themselves. Every service needs three resources: a Deployment that runs the container, a Service that gives it a stable DNS name inside the cluster, and a ConfigMap that injects non-sensitive configuration. Secrets are declared separately as placeholder objects that a local overlay will fill in with real values.
 
 All application resources live in the `library` namespace. Infrastructure resources live in `data` and `messaging`. Keeping namespaces separate has two practical benefits: you can delete all application resources with a single `kubectl delete namespace library` during development without touching your databases, and RBAC policies (covered in Chapter 13) can grant service accounts namespace-scoped permissions rather than cluster-wide ones.
 
@@ -26,7 +26,7 @@ metadata:
   name: library
 ```
 
-The `data` and `messaging` namespace manifests are identical in structure (just with different `name` fields) and were declared in section 12.2.
+The `data` and `messaging` namespace manifests are identical in structure (just with different `name` fields) and will be declared in section 12.4.
 
 ---
 
@@ -115,7 +115,7 @@ spec:
 
 ### `spec.replicas`
 
-How many Pod copies the controller should maintain. We use 1 during development. Increasing this to 2+ enables rolling updates and basic availability during node maintenance, but requires that services handle multiple concurrent instances correctly — which ours do, since all state lives in PostgreSQL and Kafka.
+How many Pod copies the controller should maintain. We use 1 during development. Increasing this to two or more enables rolling updates and basic availability during node maintenance, but requires that services handle multiple concurrent instances correctly — which ours do, since all state lives in PostgreSQL and Kafka.
 
 ### `spec.selector.matchLabels`
 
@@ -135,7 +135,7 @@ Everything under `spec.template` describes the Pod that the Deployment creates. 
 
 #### `ports`
 
-`containerPort` is documentation — it does not actually open a port or affect networking. Kubernetes networking makes all container ports reachable regardless of whether they are declared here. The convention exists so that tooling (`kubectl describe`, service mesh proxies, monitoring agents) can discover which ports a container uses.
+`containerPort` is documentation — it does not open a port or affect networking. Kubernetes networking makes all container ports reachable regardless of whether they are declared here. The convention exists so that tooling (`kubectl describe`, service mesh proxies, monitoring agents) can discover which ports a container uses.
 
 #### `envFrom` — ConfigMap injection
 
@@ -288,7 +288,7 @@ data:
 
 ConfigMaps[^4] store non-sensitive key-value data. All values must be strings — note the quotes around `"50052"`. The keys map directly to environment variable names when loaded via `envFrom.configMapRef`.
 
-`KAFKA_BROKERS` uses the cross-namespace DNS name for the Kafka StatefulSet Pod. StatefulSet Pods get stable DNS names in the form `<pod-name>.<service-name>.<namespace>.svc.cluster.local`. The `kafka-0` pod is in the `messaging` namespace, so its address is `kafka-0.kafka.messaging.svc.cluster.local:9092`. A regular Service DNS name (`kafka.messaging.svc.cluster.local`) would also work but would route through the cluster's load balancer rather than directly to the pod — for Kafka, connecting directly to broker pods by their stable identity is the standard approach.
+`KAFKA_BROKERS` uses the cross-namespace DNS name for the Kafka StatefulSet Pod. StatefulSet Pods get stable DNS names in the form `<pod-name>.<service-name>.<namespace>.svc.cluster.local`. The `kafka-0` pod is in the `messaging` namespace, so its address is `kafka-0.kafka.messaging.svc.cluster.local:9092`. A regular Service DNS name (`kafka.messaging.svc.cluster.local`) would also work but would be load-balanced across broker pods by kube-proxy rather than routed directly to one pod — for Kafka, connecting directly to broker pods by their stable identity is the standard approach.
 
 `OTEL_COLLECTOR_ENDPOINT` is empty. The OTel collector is not deployed in the kind cluster (it is part of the observability stack in Docker Compose). Leaving this empty causes the services to skip exporting traces. The Docker Compose stack (Chapter 9) includes a full collector; the kind cluster omits it for simplicity.
 
@@ -517,7 +517,7 @@ data:
   OTEL_COLLECTOR_ENDPOINT: ""
 ```
 
-`CATALOG_GRPC_ADDR` uses the Service DNS name (`catalog.library.svc.cluster.local`) rather than a StatefulSet pod name. Application Services (as opposed to StatefulSets) are load-balanced by default, so using the Service name is correct.
+`CATALOG_GRPC_ADDR` uses the Service DNS name (`catalog.library.svc.cluster.local`) rather than a StatefulSet pod name. The catalog Service is a regular ClusterIP Service backed by a Deployment, so it load-balances across all catalog pods. StatefulSet pods use headless Services and are addressed by pod name (as with Kafka above).
 
 ### Search service
 
@@ -754,7 +754,7 @@ spec:
                   number: 8080
 ```
 
-`ingressClassName: nginx` selects the NGINX controller installed in the cluster. Without this field, if multiple Ingress controllers are installed, the behavior is undefined.
+`ingressClassName: nginx` selects the NGINX controller installed in the cluster. Without this field, if multiple Ingress controllers are installed, the behavior is nondeterministic — whichever controller claims the Ingress first handles it.
 
 All HTTP traffic to `library.local` routes to the gateway Service on port 8080. The gateway handles all routing internally — it owns the URL tree and proxies to the appropriate gRPC backend.
 
@@ -811,7 +811,7 @@ Or render the assembled YAML without applying (useful for review):
 kubectl kustomize deploy/k8s/base/library/
 ```
 
-The order of `resources` matters for readability but not for correctness — `kubectl apply` handles resource creation order internally, retrying dependencies that are not yet ready.
+The order of `resources` matters for readability but not for correctness — `kubectl apply` submits resources in a single request, and the API server plus controllers reconcile dependency readiness through normal retry loops.
 
 ---
 
@@ -825,7 +825,7 @@ Three things to carry forward:
 2. In the `env` list, variables that reference other variables via `$(VAR_NAME)` must be declared after the variables they reference. The ordering is sequential, not lexicographic.
 3. Base64 encoding is not protection. Treat Secret manifests as sensitive files — never commit real values to source control.
 
-Section 12.4 assembles the top-level `kustomization.yaml` that ties all three namespaces together, and section 12.5 adds the local overlay with image name patches and `secretGenerator` entries.
+Section 12.5 assembles the top-level `kustomization.yaml` that ties all three namespaces together and adds the local overlay with image name patches and `secretGenerator` entries.
 
 ---
 

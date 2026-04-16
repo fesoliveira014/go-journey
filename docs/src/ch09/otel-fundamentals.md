@@ -1,6 +1,6 @@
 # 9.1 OpenTelemetry Fundamentals
 
-Before we instrument a single line of Go code, we need to understand what we are building toward. Observability is not about installing a library -- it is about designing your system so you can ask arbitrary questions about its behavior in production, without deploying new code. This section covers the concepts and architecture that make that possible.
+Before we instrument a single line of Go code, we need to understand what we are building toward. Observability is not about installing a library; it is about designing your system so you can ask arbitrary questions about its behavior in production, without deploying new code. This section covers the concepts and architecture that make that possible.
 
 ---
 
@@ -8,11 +8,11 @@ Before we instrument a single line of Go code, we need to understand what we are
 
 Observability rests on three signal types, each answering a different class of question:
 
-**Traces** answer "what happened during this request?" A trace follows a single operation across service boundaries -- from the HTTP request entering the gateway, through a gRPC call to the catalog service, into a PostgreSQL query, out through a Kafka publish, and into a consumer on the other side. Each step in the trace is a **span**. Spans form a tree: the root span is the entry point, and child spans represent sub-operations.
+**Traces** answer "what happened during this request?" A trace follows a single operation across service boundaries—from the HTTP request entering the gateway, through a gRPC call to the catalog service, into a PostgreSQL query, out through a Kafka publish, and into a consumer on the other side. Each step in the trace is a **span**. Spans form a tree: the root span is the entry point, and child spans represent sub-operations.
 
-**Metrics** answer "how is the system performing right now?" Metrics are aggregated numerical measurements: request count, error rate, latency percentiles, queue depth, memory usage. Unlike traces (which capture individual requests), metrics summarize behavior over time windows. They are cheap to collect, cheap to store, and the foundation of alerting.
+**Metrics** answer "how is the system performing right now?" Metrics are aggregated measurements: request count, error rate, latency percentiles, queue depth, memory usage. Unlike traces (which capture individual requests), metrics summarize behavior over time windows. They are cheap to collect, cheap to store, and the foundation of alerting.
 
-**Logs** answer "what did the code actually do?" Logs are timestamped text records emitted by your application. When structured (JSON with consistent fields), they become queryable. When correlated with traces (via a shared `trace_id`), they become powerful: you can click a slow trace in your dashboard and immediately see every log line from every service involved in that request.
+**Logs** answer "what did the code actually do?" Logs are timestamped records emitted by your application. When structured (JSON with consistent fields), they become queryable. When correlated with traces (via a shared `trace_id`), they become powerful: you can click a slow trace in your dashboard and immediately see every log line from every service involved in that request.
 
 Each pillar is useful alone. Together, they create a feedback loop: metrics tell you *something* is wrong (latency spike), traces tell you *where* it is wrong (the catalog-to-PostgreSQL span), and logs tell you *why* (a missing index causing a full table scan).
 
@@ -24,7 +24,7 @@ If you have used Spring Boot Actuator with Micrometer, you have worked with metr
 
 OpenTelemetry (OTel) is a CNCF project that provides a vendor-neutral standard for collecting telemetry data. It is the merger of two earlier projects: OpenTracing (tracing API) and OpenCensus (tracing + metrics). The goal is simple: instrument your code once, export to any backend.
 
-The Java ecosystem went through a similar consolidation. Micrometer provided a vendor-neutral metrics facade (like SLF4J for metrics). OpenTracing provided a tracing API. Spring Cloud Sleuth wired them together. OTel replaces all of these with a single, unified project that covers traces, metrics, and (as of recently) logs.
+The Java ecosystem went through a similar consolidation. Micrometer provided a vendor-neutral metrics facade (like SLF4J for metrics). OpenTracing provided a tracing API. Spring Cloud Sleuth wired them together. OTel replaces all of these with a single, unified project that covers traces, metrics, and (as of the OTel 1.x SDK series) logs.
 
 OTel consists of several components:
 
@@ -36,7 +36,7 @@ OTel consists of several components:
 | **Collector** | A standalone binary that receives, processes, and forwards telemetry. Acts as a proxy between your services and your backends. |
 | **Contrib packages** | Auto-instrumentation libraries for popular frameworks: `net/http`, gRPC, database drivers, etc. |
 
-The split between API and SDK is deliberate. Library authors depend on the API (lightweight, stable). Application authors depend on the SDK (heavier, configurable). If no SDK is configured, the API defaults to no-ops -- your library still compiles and runs, it just does not emit telemetry. This is the same pattern as SLF4J (API) + Logback (implementation) in Java.
+The split between API and SDK is deliberate. Library authors depend on the API (lightweight, stable). Application authors depend on the SDK (heavier, configurable). If no SDK is configured, the API defaults to no-ops—your library still compiles and runs, it just does not emit telemetry. This is the same pattern as SLF4J (API) + Logback (implementation) in Java.
 
 ---
 
@@ -47,13 +47,13 @@ The split between API and SDK is deliberate. Library authors depend on the API (
 A **span** represents a single unit of work: an HTTP request, a gRPC call, a database query, a Kafka publish. Each span has:
 
 - A **name** (e.g., `GET /books`, `catalog.v1.CatalogService/ListBooks`)
-- A **trace ID** -- a 128-bit identifier shared by all spans in the same trace
-- A **span ID** -- a 64-bit identifier unique to this span
-- A **parent span ID** -- linking this span to its parent (absent for root spans)
+- A **trace ID**—a 128-bit identifier shared by all spans in the same trace
+- A **span ID**—a 64-bit identifier unique to this span
+- A **parent span ID**—linking this span to its parent (absent for root spans)
 - A **start time** and **end time**
-- **Attributes** -- key-value pairs (e.g., `http.method=GET`, `http.status_code=200`)
-- **Events** -- timestamped annotations within the span (e.g., an exception)
-- A **status** -- OK, Error, or Unset
+- **Attributes**—key-value pairs (e.g., `http.method=GET`, `http.status_code=200`)
+- **Events**—timestamped annotations within the span (e.g., an exception)
+- A **status**—OK, Error, or Unset
 
 A **trace** is the collection of all spans sharing the same trace ID. Visually, a trace looks like a waterfall chart:
 
@@ -64,7 +64,7 @@ A **trace** is the collection of all spans sharing the same trace ID. Visually, 
       [catalog] db SELECT books        ──────────── 12ms
 ```
 
-Each indentation level is a child span. The total request took 45ms, and you can see that 12ms of that was the database query. Without tracing, you would know the request took 45ms (from your HTTP access log), but you would not know whether the time was spent in your code, in the database, or in network latency between services.
+Each indentation level is a child span. The request took 45 ms total — 12 ms of which was the database query. Without tracing, you would know the request took 45ms (from your HTTP access log), but you would not know whether the time was spent in your code, in the database, or in network latency between services.
 
 Spans also carry a **status**. If the catalog service returns a gRPC error, the span's status is set to `Error` with a description. Visualization tools (Grafana Tempo, Jaeger) highlight error spans in red, making it easy to spot failures in a trace waterfall.
 
@@ -84,7 +84,7 @@ In gRPC, the same header is propagated via metadata. In Kafka, we inject it into
 
 OTel calls the component that does this a **TextMapPropagator**. Our system uses `propagation.TraceContext{}`, which implements the W3C standard. You register it once at startup, and every instrumented transport (HTTP, gRPC, Kafka) uses it automatically.
 
-In the Java world, Spring Cloud Sleuth (now Micrometer Tracing) handled this transparently via servlet filters and RestTemplate interceptors. OTel in Go works the same way -- the contrib packages (`otelhttp`, `otelgrpc`) inject and extract context without manual intervention. Kafka is the exception: we handle it manually, which we will see in section 9.2.
+In the Java world, Spring Cloud Sleuth (now Micrometer Tracing) handled this transparently via servlet filters and RestTemplate interceptors. OTel in Go is similar: the contrib packages (`otelhttp`, `otelgrpc`) inject and extract context without manual intervention. Kafka is the exception: we handle it manually, which we will see in section 9.2.
 
 ### Metric Types
 
@@ -98,21 +98,21 @@ OTel defines three fundamental metric instruments:
 
 Counters and histograms are the most common. The `otelhttp` middleware automatically records `http_server_request_duration_seconds` as a histogram, giving you latency percentiles for free. We add a custom `Int64UpDownCounter` for tracking the total book count in the catalog.
 
-If you have used Micrometer in Spring, these map directly: `Counter` is `Counter`, `Gauge` is `Gauge`, and `DistributionSummary` / `Timer` is roughly `Histogram`. The naming conventions differ (OTel favors `snake_case` with units as suffixes, Micrometer uses `dot.separated`), but the concepts are identical.
+If you have used Micrometer in Spring, these map directly: `Counter` is `Counter`, `Gauge` is `Gauge`, and `DistributionSummary` / `Timer` is roughly `Histogram`. The naming conventions differ (OTel favors `snake_case` with units as suffixes, Micrometer uses `dot.separated`), but the semantics are identical.
 
 ### The OTel API/SDK Split
 
-A design decision worth understanding: OTel separates the **API** (interfaces and no-op implementations) from the **SDK** (the real implementation). This is the same split as SLF4J (API) vs. Logback (SDK) in Java.
+The OTel API/SDK split is worth understanding. OTel separates the **API** (interfaces and no-op implementations) from the **SDK** (the real implementation). This is the same split as SLF4J (API) vs. Logback (SDK) in Java.
 
-When you write library code, you depend only on the API package (`go.opentelemetry.io/otel`). You call `otel.Tracer("mylib").Start(ctx, "span")` and it works -- if no SDK is configured, the call returns a no-op span that does nothing. Your library compiles, runs, and imposes zero overhead.
+When you write library code, you depend only on the API package (`go.opentelemetry.io/otel`). You call `otel.Tracer("mylib").Start(ctx, "span")` and it works—if no SDK is configured, the call returns a no-op span that does nothing. Your library compiles, runs, and imposes zero overhead.
 
 When you write application code (your `main.go`), you also depend on the SDK packages (`go.opentelemetry.io/otel/sdk/trace`, `go.opentelemetry.io/otel/exporters/...`). You configure a `TracerProvider` with real exporters and register it globally. From that point on, all API calls (including those from libraries) produce real spans.
 
-This split has a practical consequence for testing. Your unit tests never call `Init()`, so the global providers remain no-ops. OTel-instrumented code runs without side effects -- no spans exported, no network calls, no test dependencies on a running Collector.
+This split has a practical consequence for testing. Your unit tests never call `Init()`, so the global providers remain no-ops. OTel-instrumented code runs without side effects—no spans exported, no network calls, no test dependencies on a running Collector.
 
 ### Baggage and Context
 
-Beyond trace context, OTel supports **baggage** -- arbitrary key-value pairs that propagate across service boundaries alongside the trace context. For example, you could set `baggage.Set("user.tier", "premium")` in the gateway, and every downstream service could read it.
+Beyond trace context, OTel supports **baggage**—arbitrary key-value pairs that propagate across service boundaries alongside the trace context. For example, you could set `baggage.Set("user.tier", "premium")` in the gateway, and every downstream service could read it.
 
 We do not use baggage in our system, but it is worth knowing about. It is the OTel equivalent of passing metadata through the entire call chain without adding parameters to every function signature. The W3C Baggage specification[^5] defines the header format (`baggage: user.tier=premium`), and OTel propagates it alongside `traceparent`.
 
@@ -156,15 +156,15 @@ The Collector is the key architectural piece. Services do not need to know which
 
 OpenTelemetry is the second most active CNCF project after Kubernetes[^2]. It has reached "Graduated" status for tracing and metrics, with logging in "Stable" as of late 2024. The ecosystem includes:
 
-- **Jaeger** and **Zipkin** -- trace backends (OTel can export to both)
-- **Prometheus** -- the de facto standard for metrics in Kubernetes
-- **Grafana Tempo** -- a trace backend designed for high volume and low cost
-- **Grafana Loki** -- a log aggregation system inspired by Prometheus's label model
-- **Grafana** -- the visualization layer that ties them all together
+- **Jaeger** and **Zipkin**—trace backends (OTel can export to both)
+- **Prometheus**—the de facto standard for metrics in Kubernetes
+- **Grafana Tempo**—a trace backend designed for high volume and low cost
+- **Grafana Loki**—a log aggregation system inspired by Prometheus's label model
+- **Grafana**—the visualization layer that ties them all together
 
-Our stack uses the Grafana family (Tempo, Loki, Grafana) plus Prometheus. This is a common open-source choice. In production, you might use managed equivalents: AWS X-Ray for traces, CloudWatch for metrics, or a commercial platform like Datadog or Honeycomb. The point of OTel is that switching backends does not require changing your application code -- you change the Collector configuration.
+Our stack uses the Grafana family (Tempo, Loki, Grafana) plus Prometheus — a common open-source choice. In production, you might use managed equivalents: AWS X-Ray for traces, CloudWatch for metrics, or a commercial platform like Datadog or Honeycomb. The point of OTel is that switching backends does not require changing your application code—you change the Collector configuration.
 
-The fact that OTel is vendor-neutral is its defining feature. Before OTel, you chose a vendor (Datadog, New Relic, Honeycomb) and instrumented with their proprietary SDK. Switching vendors meant re-instrumenting your entire codebase. With OTel, your instrumentation is permanent. The export destination is a configuration change.
+OTel's defining feature is that it is vendor-neutral. Before OTel, you chose a vendor (Datadog, New Relic, Honeycomb) and instrumented with their proprietary SDK. Switching vendors meant re-instrumenting your entire codebase. With OTel, your instrumentation is permanent. The export destination is a configuration change.
 
 This is the same value proposition that SLF4J brought to Java logging: write `logger.info("message")` once, switch between Logback, Log4j2, or any other implementation by changing a dependency. OTel does this for all three pillars of observability.
 
@@ -184,8 +184,8 @@ This is the same value proposition that SLF4J brought to Java logging: write `lo
 
 ## References
 
-[^1]: [W3C Trace Context Specification](https://www.w3.org/TR/trace-context/) -- The standard for propagating trace context across service boundaries via HTTP headers.
-[^2]: [OpenTelemetry CNCF Project Page](https://www.cncf.io/projects/opentelemetry/) -- Project status, governance, and community links.
-[^3]: [OpenTelemetry Go Documentation](https://opentelemetry.io/docs/languages/go/) -- Official getting-started guide and API reference for the Go SDK.
-[^4]: [OpenTelemetry Specification](https://opentelemetry.io/docs/specs/otel/) -- The language-agnostic specification that all SDKs implement.
-[^5]: [W3C Baggage Specification](https://www.w3.org/TR/baggage/) -- The standard for propagating application-defined key-value pairs alongside trace context.
+[^1]: [W3C Trace Context Specification](https://www.w3.org/TR/trace-context/)—The standard for propagating trace context across service boundaries via HTTP headers.
+[^2]: [OpenTelemetry CNCF Project Page](https://www.cncf.io/projects/opentelemetry/)—Project status, governance, and community links.
+[^3]: [OpenTelemetry Go Documentation](https://opentelemetry.io/docs/languages/go/)—Official getting-started guide and API reference for the Go SDK.
+[^4]: [OpenTelemetry Specification](https://opentelemetry.io/docs/specs/otel/)—The language-agnostic specification that all SDKs implement.
+[^5]: [W3C Baggage Specification](https://www.w3.org/TR/baggage/)—The standard for propagating application-defined key-value pairs alongside trace context.

@@ -1,12 +1,12 @@
 # 9.2 Instrumenting Go Services
 
-With the theory from section 9.1 in hand, we now instrument three services: the gateway (HTTP), the catalog (gRPC + Kafka + PostgreSQL), and the reservation service (gRPC + Kafka + PostgreSQL). The pattern is the same each time: initialize OTel once in `main()`, attach auto-instrumentation to transports, and add manual instrumentation where auto-instrumentation does not reach.
+With the theory from section 9.1 in hand, we now instrument three services: the gateway (HTTP), the catalog (gRPC + Kafka + PostgreSQL), and the reservation service (gRPC + Kafka + PostgreSQL). The pattern is the same each time. Initialize OTel once in `main()`, attach auto-instrumentation to transports, and add manual instrumentation where auto-instrumentation does not reach.
 
 ---
 
 ## The Shared `pkg/otel` Package
 
-All three services share a single `Init` function that configures the OTel SDK. This lives in `pkg/otel/otel.go` -- a shared package in the monorepo, just like `pkg/auth` from earlier chapters.
+All three services share a single `Init` function that configures the OTel SDK. This lives in `pkg/otel/otel.go`—a shared package in the monorepo, just like `pkg/auth` from earlier chapters.
 
 ```go
 // pkg/otel/otel.go
@@ -73,20 +73,20 @@ Let us walk through each piece.
 
 ### Resource
 
-A `resource.Resource` describes the entity producing telemetry. At minimum, it needs `service.name` so your traces and metrics are labeled with the originating service. The `semconv` package provides standardized attribute keys from the OpenTelemetry Semantic Conventions[^1] -- this is the OTel equivalent of well-known metric tags in Micrometer.
+A `resource.Resource` describes the entity producing telemetry. At minimum, it needs `service.name` so your traces and metrics are labeled with the originating service. The `semconv` package provides standardized attribute keys from the OpenTelemetry Semantic Conventions[^1]—this is the OTel equivalent of well-known metric tags in Micrometer.
 
 ### TracerProvider
 
 The `TracerProvider` is the factory for creating tracers. It is configured with:
 
-- A **BatchSpanProcessor** that buffers completed spans and exports them in batches. This is critical for performance -- you do not want to make a network call for every span. The batch processor has a bounded queue; if the queue fills (e.g., the Collector is down), new spans are dropped silently. Your application keeps running.
+- A **BatchSpanProcessor** that buffers completed spans and exports them in batches. This is critical for performance—you do not want to make a network call for every span. The batch processor has a bounded queue; if the queue fills (e.g., the Collector is down), new spans are dropped silently, but your application keeps running.
 - The **resource** we just created.
 
 After creation, we register it globally with `otel.SetTracerProvider(tp)`. This means any code that calls `otel.Tracer("name")` gets a tracer backed by this provider. Libraries that depend on the OTel API will automatically use it.
 
 ### MeterProvider
 
-Same pattern for metrics. The `MeterProvider` uses a `PeriodicReader` that flushes metric data every 30 seconds via the OTLP/gRPC exporter. This is the equivalent of Micrometer's `MeterRegistry` with a `StepMeterRegistry` that pushes at fixed intervals.
+Same pattern for metrics. The `MeterProvider` uses a `PeriodicReader` that periodically exports metric data (every 30 seconds) via the OTLP/gRPC exporter. This is the equivalent of Micrometer's `MeterRegistry` with a `StepMeterRegistry` that pushes at fixed intervals.
 
 ### TextMapPropagator
 
@@ -100,13 +100,13 @@ Notice the import alias at the top of `otel.go`:
 otelgo "go.opentelemetry.io/otel"
 ```
 
-Our package is also named `otel` (it lives at `pkg/otel`). Without the alias, calling `otel.SetTracerProvider()` would refer to our own package, not the upstream OTel library. The alias `otelgo` resolves this. You will see this pattern in the service layer too -- the catalog service uses the same alias for the same reason.
+Our package is also named `otel` (it lives at `pkg/otel`). Without the alias, calling `otel.SetTracerProvider()` would refer to our own package, not the upstream OTel library. The alias `otelgo` resolves this. You will see this pattern in the service layer too—the catalog service uses the same alias for the same reason.
 
 In Java, this would not happen because packages and imports use fully qualified names. In Go, import paths and package names are separate concepts, and collisions require aliases.
 
 ### The `sync.Once` Shutdown Pattern
 
-The shutdown function uses `sync.Once` to ensure the TracerProvider and MeterProvider are shut down exactly once, even if `shutdown()` is called multiple times. This is a defensive pattern -- `defer shutdown(ctx)` in `main()` might execute alongside signal handlers or other cleanup code.
+The shutdown function uses `sync.Once` to ensure the TracerProvider and MeterProvider are shut down exactly once, even if `shutdown()` is called multiple times. This is a defensive pattern—`defer shutdown(ctx)` in `main()` might execute alongside signal handlers or other cleanup code.
 
 `errors.Join` (added in Go 1.20) combines multiple errors into one. If both shutdowns fail, the caller gets both error messages.
 
@@ -114,7 +114,7 @@ The shutdown function uses `sync.Once` to ensure the TracerProvider and MeterPro
 
 ## Auto-Instrumentation
 
-Auto-instrumentation means attaching OTel to existing transports (HTTP, gRPC, SQL) without modifying business logic. You wrap your server or client with an OTel-aware middleware, and spans are created automatically.
+Auto-instrumentation means attaching OTel to existing transports (HTTP, gRPC, SQL) without touching business logic. You wrap your server or client with an OTel-aware middleware, and spans are created automatically.
 
 ### HTTP: `otelhttp`
 
@@ -184,7 +184,7 @@ if err := db.Use(tracing.NewPlugin()); err != nil {
 
 After this, every `db.Find()`, `db.Create()`, `db.Delete()` call produces a span with the SQL query as an attribute. In your trace waterfall, you will see spans like `gorm.query` nested under the gRPC handler span, with the actual SQL visible in the span attributes.
 
-This is the equivalent of the Hibernate or JDBC auto-instrumentation you get with the Java OTel agent. The difference is that Go does not have a universal instrumentation agent -- you attach plugins explicitly per library.
+This is the equivalent of the Hibernate or JDBC auto-instrumentation you get with the Java OTel agent. The difference is that Go does not have a universal instrumentation agent—you attach plugins explicitly per library.
 
 ---
 
@@ -194,7 +194,7 @@ HTTP and gRPC have mature contrib libraries that handle context propagation auto
 
 ### The TextMapCarrier Adapter
 
-The OTel propagator needs something that implements `TextMapCarrier` -- an interface with `Get(key)`, `Set(key, value)`, and `Keys()` methods. Sarama messages have headers, but they use `[]RecordHeader` (byte slices), not a string map. We bridge the gap with a small adapter:
+The OTel propagator needs something that implements `TextMapCarrier`—an interface with `Get(key)`, `Set(key, value)`, and `Keys()` methods. Sarama messages have headers, but they use `[]RecordHeader` (byte slices), not a string map. We bridge the gap with a small adapter:
 
 ```go
 // services/catalog/internal/kafka/publisher.go
@@ -266,7 +266,7 @@ func (p *Publisher) Publish(ctx context.Context, event service.BookEvent) error 
 
 We then create a `catalog.publish` span to measure the Kafka send itself. This span becomes a child of the gRPC handler span.
 
-The reservation service has an identical pattern in `services/reservation/internal/kafka/publisher.go` -- same `headerCarrier` adapter, same `Inject` + `Start` sequence.
+The reservation service has an identical pattern in `services/reservation/internal/kafka/publisher.go`—same `headerCarrier` adapter, same `Inject` + `Start` sequence.
 
 ### Consumer Side: Extracting Context
 
@@ -299,7 +299,7 @@ func (c consumerHeaderCarrier) Keys() []string {
 }
 ```
 
-Note the `Set` method is a no-op. The consumer only reads headers; it never writes them back. This is a valid implementation -- the `TextMapCarrier` interface requires the method to exist, but the propagator only calls `Get` during extraction.
+The `Set` method is a no-op. The consumer only reads headers; it never writes them back. This is a valid implementation—the `TextMapCarrier` interface requires the method to exist, but the propagator only calls `Get` during extraction.
 
 The consumer uses `Extract` to rebuild the context, then starts a new span linked to the producer's trace:
 
@@ -341,7 +341,7 @@ var bookCounter, _ = otelgo.Meter("catalog").Int64UpDownCounter("catalog.books.t
 )
 ```
 
-This is a package-level variable, initialized when the package loads. The `otelgo.Meter("catalog")` call returns a meter from the global MeterProvider. Before `Init()` runs, this returns a no-op meter -- the counter exists but does nothing. After `Init()` registers a real MeterProvider, the counter starts recording.
+This is a package-level variable, initialized when the package loads. The `otelgo.Meter("catalog")` call returns a meter from the global MeterProvider. Before `Init()` runs, this returns a no-op meter—the counter exists but does nothing. After `Init()` registers a real MeterProvider, the counter starts recording.
 
 The counter is used in two places:
 
@@ -359,7 +359,7 @@ func (s *CatalogService) DeleteBook(ctx context.Context, id uuid.UUID) error {
 }
 ```
 
-An `UpDownCounter` (as opposed to a regular `Counter`) can decrease. Regular counters are monotonically increasing -- they only go up or reset. An UpDownCounter models values that naturally go up and down, like queue depth or, in our case, the number of books.
+An `UpDownCounter` (as opposed to a regular `Counter`) can decrease. Regular counters are monotonically increasing—they only go up or reset. An UpDownCounter models values that naturally go up and down, like queue depth or, in our case, the number of books.
 
 In Micrometer, this would be a `Gauge` backed by an `AtomicLong`. The semantics are similar, but OTel distinguishes between "gauge" (a value you *observe*, like CPU temperature) and "UpDownCounter" (a value you *add to*). The distinction matters for backends that handle push vs. pull metrics differently.
 
@@ -393,8 +393,8 @@ No test changes needed. This is the benefit of the API/SDK split: the API works 
 
 ## References
 
-[^1]: [OpenTelemetry Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/) -- Standardized attribute names for spans and metrics across all languages.
-[^2]: [otelhttp package documentation](https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp) -- Auto-instrumentation for `net/http` servers and clients.
-[^3]: [otelgrpc package documentation](https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc) -- Auto-instrumentation for gRPC servers and clients.
-[^4]: [GORM OpenTelemetry Plugin](https://github.com/go-gorm/opentelemetry) -- Automatic span creation for GORM database operations.
-[^5]: [W3C Trace Context in Kafka](https://opentelemetry.io/docs/specs/otel/context/api-propagators/) -- OTel specification for context propagation across messaging systems.
+[^1]: [OpenTelemetry Semantic Conventions](https://opentelemetry.io/docs/specs/semconv/)—Standardized attribute names for spans and metrics across all languages.
+[^2]: [otelhttp package documentation](https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp)—Auto-instrumentation for `net/http` servers and clients.
+[^3]: [otelgrpc package documentation](https://pkg.go.dev/go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc)—Auto-instrumentation for gRPC servers and clients.
+[^4]: [GORM OpenTelemetry Plugin](https://github.com/go-gorm/opentelemetry)—Automatic span creation for GORM database operations.
+[^5]: [W3C Trace Context in Kafka](https://opentelemetry.io/docs/specs/otel/context/api-propagators/)—OTel specification for context propagation across messaging systems.

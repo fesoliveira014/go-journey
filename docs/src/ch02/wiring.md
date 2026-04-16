@@ -1,6 +1,6 @@
 # 2.5 Wiring It All Together
 
-Every component you have built so far — the repository, the service, the handler — exists in isolation. The repository knows nothing about the service, and the service knows nothing about gRPC. That separation is the whole point, but at some point something has to plug them together. That's `main.go`. This section walks through how the pieces connect, why the connection is explicit rather than magical, and how to drive the running service with `grpcurl`.
+Every component you have built so far — the repository, the service, the handler — exists in isolation. The repository knows nothing about the service, and the service knows nothing about gRPC. That separation is the whole point, but something must eventually plug them together. That's `main.go`. This section walks through how the pieces connect, why the connection is explicit rather than magical, and how to drive the running service with `grpcurl`.
 
 ---
 
@@ -17,9 +17,9 @@ class CatalogService(@Autowired val repo: BookRepository)
 class CatalogHandler(@Autowired val svc: CatalogService)
 ```
 
-The framework scans for annotations, builds a dependency graph, constructs objects in the right order, and wires them up for you. This is convenient until it isn't — when something goes wrong, the stack trace runs through several layers of reflection before reaching your code.
+The framework scans for annotations, builds a dependency graph, constructs objects in the right order, and wires them up for you. This is convenient—until something goes wrong and the stack trace runs through several layers of reflection before reaching your code.
 
-Go uses none of this. Dependency injection in Go is just function calls:
+Go uses none of this. Dependency injection in Go is function calls:
 
 ```go
 // services/catalog/cmd/main.go
@@ -47,9 +47,9 @@ func NewCatalogHandler(svc *service.CatalogService) *CatalogHandler {
 }
 ```
 
-The service constructor accepts a `BookRepository` **interface**, not a concrete type. This is the key inversion: the service owns the interface definition and only knows that it has something to call `Create`, `GetByID`, and so on. In production, that turns out to be the GORM-backed struct. In tests it is the in-memory mock from the previous section. The service does not know or care which.
+The service constructor accepts a `BookRepository` **interface**, not a concrete type. This is the important detail: the service owns the interface definition and only knows that it has something to call `Create`, `GetByID`, and so on. In production, that turns out to be the GORM-backed struct. In tests it is the in-memory mock from the previous section. The service does not know or care which.
 
-This pattern is sometimes called **manual dependency injection**. For projects up to moderate complexity it is the right approach — it scales well, is trivially debuggable, and produces zero "magic". Larger projects sometimes introduce a dependency injection framework (`google/wire` is the most common in Go), but that is code generation over the same pattern, not a fundamentally different approach.
+This pattern is sometimes called **manual dependency injection**. For projects up to moderate complexity it is the right approach — it scales well, is easy to debug, and produces zero "magic". Larger projects sometimes introduce a dependency injection framework (`google/wire` is the most common in Go), but that is code generation over the same pattern, not a fundamentally different approach.
 
 ---
 
@@ -78,7 +78,7 @@ Walk through each call:
 - **`net.Listen("tcp", ":50052")`** — opens a TCP socket. The `:50052` form means "listen on all interfaces, port 50052". The `net.Listener` is a standard library type; gRPC does not control how the socket is opened.
 - **`grpc.NewServer()`** — creates a gRPC server instance. At this point it has no services registered. Options for TLS, interceptors (middleware), and keepalives go here as variadic arguments — none are needed yet.
 - **`catalogv1.RegisterCatalogServiceServer(...)`** — this is generated code from the protobuf toolchain. It binds your handler to the server's internal service registry, mapping each RPC name to its method. Without this call, the server runs but has no services.
-- **`reflection.Register(grpcServer)`** — registers the gRPC server reflection protocol. This is what allows tools like `grpcurl` to query the server for its available services and method signatures at runtime, without needing the `.proto` files locally. You would disable this in production (it exposes your API surface), but it is invaluable during development.
+- **`reflection.Register(grpcServer)`** — registers the gRPC server reflection protocol. This is what allows tools like `grpcurl` to query the server for its available services and method signatures at runtime, without needing the `.proto` files locally. You would disable this in production (it lets anyone introspect the schema without authentication), but it is invaluable during development.
 - **`grpcServer.Serve(lis)`** — blocks, accepting connections and dispatching calls. This never returns unless the server is stopped.
 
 ---
@@ -113,7 +113,7 @@ func bookToProto(b *model.Book) *catalogv1.Book {
 }
 ```
 
-There is no magic here — just explicit field assignment. The UUID becomes a string (proto has no UUID type), `time.Time` becomes a `*timestamppb.Timestamp` (proto's standard timestamp type), and Go's `int` becomes proto3's `int32`. Every conversion is visible and testable.
+The function is explicit field assignment, nothing more. The UUID becomes a string (proto has no UUID type), `time.Time` becomes a `*timestamppb.Timestamp` (proto's standard timestamp type), and Go's `int` becomes proto3's `int32`. Every conversion is visible and testable.
 
 ### Error Mapping
 
@@ -137,14 +137,14 @@ func toGRPCError(err error) error {
 A few things worth noting here:
 
 - `errors.Is` handles wrapped errors — if the service returns `fmt.Errorf("%w: title is required", model.ErrInvalidBook)`, the `errors.Is(err, model.ErrInvalidBook)` branch still fires.
-- The `default` case returns `codes.Internal` with a **generic message** — not `err.Error()`. That is deliberate: unexpected errors often contain internal implementation details (SQL query text, file paths, internal service names) that should not be sent to external callers. Logging the original error separately is the right pattern.
-- The `status.Error(code, message)` call produces a gRPC status error — a type that the gRPC runtime knows how to serialize and send as a proper gRPC error response, including the status code that the client can inspect. [^3]
+- The `default` case returns `codes.Internal` with a **generic message** — not `err.Error()`. That is deliberate: Unexpected errors often contain internal implementation details (SQL query text, file paths, internal service names) that should not be sent to external callers. Logging the original error separately is the right pattern.
+- The `status.Error(code, message)` call produces a gRPC status error — a type that the gRPC runtime knows how to serialize and send as a proper gRPC error response, including the status code that the client can inspect.[^3]
 
 ---
 
 ## Testing with grpcurl
 
-`grpcurl` is a command-line tool for calling gRPC servers, analogous to `curl` for HTTP. Because you enabled `reflection.Register`, it can discover the service schema without needing the `.proto` files. [^2]
+`grpcurl` is a command-line tool for calling gRPC servers, analogous to `curl` for HTTP. Because you enabled `reflection.Register`, it can discover the service schema without needing the `.proto` files.[^2]
 
 ### Installation
 
@@ -152,7 +152,7 @@ A few things worth noting here:
 # macOS
 brew install grpcurl
 
-# Linux (download from GitHub releases)
+# Any platform with a Go toolchain
 go install github.com/fullstorydev/grpcurl/cmd/grpcurl@latest
 ```
 
@@ -299,7 +299,7 @@ The `UpdateBook` RPC has a subtle limitation: proto3 does not distinguish betwee
 {"id": "...", "total_copies": 0}
 ```
 
-The handler cannot tell whether you intentionally want to set `total_copies` to zero or whether you just omitted the field. Both cases arrive as `req.GetTotalCopies() == 0`. The current implementation treats this as a full replacement — whatever fields you send overwrite the stored values, and zero-value fields overwrite with zero.
+The handler cannot tell whether you intentionally want to set `total_copies` to zero or whether you omitted the field. Both cases arrive as `req.GetTotalCopies() == 0`. The current implementation treats this as a full replacement — whatever fields you send overwrite the stored values, and zero-value fields overwrite with zero.
 
 The idiomatic proto3 solution is `google.protobuf.FieldMask` for partial updates, or using wrapper types (`google.protobuf.Int32Value`) which can represent explicit null. Both add complexity that is not warranted for this learning stage. For now, understand the limitation: `UpdateBook` requires you to resend all fields you want to retain, not just the ones you want to change.
 
@@ -320,7 +320,7 @@ grpcurl -plaintext -d '{"id": "a1b2c3d4-...", "delta": -1}' \
 
 Start the catalog service locally and work through the following scenario entirely using `grpcurl`.
 
-**Setup:** Create 5 books across at least 2-3 genres. Suggested data:
+**Setup:** Create 5 books across at least 2–3 genres. Suggested data:
 
 | Title | Author | Genre | Copies |
 |---|---|---|---|

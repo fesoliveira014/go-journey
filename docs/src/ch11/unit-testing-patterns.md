@@ -8,13 +8,13 @@ Go's standard library ships with a testing package that is deliberately minimal.
 
 The single most important pattern in Go testing is the table-driven test. Rather than writing a separate function for each input combination, you declare a slice of anonymous structs — one per scenario — and loop over them. The Go standard library itself uses this pattern extensively.
 
-### Why a slice of anonymous structs?
+### Why a Slice of Anonymous Structs?
 
-Each element of the slice is a small, self-contained record describing one test case: its human-readable name, its inputs, and what the expected outcome looks like. The anonymous struct type is defined inline, so there is no ceremony of naming a type you will never use elsewhere. Adding a new case is a one-liner that does not require touching any control flow.
+Each element of the slice is a small, self-contained record describing one test case: its human-readable name, its inputs, and what the expected outcome looks like. The anonymous struct type is defined inline, so you avoid naming a type you will never use elsewhere. Adding a new case is a one-liner that does not require touching any control flow.
 
-Compare this to the C++ or Java approach of parameterized tests (Google Test's `INSTANTIATE_TEST_SUITE_P`, JUnit's `@ParameterizedTest`): the Go version has no framework machinery — it is just a slice and a loop.
+Compare this to the C++ or Java approach of parameterized tests (GoogleTest's `INSTANTIATE_TEST_SUITE_P`, JUnit's `@ParameterizedTest`): the Go version has no framework machinery — it is just a slice and a loop.
 
-### Worked example: `CreateBook` validation
+### Worked Example: `CreateBook` Validation
 
 The catalog service validates incoming books before persisting them. Let's test several invalid inputs and one valid input in a single function:
 
@@ -181,14 +181,14 @@ func TestCreateBook_DuplicateISBN(t *testing.T) {
 }
 ```
 
-For unit tests that use mocks or in-memory fakes built inside each test function, this is essentially free speed: a package with thirty independent tests, each doing a bit of setup and one assertion, finishes in the time of the slowest single test rather than the sum of all of them. On a CI runner with many cores, the wall-clock difference can be significant.
+For unit tests that use mocks or in-memory fakes built inside each test function, this is essentially free speed. A package with thirty independent tests — each doing a bit of setup and one assertion — finishes in the time of the slowest single test rather than the sum of all of them. On a CI runner with many cores, the wall-clock difference can be significant.
 
 Two conditions must hold for a test to safely opt into `t.Parallel()`:
 
 1. **The test must not depend on global mutable state.** If the test sets a package-level variable, mutates a shared map, or re-registers a singleton (OpenTelemetry global tracer, `log.SetOutput`, `os.Setenv`), another parallel test could observe the change mid-run. Either isolate the state into test-local instances or keep the test sequential.
 2. **The test must not depend on shared external state.** Anything that hits a real database, a real Kafka broker, a real filesystem path shared with other tests, or reserves a well-known TCP port cannot run in parallel with siblings that touch the same resource. In this project, files named `integration_test.go`, `e2e_test.go`, and the repository tests that reach a real PostgreSQL instance are deliberately left sequential.
 
-The project's unit tests build a fresh mock repository, fake publisher, and `httptest.Server` per test invocation, so they satisfy both conditions and have `t.Parallel()` at the top of every `Test*` function. Running the suite under `go test -race ./...` confirms the promise — the race detector will fail the build if any test does accidentally share state across goroutines.
+The project's unit tests build a fresh mock repository, fake publisher, and `httptest.Server` per test invocation, so they satisfy both conditions and have `t.Parallel()` at the top of every `Test*` function. Running the suite under `go test -race ./...` confirms the promise — the race detector fails the build if any test accidentally shares state across goroutines.
 
 A good sanity check when adding new tests is to run `go test -race -count=3 ./...`. The `-count=3` flag re-runs each test three times, which tends to surface flakes that only show up under specific scheduler interleavings. If a test passes with `-count=1` but fails with `-count=3`, there is almost certainly shared state you have not noticed yet.
 
@@ -219,7 +219,7 @@ func mustCreateBook(t *testing.T, svc *service.CatalogService, title string) *mo
 }
 ```
 
-Without `t.Helper()`, a failure inside `mustCreateBook` is reported as occurring on the `t.Fatalf` line inside the helper. When you look at the failure output, you see a line number inside `mustCreateBook` — not the line in the test where you called `mustCreateBook`. You have to mentally navigate from the helper back to the caller to understand what was being set up.
+Without `t.Helper()`, a failure inside `mustCreateBook` is reported as occurring on the `t.Fatalf` line inside the helper. When you look at the failure output, you see a line number inside `mustCreateBook` — not the line in the test where you called `mustCreateBook`. You have to trace back from the helper to the caller to understand what was being set up.
 
 ### The fix: `t.Helper()`
 
@@ -271,7 +271,7 @@ func TestListBooks_ReturnsPaginatedResults(t *testing.T) {
 }
 ```
 
-The helper keeps the test body focused on the behaviour under test rather than boilerplate.
+The helper keeps the test body focused on the behavior under test rather than boilerplate.
 
 ---
 
@@ -345,7 +345,7 @@ One subtlety: the `testdata/` directory is not special to the Go module system �
 | `testdata/` | Large payloads, shared fixtures, or independently editable data |
 | `t.Parallel()` | When subtests have no shared mutable state and wall-clock time matters |
 
-These four patterns cover the vast majority of unit test needs in a Go service. The next section introduces mock objects and how to keep them honest using interfaces.
+These five patterns cover the vast majority of unit test needs in a Go service. The next section shifts from mocks to real infrastructure, using Testcontainers to run repository tests against a real PostgreSQL instance.
 
 ---
 

@@ -44,7 +44,7 @@ var p *int       // nil
 
 This eliminates an entire class of uninitialized-variable bugs. You will miss it when you go back to C.
 
-No pointer arithmetic. `p++` on a pointer is a compile error. Go is not C — the runtime manages memory, and the GC needs pointer provenance intact.
+**No pointer arithmetic.** `p++` on a pointer is a compile error. Go is not C — the runtime manages memory, and the GC needs pointer provenance intact.
 
 ---
 
@@ -130,7 +130,7 @@ type Stringer interface {
 }
 ```
 
-`Book` above already satisfies `fmt.Stringer` because it has a `String() string` method. There is no annotation, no `implements`, nothing to register. The compiler checks at the point of use.
+`Book` above already satisfies `fmt.Stringer` because it has a `String() string` method. There is no annotation, no `implements`, nothing to register. The compiler verifies satisfaction where the interface is used.
 
 ```go
 func printItem(s fmt.Stringer) {
@@ -150,9 +150,9 @@ type Repository interface {
 }
 ```
 
-Any type with those three methods satisfies `Repository`. The concrete type — a Postgres implementation, a Redis cache, an in-memory fake — never needs to reference this interface.
+Any type with those three methods satisfies `Repository`. The concrete type — a PostgreSQL implementation, a Redis cache, an in-memory fake — never needs to reference this interface.
 
-**Why this matters for testing.** Because interfaces are satisfied implicitly, you can define a minimal interface in your test package and point it at a fake implementation without touching production code at all. This pattern will come up constantly in this project.
+**Why this matters for testing.** Because interfaces are satisfied implicitly, you can define a minimal interface in your test package and point it at a fake implementation without touching production code at all. You will see this pattern constantly in this project.
 
 **The empty interface.** `any` (alias for `interface{}`) accepts any value:
 
@@ -162,7 +162,7 @@ v = "now a string"
 v = Book{...}
 ```
 
-Use it sparingly. It bypasses the type system. You will see it in generic utility functions and JSON unmarshalling. When you need to get the concrete type back, use a type assertion or type switch:
+Use it sparingly. It bypasses the type system. You will see it in generic utility functions and JSON unmarshaling. When you need to get the concrete type back, use a type assertion or type switch:
 
 ```go
 if book, ok := v.(Book); ok {
@@ -174,7 +174,7 @@ if book, ok := v.(Book); ok {
 
 ### Slices and Maps
 
-**Slices** are Go's equivalent of `std::vector` or `ArrayList` — a dynamically-sized view over an underlying array. Unlike C arrays, slices carry their length and capacity.
+**Slices** are Go's equivalent of `std::vector` or `ArrayList` — a dynamically sized view over an underlying array. Unlike C arrays, slices carry their length and capacity.
 
 ```go
 // nil slice — zero value, no allocation
@@ -298,7 +298,7 @@ _ = repo.Save(ctx, book) // do not do this
 
 ### Pointers
 
-You know pointers from C. Go's are simpler: same concept, no arithmetic, automatic nil-safety enforcement via the runtime.
+You know pointers from C. Go pointers are simpler — same concept, no arithmetic, and the runtime enforces nil safety automatically.
 
 ```go
 b := Book{Title: "TGPL"}
@@ -306,9 +306,9 @@ p := &b           // *Book — pointer to b
 p.Title = "The Go Programming Language" // implicit dereference, same as (*p).Title
 ```
 
-`new(T)` allocates a zeroed T and returns a `*T`. Most Go code uses `&T{...}` instead.
+`new(T)` allocates a zero-value T and returns a `*T`. Most Go code uses `&T{...}` instead.
 
-**When to use a pointer receiver vs a value receiver:**
+**When to use a pointer receiver vs. a value receiver:**
 
 - Use a **pointer receiver** when the method mutates the struct, or when the struct is large enough that copying is expensive.
 - Use a **value receiver** when the method only reads, the struct is small, and value semantics make intent clear.
@@ -325,7 +325,7 @@ func (b Book) String() string {
 }
 ```
 
-Pick one consistently per type. Mixing pointer and value receivers on the same type is allowed but confusing — you will lose track of which interface a given receiver set satisfies.
+Pick one consistently per type. Mixing pointer and value receivers on the same type is allowed but confusing — you will lose track of which interfaces the type satisfies.
 
 ---
 
@@ -343,7 +343,7 @@ Implement the following in a file `cmd/catalog/main.go` (or a standalone `_test.
    - Returns all books matching the given genre (case-insensitive).
    - Returns `(nil, error)` when no books match — with an error message that includes the genre name.
 
-5. In `main` (or a test), call `FilterByGenre` for a genre that exists and one that does not. Print the results using `fmt.Println` (which calls `String()` automatically on `Stringer` values). Handle the error from the second call by printing it with `fmt.Fprintf(os.Stderr, ...)`.
+5. In `main` (or a test), call `FilterByGenre` for both a genre that exists and one that does not. Print the results using `fmt.Println` (which calls `String()` automatically on `Stringer` values). Handle the error from the second call by printing it with `fmt.Fprintf(os.Stderr, ...)`.
 
 **Reference implementation** — expand only after attempting:
 
@@ -420,7 +420,7 @@ func main() {
 
 ### What's Next
 
-Section 1.3 builds on these types by wiring them into an HTTP server — you will see how Go's `net/http` package uses interfaces (specifically `http.Handler`) to compose request handling, and how the structs you defined here become JSON responses.
+Section 1.3 wires these types into an HTTP server. You will see how Go's `net/http` package uses interfaces (specifically `http.Handler`) to compose request handling, and how the structs you defined here become JSON responses.
 
 ---
 

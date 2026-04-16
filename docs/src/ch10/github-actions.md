@@ -1,6 +1,6 @@
 # 10.3 GitHub Actions Workflows
 
-GitHub Actions is the orchestration layer of our pipeline. It answers one question: *when* should something run, and with what environment? The build logic itself lives in the Earthfile (section 10.2). GitHub Actions triggers that logic at the right moment, supplies secrets, and runs parallel jobs across services.
+GitHub Actions is the orchestration layer of our pipeline. It answers one question: *when* should something run, and with what environment? The build logic itself lives in the Earthfile (Section 10.2). GitHub Actions triggers that logic at the right moment, supplies secrets, and runs parallel jobs across services.
 
 This section walks through the two workflow files in this project, explains every line, and shows what the equivalent pure-GHA approach would look like so you can understand the trade-off.
 
@@ -8,7 +8,7 @@ This section walks through the two workflow files in this project, explains ever
 
 ## GitHub Actions Concepts
 
-A **workflow** is a YAML file placed in `.github/workflows/`. GitHub detects these files automatically -- no registration step, no webhook configuration. Any file in that directory matching the `on:` trigger criteria runs on GitHub's infrastructure.[^1]
+A **workflow** is a YAML file placed in `.github/workflows/`. GitHub detects these files automatically — no registration step, no webhook configuration. Any file in that directory matching the `on:` trigger criteria runs on GitHub's infrastructure.[^1]
 
 The key vocabulary:
 
@@ -45,7 +45,7 @@ The Actions we use in this project:
 | `docker/login-action@v3` | Docker | Authenticate with a container registry |
 | `docker/build-push-action@v6` | Docker | Build a Docker image and push it to a registry |
 
-If you come from Gradle, think of Actions as Gradle plugins: community-maintained, versioned, and composable. If you come from Jenkins, they are the equivalent of Jenkins plugins, but without a plugin manager UI -- you declare them directly in the workflow file.
+If you come from Gradle, think of Actions as Gradle plugins: community-maintained, versioned, and composable. If you come from Jenkins, they are the equivalent of Jenkins plugins, but without a plugin manager UI — you declare them directly in the workflow file.
 
 The `@v4` suffix pins the Action to a specific tag. Omitting it or using `@main` would pull the latest version on every run, which is a reproducibility risk. Always pin Actions to a version tag or commit SHA.
 
@@ -80,7 +80,7 @@ Walking through each part:
 
 **`on: pull_request: branches: [main]`** — Fires when a PR is opened, updated (new commit pushed), or reopened, but only if the PR targets `main`. A PR targeting a feature branch does not trigger this workflow.
 
-**`runs-on: ubuntu-latest`** — Every job needs a runner. `ubuntu-latest` is GitHub's managed Ubuntu image. It includes Docker, Git, and common system tools. You do not need to install Go -- the Earthfile manages the Go version inside a container.
+**`runs-on: ubuntu-latest`** — Every job needs a runner. `ubuntu-latest` is GitHub's managed Ubuntu image. It includes Docker, Git, and common system tools. You do not need to install Go — the Earthfile manages the Go version inside a container.
 
 **`actions/checkout@v4`** — The runner starts with an empty workspace. This step clones your repository. Without it, subsequent steps have no source code.
 
@@ -90,7 +90,7 @@ Walking through each part:
 
 ### Why a Separate Workflow for PRs?
 
-PRs need validation but not publishing. If you ran the full pipeline (including pushing Docker images) on every PR update, you would push dozens of images for in-progress work -- most of them from branches that never merge. Container registries charge for storage; image tags accumulate noise. Separating the workflows keeps the registry clean: only commits that land on `main` produce published images.
+PRs need validation but not publishing. If you ran the full pipeline (including pushing Docker images) on every PR update, you would push dozens of images for in-progress work — most of them from branches that never merge. Container registries charge for storage; image tags accumulate noise. Separating the workflows keeps the registry clean: only commits that land on `main` produce published images.
 
 ### Pure GitHub Actions Alternative
 
@@ -108,13 +108,13 @@ If you did not use Earthly, the same CI job would look like this:
 >   - run: go test ./...
 > ```
 >
-> This is simpler to read and has fewer moving parts. The downside: it only works in CI. You cannot run `actions/setup-go` locally. If lint fails in CI, you reproduce it by pushing another commit and waiting for a runner -- there is no `earthly +lint` equivalent on your terminal. The Earthly approach trades a small amount of workflow complexity for full local reproducibility.
+> This is simpler to read and has fewer moving parts. The downside: it only works in CI. You cannot run `actions/setup-go` on your laptop. If lint fails in CI, you reproduce it by pushing another commit and waiting for a runner. The Earthly approach trades a little workflow complexity for full local reproducibility.
 
 ---
 
 ## Main Workflow
 
-The main workflow runs when a commit is pushed directly to `main` -- which in practice means after a PR merges. It runs the same CI checks, then builds and pushes Docker images for all five services.
+The main workflow runs when a commit is pushed directly to `main` — which in practice means after a PR merges. It runs the same CI checks, then builds and pushes Docker images for all five services.
 
 ```yaml
 name: CI/CD
@@ -177,11 +177,11 @@ By default, `GITHUB_TOKEN` (the automatically provisioned token for each workflo
 
 `packages: write` is specifically required for GHCR (GitHub Container Registry, `ghcr.io`). Without it, the `docker/login-action` step authenticates successfully but the push step is rejected with a 403.
 
-If you come from Jenkins, this maps to credentials binding -- scoping the available credentials to exactly what the job needs.
+If you come from Jenkins, this maps to credentials binding — scoping the available credentials to exactly what the job needs.
 
 ### The `ci` Job
 
-Identical to the PR workflow. The same lint and test checks run on `main` even after merging. This catches the rare case where a merge introduces a conflict that was not caught in the PR (for example, two PRs that individually pass but conflict when both land on `main`). Running CI again on `main` is a small cost for a meaningful safety net.
+Identical to the PR workflow. The same lint and test checks run on `main` even after merging. This catches the rare case where a merge introduces a conflict that was not caught in the PR — for example, two PRs that individually pass but conflict when both land on `main`. Running CI again on `main` is a small cost for a meaningful safety net.
 
 ### The `build-and-push` Job
 
@@ -189,11 +189,11 @@ Identical to the PR workflow. The same lint and test checks run on `main` even a
 
 **`strategy: matrix: service: [auth, catalog, gateway, reservation, search]`** — This is a matrix build. GitHub Actions creates one job instance per matrix value and runs all five in parallel. Each instance has access to `${{ matrix.service }}`, which resolves to one of the five service names.
 
-The alternative would be five separate `build-and-push-auth`, `build-and-push-catalog`, etc. jobs -- identical except for the service name. The matrix eliminates that repetition. If you add a sixth service, you add its name to the list and GitHub handles the rest.
+The alternative would be five separate `build-and-push-auth`, `build-and-push-catalog`, etc. jobs — identical except for the service name. The matrix eliminates that repetition. If you add a sixth service, you add its name to the list and GitHub handles the rest.
 
 If you come from Jenkins, this maps to Jenkins parallel stages. If you come from Gradle, think of it as running the same task across a set of subprojects.
 
-**`docker/login-action@v3`** — Authenticates with `ghcr.io` using the workflow's automatic `GITHUB_TOKEN`. You do not create or store this token; GitHub provisions it per run with the permissions declared above. The `github.actor` context variable is the username of the person (or app) that triggered the workflow -- used as the registry username.
+**`docker/login-action@v3`** — Authenticates with `ghcr.io` using the workflow's automatic `GITHUB_TOKEN`. You do not create or store this token; GitHub provisions it per run with the permissions declared above. The `github.actor` context variable is the username of the person (or app) that triggered the workflow — used as the registry username.
 
 **`docker/build-push-action@v6`** — Builds and pushes the Docker image. The relevant fields:
 
@@ -211,10 +211,10 @@ The workflow uses three context variables:
 | Variable | Value | Example |
 |---|---|---|
 | `github.sha` | Full commit hash of the triggering push | `a3f2d8c1...` |
-| `github.repository` | `owner/repo` in lowercase | `acme/library-system` |
+| `github.repository` | `owner/repo` (GHCR requires lowercase; `github.repository` preserves the original case) | `acme/library-system` |
 | `github.actor` | Username that triggered the workflow | `jsmith` |
 
-These are read-only and injected by GitHub. You reference them with the `${{ }}` expression syntax. They are not secrets -- they are metadata about the current run.
+These are read-only and injected by GitHub. You reference them with the `${{ }}` expression syntax. They are not secrets — they are metadata about the current run.
 
 ### Earthly-Push Alternative
 
@@ -226,7 +226,7 @@ These are read-only and injected by GitHub. You reference them with the `${{ }}`
 > - run: earthly --push ./services/${{ matrix.service }}+docker
 > ```
 >
-> This uses Earthly's `--push` flag to build and push the image in one step, with the registry credentials passed via environment variables. The advantage is consistency: the same `+docker` target works locally and in CI. The disadvantage is that you lose GitHub's built-in integrations: OIDC-based keyless signing, layer cache export to the Actions cache, and the SBOM (Software Bill of Materials) provenance attestations that `docker/build-push-action` can generate automatically. For a learning project those features are optional. For a production system they are worth having.
+> This uses Earthly's `--push` flag to build and push the image in one step, with the registry credentials passed via environment variables. The advantage is consistency: the same `+docker` target works locally and in CI. The disadvantage is that you lose GitHub's built-in integrations: OIDC-based keyless signing, layer cache export to the Actions cache, and the SBOM (Software Bill of Materials) provenance attestations that `docker/build-push-action` can generate automatically. For a learning project, those features are optional. For a production system they are worth having.
 
 ---
 
@@ -256,7 +256,7 @@ There is also a security reason: the `packages: write` permission needed for GHC
 | `github.sha` | `env.GIT_COMMIT` in Jenkins |
 | `permissions:` block | Jenkins role-based access control on credentials |
 
-The biggest structural difference from Jenkins is that GitHub Actions is fully cloud-managed. There is no Jenkins master to maintain, no plugin compatibility matrix to manage, and no node configuration. The trade-off is that you are locked into GitHub's infrastructure and pricing model. For an open-source project or a team already on GitHub, that trade-off is usually worth it.
+The biggest structural difference from Jenkins is that GitHub Actions is fully cloud-managed. There is no Jenkins controller to maintain, no plugin compatibility matrix to manage, and no node configuration. The trade-off is that you are locked into GitHub's infrastructure and pricing model. For an open-source project or a team already on GitHub, that trade-off is usually worth it.
 
 ---
 
@@ -266,7 +266,7 @@ The biggest structural difference from Jenkins is that GitHub Actions is fully c
 
 2. **Add a matrix dimension.** Modify `main.yml` to also build a `linux/arm64` image for each service alongside the existing `linux/amd64` image. The `docker/build-push-action` supports a `platforms:` field. What changes in the matrix? What changes in the tags? How would you name the images to distinguish architectures?
 
-3. **Add a notify step.** Add a final step to the `build-and-push` job that posts a Slack message when the build completes -- both on success and on failure. Use `if: always()` to ensure the step runs even if earlier steps fail. Look up the `slackapi/slack-github-action` Action on the Marketplace. What secret do you need to configure?
+3. **Add a notify step.** Add a final step to the `build-and-push` job that posts a Slack message when the build completes — both on success and on failure. Use `if: always()` to ensure the step runs even if earlier steps fail. Look up the `slackapi/slack-github-action` Action on the Marketplace. What secret do you need to configure?
 
 4. **Implement a staging deploy job.** Add a third job, `deploy-staging`, that runs after `build-and-push` and calls a fictional `kubectl set image` command. It should only run on pushes to `main`, use the `sha-${{ github.sha }}` tag (not `latest`), and require the `build-and-push` job for all five services to succeed before starting. How do you express that dependency when `build-and-push` is a matrix job?
 
@@ -274,6 +274,6 @@ The biggest structural difference from Jenkins is that GitHub Actions is fully c
 
 ## References
 
-[^1]: [GitHub Actions -- Understanding GitHub Actions](https://docs.github.com/en/actions/learn-github-actions/understanding-github-actions) -- Overview of workflows, jobs, steps, runners, and the event model.
-[^2]: [GitHub Actions -- Automatic token authentication](https://docs.github.com/en/actions/security-guides/automatic-token-authentication) -- How `GITHUB_TOKEN` works, what permissions it grants by default, and how to restrict them with the `permissions:` block.
-[^3]: [GitHub Actions -- Workflow syntax: `jobs.<job_id>.needs`](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idneeds) -- Reference for expressing dependencies between jobs, including how to handle matrix job dependencies.
+[^1]: [GitHub Actions — Understanding GitHub Actions](https://docs.github.com/en/actions/learn-github-actions/understanding-github-actions) — Overview of workflows, jobs, steps, runners, and the event model.
+[^2]: [GitHub Actions — Automatic token authentication](https://docs.github.com/en/actions/security-guides/automatic-token-authentication) — How `GITHUB_TOKEN` works, what permissions it grants by default, and how to restrict them with the `permissions:` block.
+[^3]: [GitHub Actions — Workflow syntax: `jobs.<job_id>.needs`](https://docs.github.com/en/actions/using-workflows/workflow-syntax-for-github-actions#jobsjob_idneeds) — Reference for expressing dependencies between jobs, including how to handle matrix job dependencies.

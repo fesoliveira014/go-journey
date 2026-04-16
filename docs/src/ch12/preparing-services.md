@@ -1,6 +1,6 @@
 # 12.2 Preparing Services for Kubernetes
 
-Before writing a single manifest, two code-level concerns need addressing: graceful shutdown and health checks. Docker Compose was forgiving about both — containers could exit abruptly without consequence and Compose had no built-in mechanism to check whether a service was actually ready to handle traffic. Kubernetes is not forgiving. It manages pod termination with a structured lifecycle, routes traffic based on probe results, and will kill a pod that fails to terminate cleanly within a configurable window. Getting both right before touching YAML saves a lot of confusing debugging later.
+Before writing a single manifest, two code-level concerns need addressing: graceful shutdown and health checks. Docker Compose was forgiving about both: containers could exit abruptly without consequence, and Compose had no built-in mechanism to check whether a service was ready to handle traffic. Kubernetes is not forgiving. It manages pod termination with a structured lifecycle, routes traffic based on probe results, and will kill a pod that fails to terminate cleanly within a configurable window. Getting both right before touching YAML saves a lot of confusing debugging later.
 
 ---
 
@@ -29,7 +29,7 @@ sequenceDiagram
     end
 ```
 
-Two things are important here. First, endpoint removal and `SIGTERM` are issued concurrently — there is a race between traffic stopping and your process receiving the signal. A `preStop` sleep hook (e.g., `sleep 5`) is the conventional workaround: it gives the load balancer time to drain in-flight connections before shutdown begins. Second, you have up to 30 seconds (by default) between `SIGTERM` and `SIGKILL`. Any work that exceeds that window is forcibly interrupted.
+Two things are important here. First, Kubernetes issues endpoint removal and `SIGTERM` concurrently; a race exists between traffic stopping and your process receiving the signal. A `preStop` sleep hook (e.g., `sleep 5`) is the conventional workaround: it gives the load balancer time to drain in-flight connections before shutdown begins. Second, you have up to 30 seconds (by default) between `SIGTERM` and `SIGKILL`. Any work that exceeds that window is forcibly interrupted.
 
 ### Why It Matters
 
@@ -37,7 +37,7 @@ Without signal handling, when Kubernetes sends `SIGTERM` during a rolling update
 
 - **gRPC servers** drop in-flight RPCs mid-stream. Callers receive an `UNAVAILABLE` error. If the client has no retry logic, that RPC is lost.
 - **Kafka consumers** do not commit their current offset. On restart, the consumer re-processes messages it already handled. Depending on whether your handlers are idempotent, this causes duplicate side effects.
-- **Database connections** in the GORM pool are not closed cleanly. PostgreSQL sees the connections evaporate and eventually times them out, but during the window you may hit connection limits under high churn.
+- **Database connections** in the GORM pool are not closed cleanly. PostgreSQL sees the connections terminate abruptly and eventually times them out, but during the window you may hit connection limits under high churn.
 
 Handling `SIGTERM` lets each component finish what it is doing and shut down in a controlled order.
 
@@ -52,7 +52,7 @@ defer cancel()
 
 The Kafka consumers in catalog and search already use this pattern — the consumer loop checks `ctx.Done()` and exits cleanly when the context is cancelled. The gap is that `grpcServer.Serve` is not wired to the same context. It runs forever until the process dies.
 
-The fix is a goroutine that waits for context cancellation and then calls `grpcServer.GracefulStop()`. `GracefulStop` stops the server from accepting new connections and blocks until all active RPCs complete, then returns. The `Serve` call unblocks when `GracefulStop` is called.
+The fix is a goroutine that waits for context cancellation and then calls `grpcServer.GracefulStop()`. `GracefulStop` stops the server from accepting new connections and blocks until all active RPCs complete, which unblocks `Serve`.
 
 ### Catalog: Wire the Existing Context
 
@@ -159,7 +159,7 @@ Reservation uses `slog` and already imports `context`. Add `os/signal` and `sysc
  }
 ```
 
-One note on variable naming: reservation initialises `otelCtx` as a separate `context.Background()` at the top of `main` specifically for the OTel shutdown defer. Keep that separate variable — the OTel `shutdown` func should not receive a cancelled context at teardown time. Use the signal context only for the gRPC server and any consumers.
+One note on variable naming: reservation initializes `otelCtx` as a separate `context.Background()` at the top of `main` specifically for the OTel shutdown defer. Keep that separate variable — the OTel `shutdown` func should not receive a cancelled context at teardown time. Use the signal context only for the gRPC server and any consumers.
 
 ### Search: Wire the Existing Context
 
@@ -218,7 +218,7 @@ The gateway uses `net/http` rather than gRPC. The standard library's `http.Serve
 +}
 ```
 
-`http.ListenAndServe` returns `http.ErrServerClosed` when `Shutdown` is called — that is the normal exit path, not an error. The `err != http.ErrServerClosed` guard prevents a spurious error log on clean shutdown. The variable is named `sigCtx` to avoid shadowing the existing `ctx` declared at the top of `main` for OTel initialisation.
+`server.ListenAndServe` (and the package-level `http.ListenAndServe`) returns `http.ErrServerClosed` when `Shutdown` is called — that is the normal exit path, not an error. The `err != http.ErrServerClosed` guard prevents a spurious error log on clean shutdown. The variable is named `sigCtx` to avoid shadowing the existing `ctx` declared at the top of `main` for OTel initialisation.
 
 ---
 
@@ -226,7 +226,7 @@ The gateway uses `net/http` rather than gRPC. The standard library's `http.Serve
 
 ### The gRPC Health Checking Protocol
 
-Kubernetes knows how to send HTTP requests and run shell commands as probes. Since Kubernetes 1.24 it also has native support for gRPC probes: you specify a port and the kubelet calls the standard `grpc.health.v1.Health/Check` RPC and expects a `SERVING` response[^3]. No sidecar, no shell script, no curl dependency in the image.
+Kubernetes knows how to send HTTP requests and run shell commands as probes. Since Kubernetes 1.24, it also has native support for gRPC probes: you specify a port and the kubelet calls the standard `grpc.health.v1.Health/Check` RPC and expects a `SERVING` response[^3]. No sidecar, no shell script, no curl dependency in the image.
 
 The protocol[^2] defines a single RPC:
 
@@ -328,7 +328,7 @@ For full shutdown signalling you could make the `/healthz` handler return a non-
 
 Verify compilation across all services before moving on:
 
-```
+```bash
 go build ./services/*/cmd/
 ```
 
@@ -336,7 +336,7 @@ This catches missing imports (`os/signal`, `syscall`, `time`) and any type misma
 
 To test the health endpoint locally, start a gRPC service and use `grpcurl`:
 
-```
+```bash
 grpcurl -plaintext localhost:50052 grpc.health.v1.Health/Check
 ```
 
@@ -352,7 +352,7 @@ If you get `Failed to dial target host`, the service is not running. If you get 
 
 You can also check a named service (useful if you register per-service statuses):
 
-```
+```bash
 grpcurl -plaintext -d '{"service": "catalog.v1.CatalogService"}' \
     localhost:50052 grpc.health.v1.Health/Check
 ```

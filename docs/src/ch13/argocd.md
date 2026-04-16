@@ -1,6 +1,6 @@
 # 13.10 — GitOps with ArgoCD
 
-Section 13.8 built a deployment pipeline where GitHub Actions calls `kubectl apply`. When tests pass, the pipeline renders the production Kustomize overlay and pushes the result to EKS. This works, and for a single team with a single environment it is perfectly reasonable. But it encodes a directional assumption: the CI system holds the cluster's desired state and pushes it outward on demand.
+Section 13.8 built a deployment pipeline where GitHub Actions calls `kubectl apply`. When tests pass, the pipeline renders the production Kustomize overlay and pushes the result to EKS. This works, and for a single team with a single environment it is reasonable. But it encodes a directional assumption: the CI system holds the cluster's desired state and pushes it outward on demand.
 
 GitOps inverts that relationship. The cluster watches its own desired state in Git and pulls it in continuously. There is no push step. The CI pipeline's job ends at "commit the new image tag to the repository." From that moment, a controller running inside the cluster detects the change and reconciles. This section explains that model, introduces ArgoCD as the most widely adopted implementation, and maps out exactly how it would replace the pipeline you built in section 13.8 — without touching a line of application code.
 
@@ -59,9 +59,9 @@ spec:
 
 `syncPolicy.automated.prune: true` means resources that exist in the cluster but have been removed from Git are deleted. Without this, stale resources accumulate silently.
 
-**AppProject** groups one or more Application resources and defines the boundaries they are allowed to operate within: which source repositories are permitted, which destination namespaces are allowed, and which Kubernetes resource types can be managed. For a single-team project, a single AppProject covering all namespaces is sufficient. For a multi-team platform, AppProjects are how you enforce that team A cannot accidentally modify team B's namespace.
+**AppProject** groups one or more Application resources and defines the boundaries they are allowed to operate within: which source repositories are permitted, which destination namespaces are allowed, and which Kubernetes resource types can be managed. For a single-team project, a single AppProject covering all namespaces is sufficient. For a multi-team platform, AppProjects enforce that team A cannot accidentally modify team B's namespace.
 
-Beyond the CRDs, ArgoCD ships a web UI that is genuinely useful in day-to-day operations. It visualizes the full resource tree for each Application — Deployments, ReplicaSets, Pods, Services, ConfigMaps — and shows their sync status, health, and any error messages. A diff view shows exactly what ArgoCD would change before it applies. Rollback to any previous Git revision is a single button click. The UI also surfaces Kubernetes events, making it a reasonable first stop for diagnosing why a rollout is stuck without needing to reach for `kubectl describe` directly.
+Beyond the CRDs, ArgoCD ships a web UI that is genuinely useful in day-to-day operations. It visualizes the full resource tree for each Application — Deployments, ReplicaSets, Pods, Services, ConfigMaps — and shows their sync status, health, and any error messages. A diff view shows exactly what ArgoCD would change before it applies. Rollback to any previous Git revision is a single click. The UI also surfaces Kubernetes events, making it a reasonable first stop for diagnosing why a rollout is stuck without needing to reach for `kubectl describe` directly.
 
 ArgoCD is not the only GitOps controller worth knowing. **Flux** (also a CNCF graduated project) takes a more modular, CLI-first approach: it decomposes into separate controllers for source tracking, Kustomize reconciliation, Helm releases, and image automation. The two tools are functionally comparable for the use case described here. ArgoCD is more commonly encountered in teams that prioritize the web UI and a single-binary install experience; Flux is more common in teams that prefer composability and GitOps-as-code with no UI dependency. The choice between them is largely organizational preference. Everything in this discussion applies equally to a Flux-based setup.
 
@@ -118,7 +118,7 @@ When the CI pipeline builds and pushes a new image to ECR, the new image tag (ty
 
 `kustomize edit set image` writes the new image reference into the overlay's `kustomization.yaml` file without modifying the base manifests. The pipeline then commits that change to the repository. ArgoCD detects the commit on its next poll cycle and syncs.
 
-A practical consideration: the pipeline is committing back to the same branch it was triggered by. This can cause infinite loop risks if not handled carefully — the commit by the bot user should either target a different branch than the trigger branch, or the pipeline should be configured to skip runs triggered by the bot user's commits. Teams typically handle this by using a dedicated `config` or `gitops` branch that only CI writes to, while humans work on `main`.
+A practical consideration: the pipeline is committing back to the same branch it was triggered by. This can cause infinite loop risks if not handled carefully — the commit by the bot user should either target a different branch than the trigger branch, or configure the pipeline to skip runs triggered by the bot user's commits. Teams typically handle this by using a dedicated `config` or `gitops` branch that only CI writes to, while humans work on `main`.
 
 ArgoCD also has an optional companion component called **ArgoCD Image Updater** that automates this step: it watches ECR for new image tags matching a pattern and commits the update to Git automatically, without any CI involvement. For the library system's simple use case, the inline CI step above is sufficient and more transparent.
 
@@ -140,15 +140,15 @@ ArgoCD also has an optional companion component called **ArgoCD Image Updater** 
 
 ## Disadvantages and costs
 
-**An additional component to install and maintain.** ArgoCD is not trivial — its full installation includes a dozen or more Kubernetes resources, a Redis instance, and several controllers. It needs to be upgraded as Kubernetes versions advance. Its own availability becomes part of your operational picture: if ArgoCD is down, deployments stall.
+**An additional component to install and maintain.** ArgoCD is non-trivial — its full installation includes a dozen or more Kubernetes resources, a Redis instance, and several controllers. It needs to be upgraded as Kubernetes versions advance. Its own availability becomes part of your operational picture: if ArgoCD is down, deployments stall.
 
 **Learning curve.** The CRD model, sync policies, resource health checks, and SSO integration (ArgoCD has its own authentication layer, often integrated with Dex or an external OIDC provider) all take time to learn. For a team already comfortable with the `kubectl apply` pipeline, the transition requires re-learning a workflow.
 
-**The chicken-and-egg problem.** ArgoCD cannot deploy itself. Something has to install ArgoCD into the cluster before it can manage anything. In practice this means keeping a small bootstrap script or Terraform module that runs once to install ArgoCD, after which ArgoCD can manage its own configuration and everything else. This is solvable, but it is a layer of bootstrapping complexity that does not exist with a pure `kubectl apply` approach.
+**The chicken-and-egg problem.** ArgoCD cannot install itself the first time. Something has to install ArgoCD into the cluster before it can manage anything. In practice this means keeping a small bootstrap script or Terraform module that runs once to install ArgoCD, after which ArgoCD can manage its own configuration and everything else. This is solvable, but it is a layer of bootstrapping complexity that does not exist with a pure `kubectl apply` approach.
 
 **Sync feedback in CI.** With `kubectl apply` in CI, the pipeline waits for the apply to complete and can fail the job if it does not. With ArgoCD, the CI pipeline commits an image tag and exits successfully — it does not wait for the sync to finish. Monitoring whether the deployment actually succeeded requires polling ArgoCD's API or using its CLI (`argocd app wait`) in a separate job. Getting "did the deploy succeed?" feedback back into the CI pipeline requires additional wiring.
 
-**Overkill for a single team and environment.** For a single developer or a two-person team with one production environment and no compliance requirements, the operational overhead of ArgoCD is not justified by its benefits. The direct pipeline is simpler to understand, simpler to debug, and simpler to change. Complexity should be introduced in response to problems that actually exist, not in anticipation of problems that might exist.
+**Overkill for a single team and environment.** For a single developer or a two-person team with one production environment and no compliance requirements, the operational overhead of ArgoCD is not justified by its benefits. The direct pipeline is simpler to understand, simpler to debug, and simpler to change. Complexity should be introduced in response to problems that exist, not in anticipation of problems that might exist.
 
 ---
 
@@ -162,7 +162,7 @@ The signal that a push pipeline is no longer sufficient usually comes from one o
 
 **Compliance or audit requirements appear.** Some regulatory frameworks require an immutable audit trail of every production change and the ability to demonstrate that the running system matches a declared desired state. A Git history of Kubernetes overlays satisfies both requirements in a way that CI pipeline logs do not.
 
-**Manual changes are causing incidents.** If post-mortems keep revealing that someone edited a ConfigMap directly or changed a replica count and forgot to update the manifest, drift detection is the right tool. When the same class of problem appears twice, it is worth the overhead of preventing it structurally.
+**Manual changes are causing incidents.** If postmortems keep revealing that someone edited a ConfigMap directly or changed a replica count and forgot to update the manifest, drift detection is the right tool. When the same class of problem appears twice, it is worth the overhead of preventing it structurally.
 
 ---
 

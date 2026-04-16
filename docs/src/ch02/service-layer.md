@@ -2,7 +2,7 @@
 
 The repository layer you built in the previous section knows exactly one thing: how to talk to a database. That's intentional — it has no opinion about whether a book title is required, whether you can delete a book that's currently checked out, or how to coordinate multiple repository calls into a single operation. That's the job of the **service layer**.
 
-The service layer is where business logic lives. It sits between the transport layer (gRPC handlers) and the persistence layer (repositories), and it depends on neither. This section covers how Go interfaces enable that clean separation, how to express domain errors in a way callers can inspect, and how to test business logic in isolation using hand-written mocks.
+The service layer is where business logic lives. It sits between the transport layer (gRPC handlers) and the persistence layer (repositories), and it does not depend on gRPC or GORM — it interacts with both only through interfaces it defines or receives. This section covers how Go interfaces enable that clean separation, how to express domain errors in a way callers can inspect, and how to test business logic in isolation using hand-written mocks.
 
 ---
 
@@ -21,7 +21,7 @@ class PostgresBookRepository : BookRepository {  // explicit declaration
 }
 ```
 
-Go works differently. Interface satisfaction is **implicit** — a type satisfies an interface simply by having the right method signatures. There is no `implements` keyword and no declaration of intent:
+Go works differently. Interface satisfaction is **implicit** — a type satisfies an interface by having the right method signatures. There is no `implements` keyword and no declaration of intent:
 
 ```go
 // The interface lives in the service package — the consumer owns it.
@@ -59,9 +59,9 @@ func NewCatalogService(repo BookRepository) *CatalogService {
 
 > **Note:** In later chapters, we will extend this constructor to accept an `EventPublisher` for Kafka integration. The pattern stays the same — add a new interface dependency, pass it through the constructor.
 
-This is manual dependency injection — no framework, just a constructor that takes what it needs. The service has no idea whether `repo` is backed by PostgreSQL, SQLite, or an in-memory map. That's the point.
+This is manual dependency injection — no framework, a constructor that takes what it needs. The service has no idea whether `repo` is backed by PostgreSQL, SQLite, or an in-memory map. That's the point.
 
-Most service methods are thin orchestrators. `GetBook` simply delegates:
+Most service methods are thin orchestrators. `GetBook` delegates:
 
 ```go
 func (s *CatalogService) GetBook(ctx context.Context, id uuid.UUID) (*model.Book, error) {
@@ -69,7 +69,7 @@ func (s *CatalogService) GetBook(ctx context.Context, id uuid.UUID) (*model.Book
 }
 ```
 
-There's no business logic here worth adding a layer for — but the layer still matters because it's the right place for logic *when it does exist*, and it decouples the gRPC handler from the repository interface. If you later need to add an audit log entry every time a book is fetched, this is where it goes, without touching the handler or the repository.
+There is no business logic here that warrants a dedicated layer. The layer still matters — it's the right place for logic *when it exists*, and it decouples the gRPC handler from the repository interface. If you later need to add an audit log entry every time a book is fetched, this is where it goes, without touching the handler or the repository.
 
 `CreateBook` is where the service earns its keep:
 
@@ -83,7 +83,7 @@ func (s *CatalogService) CreateBook(ctx context.Context, book *model.Book) (*mod
 }
 ```
 
-Two things happen here that have nothing to do with SQL: the input is validated, and an invariant is enforced (`available_copies` must equal `total_copies` for a new book). The repository doesn't know about either rule — it would happily insert a book with a blank title and negative availability if asked. The service layer is the last line of defence before data reaches the database.
+Two things happen here that have nothing to do with SQL: the input is validated, and an invariant is enforced (`available_copies` must equal `total_copies` for a new book). The repository doesn't know about either rule — the repository doesn't validate either rule; the database CHECK constraints catch the most egregious violations, but defensive validation in the service layer produces better error messages and prevents an RPC round-trip. The service layer is the last line of defense before data reaches the database.
 
 ---
 
@@ -116,7 +116,7 @@ var (
 )
 ```
 
-The `%w` verb in `fmt.Errorf` **wraps** the sentinel error. The resulting error carries a human-readable message ("title is required") but also embeds `ErrInvalidBook` as a cause. Callers can inspect which type of error they're dealing with using `errors.Is`:
+The `%w` verb in `fmt.Errorf` **wraps** the sentinel error. The resulting error carries a human-readable message ("title is required") but also embeds `ErrInvalidBook` as a cause. Callers can check the type using `errors.Is`:
 
 ```go
 _, err := svc.CreateBook(ctx, &model.Book{Author: "Kennedy"})
@@ -125,9 +125,9 @@ if errors.Is(err, model.ErrInvalidBook) {
 }
 ```
 
-`errors.Is` traverses the error chain — it unwraps wrapped errors recursively until it finds a match. This means the gRPC handler doesn't need to parse the error string to decide how to respond. It just checks `errors.Is(err, model.ErrBookNotFound)` and maps to `codes.NotFound`, or checks `model.ErrInvalidBook` and maps to `codes.InvalidArgument`.
+`errors.Is` traverses the error chain — it unwraps wrapped errors recursively until it finds a match. This means the gRPC handler doesn't need to parse the error string to decide how to respond. It checks `errors.Is(err, model.ErrBookNotFound)` and maps to `codes.NotFound`, or checks `model.ErrInvalidBook` and maps to `codes.InvalidArgument`.
 
-Compare this to Java's exception hierarchy. The Go pattern achieves the same classification goal without inheritance or `instanceof` — just wrap a sentinel, unwrap it with `errors.Is`. [^2]
+Compare this to Java's exception hierarchy. The Go pattern achieves the same classification goal without inheritance or `instanceof` — wrap a sentinel, unwrap it with `errors.Is`.[^2]
 
 ---
 
@@ -135,7 +135,7 @@ Compare this to Java's exception hierarchy. The Go pattern achieves the same cla
 
 Go's standard library includes `testing` but no mocking framework. The ecosystem has tools like `gomock` and `testify/mock`, but for learning, hand-written mocks are better — they show you exactly what's happening rather than hiding it behind code generation.
 
-A mock just needs to implement the same interface. Here's the one from `catalog_test.go`:
+A mock needs only to implement the same interface. Here's the one from `catalog_test.go`:
 
 ```go
 type mockBookRepository struct {
@@ -190,7 +190,7 @@ func TestCatalogService_CreateBook_MissingTitle(t *testing.T) {
 
 Notice what's being tested: not "does GORM insert correctly" (the repository tests cover that), but "does the service reject invalid input". Each test exercises one business rule. When a test fails, you know exactly which rule broke.
 
-Why hand-written over `mockgen`? Small, focused interfaces (often 1–3 methods) are Go's norm [^1] — they're trivial to implement by hand. The mock above also stores actual state in a map, which makes tests more realistic than `gomock`'s call-expectation style. And there's no generated code to decode when something fails.
+Why hand-written over `mockgen`? Small, focused interfaces (often 1–3 methods) are Go's norm[^1] — they're trivial to implement by hand. The mock above also stores actual state in a map, which makes tests more realistic than `gomock`'s call-expectation style. And there's no generated code to decode when something fails.
 
 ---
 
@@ -204,7 +204,7 @@ func (s *CatalogService) DeleteBook(ctx context.Context, id uuid.UUID) error {
 }
 ```
 
-This has a bug: a book can be deleted even if copies are currently checked out (i.e., `available_copies < total_copies`). That means outstanding reservations would reference a book that no longer exists.
+This is incomplete: a book can be deleted even if copies are currently checked out (i.e., `available_copies < total_copies`). That means outstanding reservations would reference a book that no longer exists.
 
 **Your task:** Add a new sentinel error and enforce the invariant in the service layer. Write the test first, then fix the implementation.
 

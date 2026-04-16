@@ -8,7 +8,7 @@ This section walks through the final steps: building images, loading them into t
 
 ## Build and Load Images
 
-The first step is getting fresh images into the kind node. As covered in Section 12.1, kind nodes run their own `containerd` daemon and cannot see images in the host Docker daemon. You must build and then explicitly load.
+The first step is getting fresh images into the kind node. As covered in section 12.1, kind nodes run their own `containerd` daemon and cannot see images in the host Docker daemon. You must build and then explicitly load.
 
 **Build all service images with Earthly:**
 
@@ -68,7 +68,6 @@ secret/postgres-auth-secret created
 secret/postgres-catalog-secret created
 secret/postgres-reservation-secret created
 secret/meilisearch-secret created
-secret/oauth-secret created
 statefulset.apps/postgres-auth created
 statefulset.apps/postgres-catalog created
 statefulset.apps/postgres-reservation created
@@ -89,7 +88,7 @@ deployment.apps/search created
 service/search created
 deployment.apps/gateway created
 service/gateway created
-ingress.networking.k8s.io/gateway created
+ingress.networking.k8s.io/library-ingress created
 ```
 
 Kubernetes creates the namespaces first (ordering matters — resources that reference a namespace will fail if it does not exist yet), then the infrastructure workloads, then the application services. The apply is declarative: running the same command again is safe and idempotent.
@@ -108,7 +107,7 @@ kubectl wait --namespace messaging \
   --timeout=120s
 ```
 
-The application services have startup probes and will restart if the database or broker is not yet accepting connections. Waiting explicitly here avoids a wave of early `CrashLoopBackOff` restarts that can obscure real errors.
+The application services have liveness probes that may restart them if startup takes too long while the database or broker is not yet accepting connections. Waiting explicitly here avoids a wave of early `CrashLoopBackOff` restarts that can obscure real errors.
 
 **Watch the application pods come up:**
 
@@ -240,7 +239,7 @@ When you are finished experimenting, delete the cluster entirely:
 kind delete cluster --name library
 ```
 
-This removes the Docker container, all pods, all persistent data, and the kubeconfig context. Nothing persists. Re-creating the cluster from scratch with `kind create cluster --config kind-config.yaml --name library` takes the same 30 seconds as the first time (images are cached locally).
+This removes the Docker container, all pods, all persistent data, and the kubeconfig context. Nothing persists. Re-creating the cluster takes about 30 seconds once the node image is cached locally (the first `kind create cluster` pulls ~700 MB; subsequent runs skip the pull).
 
 If you only want to reset the application state without tearing down the cluster, you can delete the namespaces:
 

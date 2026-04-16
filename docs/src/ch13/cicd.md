@@ -2,7 +2,7 @@
 
 Chapter 10 built a CI/CD pipeline that runs tests with Earthly and pushes container images to GitHub Container Registry (GHCR) on every push to `main`. That was the right scope for a pipeline with no cloud target: build it, verify it, store it. Now there is a cloud target. Every section of this chapter has added infrastructure — an EKS cluster, ECR repositories, an RDS database per service, an MSK broker — and none of it is doing anything useful until a deployment pipeline closes the loop. This section builds that pipeline.
 
-The end state: a push to `main` runs the existing CI job, builds and pushes images to both GHCR and ECR, and then deploys to the EKS cluster by applying the production Kustomize overlay. No long-lived AWS credentials are stored in GitHub. A failed rollout rolls back automatically. The entire process is auditable in the GitHub Actions log.
+The end state: a push to `main` runs the existing CI job, builds and pushes images to both GHCR and ECR, and then deploys to the EKS cluster by applying the production Kustomize overlay. No long-lived AWS credentials are stored in GitHub. A failed rollout fails the job so you can investigate. The entire process is auditable in the GitHub Actions log.
 
 The central challenge is authentication. The pipeline needs permission to push to ECR and to call the Kubernetes API. The naive approach — create an IAM user, generate an access key, and store it as a GitHub secret — works, but it carries serious risk: long-lived credentials that never expire, credentials that must be rotated manually, and credentials that are one leaked secret away from full account access. The production answer is OIDC federation.
 
@@ -34,7 +34,7 @@ sequenceDiagram
 
 The critical detail is the `sub` claim. GitHub sets it to a string that encodes the repository and the ref that triggered the workflow: `repo:owner/repo:ref:refs/heads/main`. The IAM trust policy uses this claim as a condition. A token minted for a pull request from a fork has a different `sub` — it cannot assume the deployment role. You get branch-scoped permissions with no extra work.
 
-The credentials STS returns are temporary — they expire in 15 minutes by default. If the token is leaked, it is useless before an attacker can act on it. There is nothing to rotate. There is nothing stored in GitHub secrets that grants AWS access. This is the correct model for any pipeline interacting with a cloud provider.
+The credentials STS returns are temporary — they expire in 15 minutes by default. If the token is leaked, the narrow exploitation window limits what an attacker can do. There is nothing to rotate. There is nothing stored in GitHub secrets that grants AWS access. This is the correct model for any pipeline interacting with a cloud provider.
 
 ---
 
@@ -428,7 +428,7 @@ For production systems where rollback is a planned procedure rather than an emer
 
 ---
 
-With the deploy job in place, every push to `main` now follows a fully automated path: tests pass, images are built and stored in both GHCR and ECR, and the production cluster converges to the new state. The entire process is observable — GitHub Actions logs show each step, CloudTrail logs show every AWS API call, and `kubectl rollout history` shows every revision the cluster has run. The library system is running in the cloud, deployed by a pipeline, with no credentials stored anywhere that do not expire.
+With the deploy job in place, every push to `main` now follows a fully automated path: tests pass, images are built and stored in both GHCR and ECR, and the production cluster converges to the new state. The entire process is observable — GitHub Actions logs show each step, CloudTrail logs show every AWS API call, and `kubectl rollout history` shows every revision the cluster has run. The library system is running in the cloud, deployed by a pipeline that stores no long-lived credentials.
 
 ---
 

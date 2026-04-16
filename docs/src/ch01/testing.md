@@ -6,7 +6,7 @@ Go's testing story is opinionated and minimal. There is no JUnit, no TestNG, no 
 
 ### The `_test.go` Convention
 
-The Go toolchain identifies test files by their name: any file ending in `_test.go` is excluded from the production build and only compiled when running tests. There is no annotation, no test runner configuration — the filename is the contract.
+The Go toolchain identifies test files by their name: Any file ending in `_test.go` is excluded from the production build and only compiled when running tests. There is no annotation, no test runner configuration — the filename is the contract.
 
 Inside a test file, test functions follow a strict signature:
 
@@ -14,15 +14,15 @@ Inside a test file, test functions follow a strict signature:
 func TestXxx(t *testing.T) { ... }
 ```
 
-The function must start with `Test`, the next character must be uppercase (or end of name), and the parameter must be `*testing.T`. The `T` type provides methods for logging, marking failures, and stopping execution:
+The function must start with `Test`, the next character must be uppercase, and the parameter must be `*testing.T`. The `T` type provides methods for logging, marking failures, and stopping execution:
 
-| Method | Behaviour | Java/Kotlin analogue |
+| Method | Behavior | Java/Kotlin analogue |
 |---|---|---|
 | `t.Errorf(...)` | Marks the test as failed, continues running | `fail(message)` — soft |
 | `t.Fatalf(...)` | Marks the test as failed, stops immediately | `fail(message)` — hard |
 | `t.Logf(...)` | Logs a message, only visible with `-v` | `System.out.println` |
 
-This is the only assertion mechanism you get by default. It forces you to write precise, readable failure messages instead of relying on a framework to format them for you. Many Go projects add `github.com/stretchr/testify/assert` for convenience, but the standard library alone is sufficient and is what you will use here.[^1]
+These three methods are the only assertion mechanism you get by default. It forces you to write precise, readable failure messages instead of relying on a framework to format them for you. Many Go projects add `github.com/stretchr/testify/assert` for convenience, but the standard library suffices and is what this project uses.[^1]
 
 #### Package Naming: `_test` Suffix
 
@@ -41,15 +41,15 @@ go test -race ./...             # enable the data race detector
 go test -cover ./...            # print a coverage summary per package
 ```
 
-The `-race` flag instruments the binary to detect concurrent memory accesses that are not properly synchronised. It has a runtime cost (~2–20x slowdown) but catches real bugs. You should run it in CI even if not locally every time.
+The `-race` flag instruments the binary to detect concurrent memory accesses that are not properly synchronized. It has a runtime cost (roughly 2–20× slowdown) but catches genuine concurrency bugs that are otherwise nearly impossible to reproduce. Run it in CI, even if you skip it locally.
 
-`./...` is a Go path wildcard meaning "this module and all packages recursively below it". Think of it as the Go equivalent of Maven's `mvn test` applied to all submodules at once.
+`./...` is a Go path wildcard meaning "this module and all packages recursively below it." Think of it as the Go equivalent of Maven's `mvn test` applied to all submodules at once.
 
 ---
 
 ### The `httptest` Package
 
-Testing an HTTP handler normally means spinning up a real server, making a real network call, and tearing down afterwards. Go eliminates this with `net/http/httptest`.[^3]
+Testing an HTTP handler normally means spinning up a real server, making a real network call, and tearing down afterward. Go eliminates this with `net/http/httptest`.[^3]
 
 - `httptest.NewRequest(method, target, body)` — creates an `*http.Request` suitable for passing directly to a handler, without a real TCP connection.
 - `httptest.NewRecorder()` — creates a `*httptest.ResponseRecorder` that implements `http.ResponseWriter` and captures the response status, headers, and body in memory.
@@ -63,7 +63,7 @@ handler.Health(rec, req)
 // rec.Code, rec.Body, rec.Header() are all available now
 ```
 
-No ports, no goroutines, no teardown. This is the standard Go pattern — if you have ever used Spring's `MockMvc` or Ktor's `testApplication`, the motivation is identical, but the implementation is lighter because the handler is already just a function.
+No ports, no goroutines, no teardown. This is the standard Go pattern. If you've used Spring's `MockMvc` or Ktor's `testApplication`, the motivation is identical — but the implementation is lighter because the handler is already just a function.
 
 ---
 
@@ -191,7 +191,7 @@ go test -coverprofile=coverage.out ./...
 go tool cover -html=coverage.out
 ```
 
-The first command runs tests and writes a coverage profile to `coverage.out`. The second opens it in your browser, colour-coding each line: green for covered, red for not. This is the standard Go workflow — there is no plugin or external tool required.
+The first command runs tests and writes a coverage profile to `coverage.out`. The second opens it in your browser, color-coding each line: green for covered, red for not. This is the built-in Go workflow — no plugin or external tool required.
 
 For a quick summary without the browser:
 
@@ -200,7 +200,7 @@ go test -cover ./...
 # ok   github.com/fesoliveira014/library-system/services/gateway/internal/handler   coverage: 87.5% of statements
 ```
 
-Coverage is a proxy metric, not a goal. 100% coverage does not mean the code is correct; it means every line was executed at least once. What matters is that your cases cover the meaningful behavioural boundaries — which is exactly what table-driven tests are good at making explicit.
+Coverage is a proxy metric, not a goal. 100% coverage does not mean the code is correct; it means every line was executed at least once. What matters is that your cases cover the meaningful behavioral boundaries — which is exactly what table-driven tests are good at making explicit.
 
 ---
 
@@ -224,7 +224,7 @@ ci:
     BUILD ./services/gateway+test
 ```
 
-This is why reproducible environments matter: the same `earthly +ci` invocation runs identically on a developer laptop, in a GitHub Actions runner, or inside any other container runtime. No JVM toolchain to configure, no Gradle wrapper, no Maven settings XML — just a container and the `earthly` binary.[^4]
+This is why reproducible environments matter: the same `earthly +ci` invocation runs identically on a developer laptop, in a GitHub Actions runner, or inside any other container runtime. No JVM toolchain to configure, no Gradle wrapper, no Maven `settings.xml` — just a container and the `earthly` binary.[^4]
 
 ---
 
@@ -232,9 +232,9 @@ This is why reproducible environments matter: the same `earthly +ci` invocation 
 
 In section 1.3 you were asked to implement a `GET /books/{id}` endpoint. Write table-driven tests for it covering three cases:
 
-1. A valid numeric ID (e.g. `1`) returns HTTP 200 and a JSON body containing the correct book.
-2. An ID that does not exist (e.g. `9999`) returns HTTP 404.
-3. A non-GET method (e.g. `DELETE`) on a valid path returns HTTP 405.
+1. A valid numeric ID (e.g., `1`) returns HTTP 200 and a JSON body containing the correct book.
+2. An ID that does not exist (e.g., `9999`) returns HTTP 404.
+3. A non-GET method (e.g., `DELETE`) on a valid path returns HTTP 405.
 
 Your test function should have the signature `func TestBooksIDHandler(t *testing.T)` and live in `services/gateway/internal/handler/books_test.go`. Each case should be a subtest named clearly enough that a failure message alone tells you what broke.
 

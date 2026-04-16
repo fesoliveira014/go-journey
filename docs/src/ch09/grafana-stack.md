@@ -73,13 +73,13 @@ In production, you would add more processors here: `memory_limiter` to prevent t
 
 Two exporters, one per signal type:
 
-- `otlp/tempo` forwards traces to Tempo via OTLP/gRPC. The `/tempo` suffix is just a label -- it lets you define multiple OTLP exporters with different configurations. `tls.insecure: true` disables TLS for the inter-container connection (acceptable in Docker Compose, not in production).
+- `otlp/tempo` forwards traces to Tempo via OTLP/gRPC. The `/tempo` suffix is just a label—it lets you define multiple OTLP exporters with different configurations. `tls.insecure: true` disables TLS for the inter-container connection (acceptable in Docker Compose, not in production).
 
 - `prometheus` exposes a Prometheus scrape endpoint on port 8889. Rather than pushing metrics to Prometheus, the Collector converts OTLP metrics to Prometheus format and serves them on an HTTP endpoint. Prometheus then pulls from this endpoint on its regular scrape interval. This push-to-pull conversion is one of the Collector's most useful features.
 
 ### Pipelines
 
-The `service.pipelines` block wires everything together. The traces pipeline flows from `otlp` receiver through `batch` processor to `otlp/tempo` exporter. The metrics pipeline flows from `otlp` receiver through `batch` processor to `prometheus` exporter. Each pipeline is independent -- a failure in the trace exporter does not affect metrics.
+The `service.pipelines` block wires everything together. The traces pipeline flows from `otlp` receiver through `batch` processor to `otlp/tempo` exporter. The metrics pipeline flows from `otlp` receiver through `batch` processor to `prometheus` exporter. Each pipeline is independent—a failure in the trace exporter does not affect metrics.
 
 If you have used Spring Cloud Data Flow or Kafka Connect, the pipeline concept is similar: sources, processors, and sinks composed declaratively. The Collector's pipeline model is simpler (no dynamic routing), but the mental model is the same.
 
@@ -113,7 +113,7 @@ storage:
 
 The configuration is minimal for development. Tempo receives traces via OTLP/gRPC (from the Collector's `otlp/tempo` exporter) and stores them on local disk. The WAL (Write-Ahead Log) buffers incoming traces before they are flushed to the storage backend, providing durability across restarts.
 
-In production, you would use object storage (S3, GCS, Azure Blob) as the backend instead of local disk. Tempo is designed for this -- it stores traces as compressed blocks in object storage, which is orders of magnitude cheaper than a traditional database. This is why Tempo can handle high trace volumes without breaking the budget.
+In production, you would use object storage (S3, GCS, Azure Blob) as the backend instead of local disk. Tempo is designed for this—it stores traces as compressed blocks in object storage, which is orders of magnitude cheaper than a traditional database. This is why Tempo can handle high trace volumes without breaking the budget.
 
 Tempo exposes an HTTP API on port 3200 that Grafana uses to query traces. You can also query directly:
 
@@ -200,13 +200,13 @@ scrape_configs:
 
 Let us break this down:
 
-**`docker_sd_configs`** -- Promtail uses Docker service discovery via the Docker socket. It automatically finds all running containers and tails their stdout/stderr logs. No file paths to configure, no log rotation to manage.
+**`docker_sd_configs`**—Promtail uses Docker service discovery via the Docker socket. It automatically finds all running containers and tails their stdout/stderr logs. No file paths to configure, no log rotation to manage.
 
-**`relabel_configs`** -- Two rules:
+**`relabel_configs`**—Two rules:
 1. Extract the container name from Docker metadata and set it as the `container_name` label
-2. `action: keep` with the regex `.*(?:gateway|catalog|reservation).*` -- only collect logs from our application containers. This filters out logs from Postgres, Kafka, and the observability stack itself.
+2. `action: keep` with the regex `.*(?:gateway|catalog|reservation).*`—only collect logs from our application containers. This filters out logs from Postgres, Kafka, and the observability stack itself.
 
-**`pipeline_stages`** -- This is where structured logging pays off:
+**`pipeline_stages`**—This is where structured logging pays off:
 1. The `json` stage parses each log line as JSON and extracts `level`, `msg`, `trace_id`, and `span_id`
 2. The `labels` stage promotes `level` and `trace_id` to Loki labels, making them indexed and fast to query
 
@@ -284,25 +284,25 @@ This tells Grafana to load dashboard JSON files from `/var/lib/grafana/dashboard
 
 The pre-built dashboard (`deploy/grafana/dashboards/library-system.json`) has four panels:
 
-**Request Rate by Service** -- A time series panel using:
+**Request Rate by Service**—A time series panel using:
 ```promql
 rate(http_server_request_duration_seconds_count[5m])
 ```
 This shows how many HTTP requests per second the gateway is handling, broken down by route and method. `rate()` over the `_count` suffix of a histogram gives you the request rate.
 
-**Request Latency p95** -- A time series panel using:
+**Request Latency p95**—A time series panel using:
 ```promql
 histogram_quantile(0.95, rate(http_server_request_duration_seconds_bucket[5m]))
 ```
 This computes the 95th percentile latency from the histogram buckets. If p95 is 200ms, it means 95% of requests completed in under 200ms. This is the standard SLI (Service Level Indicator) for latency.
 
-**gRPC Server Latency by Method** -- A time series panel using:
+**gRPC Server Latency by Method**—A time series panel using:
 ```promql
 rate(rpc_server_duration_seconds_sum[5m]) / rate(rpc_server_duration_seconds_count[5m])
 ```
 This is the average gRPC latency per method. You can see which RPC methods are slow at a glance.
 
-**Recent Logs** -- A logs panel querying Loki:
+**Recent Logs**—A logs panel querying Loki:
 ```logql
 {container_name=~".*catalog.*|.*gateway.*|.*reservation.*"}
 ```
@@ -324,7 +324,7 @@ Here is how the pieces connect end-to-end:
 8. Click the trace. Grafana shows the span waterfall: HTTP → gRPC → DB → Kafka publish.
 9. Click "Logs for this span" (the link configured by `tracesToLogsV2`). Grafana queries Loki for `{trace_id="abc123..."}` and shows you every log line from the gateway and catalog services for this exact request.
 
-This workflow -- from metric alert, to trace, to logs -- is the observability feedback loop. It is the reason all three pillars matter and the reason they must be correlated.
+This workflow—from metric alert, to trace, to logs—is the observability feedback loop. It is the reason all three pillars matter and the reason they must be correlated.
 
 ---
 
@@ -394,7 +394,7 @@ Notable details:
 - Promtail mounts `/var/run/docker.sock:ro` (read-only) to discover containers via the Docker API. This is a common pattern for Docker log collection but requires the socket to be accessible.
 - Grafana enables anonymous access (`GF_AUTH_ANONYMOUS_ENABLED`) for development convenience. In production, you would disable this and use proper authentication.
 - `tempo-data` is a named volume that persists trace data across container restarts.
-- The `depends_on` declarations ensure Grafana starts after its datasource backends. Note that `depends_on` only waits for container start, not readiness -- Grafana handles reconnection internally.
+- The `depends_on` declarations ensure Grafana starts after its datasource backends. Note that `depends_on` only waits for container start, not readiness—Grafana handles reconnection internally.
 
 ---
 
@@ -402,19 +402,19 @@ Notable details:
 
 After `docker compose up`, verify each component:
 
-1. **Grafana** -- Open `http://localhost:3000`. Log in as `admin/admin`. The "Library System Overview" dashboard should be available under Dashboards.
+1. **Grafana**—Open `http://localhost:3000`. Log in as `admin/admin`. The "Library System Overview" dashboard should be available under Dashboards.
 
-2. **Create a book** -- Use the gateway UI or `curl`. This triggers HTTP spans (gateway), gRPC spans (catalog), DB spans (GORM), and a Kafka publish span.
+2. **Create a book**—Use the gateway UI or `curl`. This triggers HTTP spans (gateway), gRPC spans (catalog), DB spans (GORM), and a Kafka publish span.
 
-3. **Find the trace** -- In Grafana, go to Explore > Tempo. Search by service name "catalog" or "gateway". Click a trace to see the span waterfall.
+3. **Find the trace**—In Grafana, go to Explore > Tempo. Search by service name "catalog" or "gateway". Click a trace to see the span waterfall.
 
-4. **Check logs** -- In Grafana, go to Explore > Loki. Query `{container_name=~".*catalog.*"}`. Verify that log lines include `trace_id` fields.
+4. **Check logs**—In Grafana, go to Explore > Loki. Query `{container_name=~".*catalog.*"}`. Verify that log lines include `trace_id` fields.
 
-5. **Trace-to-log** -- Click a trace in Tempo. Click the "Logs" icon on a span. Verify that Loki shows log lines filtered by that trace ID.
+5. **Trace-to-log**—Click a trace in Tempo. Click the "Logs" icon on a span. Verify that Loki shows log lines filtered by that trace ID.
 
-6. **Check metrics** -- In Grafana, go to Explore > Prometheus. Query `http_server_request_duration_seconds_count`. Verify that data points are appearing.
+6. **Check metrics**—In Grafana, go to Explore > Prometheus. Query `http_server_request_duration_seconds_count`. Verify that data points are appearing.
 
-7. **Check the dashboard** -- Open the "Library System Overview" dashboard. Make several requests and watch the request rate and latency panels update.
+7. **Check the dashboard**—Open the "Library System Overview" dashboard. Make several requests and watch the request rate and latency panels update.
 
 ---
 
@@ -434,9 +434,9 @@ After `docker compose up`, verify each component:
 
 ## References
 
-[^1]: [OpenTelemetry Collector Documentation](https://opentelemetry.io/docs/collector/) -- Architecture, configuration, and deployment guide for the OTel Collector.
-[^2]: [Grafana Tempo Documentation](https://grafana.com/docs/tempo/latest/) -- Tempo configuration, query API, and storage backends.
-[^3]: [Prometheus Configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/) -- Scrape configuration, recording rules, and alerting rules.
-[^4]: [Grafana Loki Documentation](https://grafana.com/docs/loki/latest/) -- LogQL query language, label design, and deployment modes.
-[^5]: [Promtail Configuration](https://grafana.com/docs/loki/latest/send-data/promtail/configuration/) -- Pipeline stages, Docker service discovery, and relabeling.
-[^6]: [Grafana Provisioning](https://grafana.com/docs/grafana/latest/administration/provisioning/) -- Auto-configuring datasources and dashboards via YAML files.
+[^1]: [OpenTelemetry Collector Documentation](https://opentelemetry.io/docs/collector/)—Architecture, configuration, and deployment guide for the OTel Collector.
+[^2]: [Grafana Tempo Documentation](https://grafana.com/docs/tempo/latest/)—Tempo configuration, query API, and storage backends.
+[^3]: [Prometheus Configuration](https://prometheus.io/docs/prometheus/latest/configuration/configuration/)—Scrape configuration, recording rules, and alerting rules.
+[^4]: [Grafana Loki Documentation](https://grafana.com/docs/loki/latest/)—LogQL query language, label design, and deployment modes.
+[^5]: [Promtail Configuration](https://grafana.com/docs/loki/latest/send-data/promtail/configuration/)—Pipeline stages, Docker service discovery, and relabeling.
+[^6]: [Grafana Provisioning](https://grafana.com/docs/grafana/latest/administration/provisioning/)—Auto-configuring datasources and dashboards via YAML files.

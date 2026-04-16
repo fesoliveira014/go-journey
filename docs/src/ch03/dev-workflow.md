@@ -1,6 +1,6 @@
 # 3.4 Development Workflow
 
-The production Compose stack from the previous section builds optimized images and runs compiled binaries. That is correct for deployment, but painful for development: every code change requires rebuilding the Docker image and restarting the container. In this section, we set up a development workflow where code changes are automatically detected and rebuilt inside the running container.
+The production Compose stack from the previous section builds optimized images and runs compiled binaries. Correct for deployment, painful for development: every code change requires rebuilding the Docker image and restarting the container. In this section, we set up a development workflow where your code changes trigger automatic rebuilds inside the running container.
 
 ---
 
@@ -12,7 +12,7 @@ Docker Compose supports **file merging**. When you pass multiple `-f` flags, Com
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
 ```
 
-This lets you keep the production Compose file clean and layer development-specific changes on top. You don't duplicate the entire service definition -- you only specify what changes.
+This lets you keep the production Compose file clean and layer development-specific changes on top. You don't duplicate the entire service definition—you only specify what changes.
 
 Here is `deploy/docker-compose.dev.yml`:
 
@@ -36,10 +36,10 @@ services:
 
 This override changes two things per service:
 
-1. **`dockerfile`** -- switches from the production Dockerfile to a development variant (e.g., `Dockerfile.dev`)
-2. **`volumes`** -- mounts your local source directory into the container
+1. **`dockerfile`**—switches from the production Dockerfile to a development variant (e.g., `Dockerfile.dev`)
+2. **`volumes`**—mounts your local source directory into the container
 
-Everything else (environment variables, ports, networks, depends_on, healthchecks) is inherited from the base `docker-compose.yml`. You don't repeat it.
+Everything else (environment variables, ports, networks, depends_on, healthchecks) comes from the base `docker-compose.yml`. You don't repeat it.
 
 ---
 
@@ -80,12 +80,12 @@ tmp_dir = "tmp"
 
 Key settings:
 
-- **`cmd`** -- the build command. Same as what you would run manually: `go build -o ./tmp/main ./cmd/`.
-- **`bin`** -- path to the compiled binary that Air should execute.
-- **`delay`** -- milliseconds to wait after detecting a change before rebuilding. 1000ms debounces rapid multi-file saves.
-- **`include_ext`** -- only watch `.go` files. Changes to `.md`, `.toml`, or other files are ignored.
-- **`exclude_dir`** -- ignore the `tmp` directory (where the binary is written) and `vendor` to avoid infinite rebuild loops.
-- **`clean_on_exit`** -- delete the `tmp` directory when Air stops.
+- **`cmd`**—the build command. Same as what you would run manually: `go build -o ./tmp/main ./cmd/`.
+- **`bin`**—path to the compiled binary that Air should execute.
+- **`delay`**—milliseconds to wait after detecting a change before rebuilding. 1000ms debounces rapid multi-file saves.
+- **`include_ext`**—only watch `.go` files. Changes to `.md`, `.toml`, or other files are ignored.
+- **`exclude_dir`**—ignore the `tmp` directory (where the binary is written) and `vendor` to avoid infinite rebuild loops.
+- **`clean_on_exit`**—delete the `tmp` directory when Air stops.
 
 ### The Dev Dockerfile
 
@@ -114,9 +114,9 @@ CMD ["air", "-c", ".air.toml"]
 Key differences from the production Dockerfile:
 
 - **No multi-stage build.** We need the Go toolchain at runtime because Air calls `go build` on every change.
-- **Air is installed** with `go install`. This adds the `air` binary to the Go toolchain's bin directory.
+- **Air installs** via `go install`. This adds the `air` binary to the Go toolchain's bin directory.
 - **`CMD` instead of `ENTRYPOINT`.** `CMD` is easier to override if you want to debug something (e.g., `docker compose exec catalog sh`).
-- **No `CGO_ENABLED=0`.** The development build doesn't need to be fully static since the container already has the necessary libraries.
+- **No `CGO_ENABLED=0`.** The development build doesn't need to be fully static since the container has the necessary libraries.
 
 The Gateway's `Dockerfile.dev` follows the same pattern, minus the `GOWORK=off` and `gen/` copy:
 
@@ -138,7 +138,7 @@ CMD ["air", "-c", ".air.toml"]
 
 ## Volume Mounts and How They Enable Hot-Reload
 
-The magic is in the volume mounts from `docker-compose.dev.yml`:
+The key is in the volume mounts from `docker-compose.dev.yml`:
 
 ```yaml
 volumes:
@@ -146,9 +146,9 @@ volumes:
   - ../gen:/app/gen
 ```
 
-A **bind mount** maps a host directory to a container directory. The container sees your local filesystem in real time -- when you save a file on your host, the change is immediately visible inside the container. Air detects the change and triggers a rebuild.
+A **bind mount** maps a host directory to a container directory. The container sees your local filesystem in real time—when you save a file on your host, the change is immediately visible inside the container. Air detects the change and triggers a rebuild.
 
-Without the volume mount, the container would only have the source code that was `COPY`ed during the image build. Changes on your host would not be reflected.
+Without the volume mount, the container would have only the source code that was `COPY`ed during the image build. Changes on your host would not appear in the container.
 
 ```mermaid
 sequenceDiagram
@@ -187,7 +187,7 @@ This:
 4. Waits for PostgreSQL to be healthy
 5. Starts catalog and gateway with volume mounts and Air
 
-You will see Air's output in the logs:
+Air's output appears in the logs:
 
 ```
 catalog-1  | running...
@@ -259,7 +259,7 @@ Solutions:
 
 | Situation | Action |
 |---|---|
-| Changed Go source code | Nothing -- Air handles it |
+| Changed Go source code | Nothing—Air handles it |
 | Changed `go.mod` (new dependency) | `docker compose up --build` (rebuild the image) |
 | Changed `Dockerfile.dev` | `docker compose up --build` |
 | Changed `docker-compose.yml` or `.dev.yml` | `docker compose up` (re-reads config) |
@@ -280,7 +280,7 @@ The key insight: volume-mounted source changes are instant (Air catches them). B
 
 2. Wait for all services to start. You should see Air's "running" messages for both catalog and gateway.
 
-3. In your editor, open `services/gateway/cmd/main.go` (or whichever file contains an HTTP handler). Add a new endpoint or modify the response of an existing one -- for example, change the health check response body.
+3. In your editor, open `services/gateway/cmd/main.go` (or whichever file contains an HTTP handler). Add a new endpoint or modify the response of an existing one—for example, change the health check response body.
 
 4. Watch the terminal. Within ~2 seconds, you should see Air detect the change, rebuild, and restart the service.
 
@@ -302,11 +302,11 @@ gateway-1  | building...
 gateway-1  | running ./tmp/main
 ```
 
-The rebuild typically takes 1-3 seconds for a small service. The curl request to `localhost:8080/healthz` returns the modified response immediately.
+The rebuild typically takes 1–3 seconds for a small service. The curl request to `localhost:8080/healthz` returns the modified response immediately.
 
 If you don't see Air detecting the change:
-- Verify the volume mount is working: `docker compose exec gateway ls /app/services/gateway/cmd/` -- the file should show your latest modification timestamp.
-- Check that the file extension is `.go` -- Air only watches extensions listed in `include_ext`.
+- Verify the volume mount is working: `docker compose exec gateway ls /app/services/gateway/cmd/`—the file should show your latest modification timestamp.
+- Check that the file extension is `.go`—Air only watches extensions listed in `include_ext`.
 - On some systems (notably Docker Desktop with WSL2), file change notification can be delayed. Try saving twice or waiting a few seconds.
 
 If the build fails (you introduced a syntax error), Air reports the error in the logs and keeps running. Fix the error, save again, and Air retries the build.
@@ -321,13 +321,13 @@ If the build fails (you introduced a syntax error), Air reports the error in the
 - Air watches for Go source file changes and automatically rebuilds and restarts the service binary.
 - Bind mounts map your host filesystem into the container, enabling real-time code synchronization.
 - Use `docker compose logs -f` and `docker compose exec` for debugging.
-- Source code changes are handled by Air automatically. Dependency, Dockerfile, or Compose config changes require a rebuild or restart.
+- Air handles source-code changes automatically. Dependency, Dockerfile, or Compose config changes require a rebuild or restart.
 
 ---
 
 ## References
 
-[^1]: [Air -- Live reload for Go apps](https://github.com/air-verse/air) -- Air's GitHub repository with configuration documentation.
-[^2]: [Docker Compose file merging](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/) -- how multiple Compose files are merged.
-[^3]: [Bind mounts](https://docs.docker.com/engine/storage/bind-mounts/) -- Docker documentation on host-to-container file mounting.
-[^4]: [Docker Compose CLI reference](https://docs.docker.com/reference/cli/docker/compose/) -- complete command reference for `docker compose`.
+[^1]: [Air—Live reload for Go apps](https://github.com/air-verse/air)—Air's GitHub repository with configuration documentation.
+[^2]: [Docker Compose file merging](https://docs.docker.com/compose/how-tos/multiple-compose-files/merge/)—how multiple Compose files are merged.
+[^3]: [Bind mounts](https://docs.docker.com/engine/storage/bind-mounts/)—Docker documentation on host-to-container file mounting.
+[^4]: [Docker Compose CLI reference](https://docs.docker.com/reference/cli/docker/compose/)—complete command reference for `docker compose`.

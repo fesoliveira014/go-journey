@@ -12,7 +12,7 @@ That is the question this section answers.
 
 The phrase "end-to-end test" is overloaded. In most contexts it implies a full system test: all five services deployed, a gateway accepting HTTP traffic, a real user logging in and performing an action. That style of test is valuable and is discussed briefly at the end of this section. It is not what we are building here.
 
-What we are building is narrower in scope but higher in fidelity than anything in 10.2 through 10.4. The term used in this project is **service-level end-to-end test**, and it has a precise meaning:
+What we are building is narrower in scope but higher in fidelity than anything in 11.2 through 11.4. The term used in this project is **service-level end-to-end test**, and it has a precise meaning:
 
 > A test that exercises one service — in isolation from other services — from its public API boundary through every real dependency: gRPC transport, interceptor chain, business-logic handler, service layer, repository, and PostgreSQL. Kafka side effects are verified using a real broker. No mocks replace infrastructure components.
 
@@ -40,7 +40,7 @@ Test client (bufconn)
  [Kafka container]        <- real broker, real topic
 ```
 
-Compare this to the bufconn test from section 11.3. That test also ran through the interceptor and gRPC server. The difference is in the repository layer. Section 11.3's bufconn test could use either a real or a mocked repository — the test goal was to verify the gRPC wiring, so a mock was sufficient. Here the repository is always real. The test goal is to verify that the full vertical slice works end-to-end within a single service.
+Compare this to the bufconn test from section 11.3. That test also ran through the interceptor and gRPC server. The difference is in the repository layer. section 11.3's bufconn test could use either a real or a mocked repository — the test goal was to verify the gRPC wiring, so a mock was sufficient. Here the repository is always real. The test goal is to verify that the full vertical slice works end-to-end within a single service.
 
 This is the Go equivalent of a Spring Boot `@SpringBootTest` with `DEFINED_PORT` and a Testcontainers datasource — the full application context, real database, real request/response cycle.
 
@@ -187,7 +187,7 @@ func setupKafka(t *testing.T) []string {
 }
 ```
 
-Unlike PostgreSQL, where we used `GenericContainer`, Kafka uses the Testcontainers Kafka module (`testcontainers-go/modules/kafka`). The module handles all the KRaft-mode configuration internally — node IDs, controller quorum voters, listener protocols — so you don't have to set any Kafka environment variables yourself. The `confluent-local` image is purpose-built for single-node testing: it starts in KRaft mode (no ZooKeeper) and auto-creates topics by default.
+Like PostgreSQL, Kafka uses a dedicated Testcontainers module (`testcontainers-go/modules/kafka`). The module handles all the KRaft-mode configuration internally — node IDs, controller quorum voters, listener protocols — so you don't have to set any Kafka environment variables yourself. The `confluent-local` image is purpose-built for single-node testing: it starts in KRaft mode (no ZooKeeper) and auto-creates topics by default.
 
 The return value is a `[]string` of broker addresses — the same type that `sarama.NewSyncProducer` and `sarama.NewConsumerGroup` both accept. Keeping the signature consistent with what your application packages expect means you can pass the slice directly without any adaptation.
 
@@ -377,13 +377,13 @@ func TestCatalog_E2E(t *testing.T) {
 
 Walk through what each step is actually testing:
 
-**Step 1 — Create:** The gRPC request traverses the auth interceptor (which validates the JWT and extracts the caller's identity), reaches the handler, is validated by the service layer, and is persisted by the GORM repository via a real `INSERT` statement. The Kafka publisher also fires a `BookCreated` event to the real broker. The returned `bookID` came from PostgreSQL's auto-generated UUID — if there were a schema mismatch in the primary-key column, this step fails.
+**Step 1 — Create:** The gRPC request traverses the auth interceptor, which validates the JWT and extracts the caller's identity. It then reaches the handler, is validated by the service layer, and is persisted by the GORM repository via a real `INSERT`. The Kafka publisher also fires a `BookCreated` event to the real broker. The returned `bookID` came from PostgreSQL's auto-generated UUID — if there were a schema mismatch in the primary-key column, this step fails.
 
 **Steps 2 and 3 — Get and List:** These verify that the `SELECT` queries work correctly and that the schema matches what the struct tags declare. A column-name mismatch that the mock would never surface will cause step 2 to return an empty struct or an ORM error here.
 
 **Step 4 — Update:** Exercises the `UPDATE` path and immediately re-reads to confirm the write was committed (not rolled back silently due to a missed transaction boundary).
 
-**Step 5 and 6 — Delete and NotFound:** Verifies that the soft-delete or hard-delete mechanism in the repository actually makes the row invisible to subsequent reads. Soft-delete bugs — where a `deleted_at` timestamp is set but the `FindByID` query does not filter on it — are caught here but invisible to unit tests.
+**Steps 5 and 6 — Delete and NotFound:** Verifies that the soft-delete or hard-delete mechanism in the repository actually makes the row invisible to subsequent reads. Soft-delete bugs — where a `deleted_at` timestamp is set but the `FindByID` query does not filter on it — are caught here but invisible to unit tests.
 
 **Step 7 — Unauthenticated rejection:** Verifies that the auth interceptor is actually wired into the server. A server started with `grpc.NewServer()` and no interceptors would pass steps 1 through 6 just as well. This step is the proof that the interceptor is present and active. It costs one extra test call and catches the most expensive category of wiring mistake.
 
@@ -548,7 +548,7 @@ func TestReservation_E2E(t *testing.T) {
 }
 ```
 
-Step 3 uses a helper `consumeOneEvent` that creates a short-lived Sarama consumer, subscribes to the topic with a fresh consumer group ID, reads one message, and returns it deserialized. This is the same consumer-side code path that the reservation service uses internally — you are verifying not just that a message was sent, but that it can be received and deserialized by the exact code path a downstream consumer would use.
+Step 3 uses a helper `consumeOneEvent` that creates a short-lived Sarama consumer, subscribes to the topic with a fresh consumer group ID, reads one message, and returns it deserialized. This is the same consumer-side path the reservation service uses internally. You are verifying not just that a message was sent, but that it can be received and deserialized by the exact code path a downstream consumer would use.
 
 Step 6 exercises the most important business rule in the reservation service, and it is a rule that requires the database to count active reservations. A unit test with a mocked repository can test this rule only by making the mock lie about the count. This e2e test counts real rows in a real table, so the rule is tested against the actual query.
 
@@ -701,7 +701,7 @@ The existing repository tests that use `t.Skip` are left exactly as they are. Th
 
 ### Build tag discipline
 
-Every file under `internal/e2e/` carries `//go:build integration` at the very top, before the `package` declaration. This is not optional — if any file in the package is missing the tag, `go test ./...` will try to compile the package and fail because `testcontainers-go` imports Docker client libraries that are heavy dependencies.
+Every file under `internal/e2e/` carries `//go:build integration` at the top, before the `package` declaration. This is not optional — if any file in the package is missing the tag, `go test ./...` will try to compile the package and fail because `testcontainers-go` imports Docker client libraries that are heavy dependencies.
 
 ```go
 //go:build integration
@@ -727,7 +727,7 @@ go test -tags integration ./services/catalog/internal/e2e/...
 go test -tags integration -v -count=1 ./services/catalog/internal/e2e/...
 ```
 
-The `-count=1` flag disables Go's test result cache. Without it, Go will cache the result of a passing test and not re-run it. For e2e tests that depend on external state (containers that are freshly started each run), caching is almost always wrong.
+The `-count=1` flag disables Go's test-result cache. Without it, Go will cache the result of a passing test and not re-run it. For e2e tests that depend on external state (containers that are freshly started each run), caching is almost always wrong.
 
 ---
 
@@ -776,7 +776,7 @@ integration-test:
     BUILD ./services/search+integration-test
 ```
 
-Earthly executes independent `BUILD` targets in parallel by default. The four service integration tests will run concurrently, each with their own Docker daemon scope. There is no shared state between them — each service starts its own Postgres and Kafka containers, which means total wall-clock time for the full integration suite is bounded by the slowest single service rather than the sum of all four.
+Earthly executes independent `BUILD` targets in parallel by default. The four service integration tests will run concurrently, each with its own Docker-daemon scope. There is no shared state between them — each service starts its own Postgres and Kafka containers, which means total wall-clock time for the full integration suite is bounded by the slowest single service rather than the sum of all four.
 
 Invoking the full suite from the project root:
 

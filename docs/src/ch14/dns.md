@@ -1,10 +1,10 @@
 # 14.1 — DNS with Route 53
 
-At the end of Chapter 13, the library system was reachable — but only via a hostname that looks something like `k8s-library-ingress-a1b2c3d4e5-987654321.us-east-1.elb.amazonaws.com`. That URL works, but it is not something you would print on a business card, give to a user, or embed in a mobile app. It is also not a hostname you can obtain a TLS certificate for in any meaningful way — a certificate for `*.us-east-1.elb.amazonaws.com` is not yours to request, and ACM (which you will use in section 14.2) requires that you demonstrate control over the domain you are issuing a certificate for.
+At the end of Chapter 13, the library system was reachable — but only via a hostname that looks something like `k8s-library-ingress-a1b2c3d4e5-987654321.us-east-1.elb.amazonaws.com`. That URL works, but it is not something you would print on a business card, give to a user, or embed in a mobile app. It is also not a hostname you can obtain a TLS certificate for in any meaningful way — a certificate for `*.us-east-1.elb.amazonaws.com` is not yours to request, and AWS Certificate Manager (ACM), which you will use in section 14.2, requires that you demonstrate control over the domain you are issuing a certificate for.
 
 A custom domain solves three problems at once: it gives users a stable, human-readable address; it gives you a hostname you can anchor a TLS certificate to; and it decouples your application's public identity from whatever AWS generates internally. When your ALB is replaced — during a cluster migration, a region failover, or a blue/green deployment — the DNS record is the only thing that changes. Clients see no difference.
 
-This section wires up a custom domain using **Route 53**, AWS's managed DNS service. The Terraform is concise: one data source to look up your hosted zone, one data source to look up the ALB, and one record that points your domain at the load balancer using an AWS alias record.
+This section wires up a custom domain using **Route 53**, AWS's managed DNS service. The Terraform is concise: one data source for the hosted zone, one for the ALB, and one record pointing your domain at the load balancer via an AWS alias.
 
 ---
 
@@ -16,21 +16,21 @@ There are three record types relevant here.
 
 **A records** map a hostname directly to one or more IPv4 addresses. They are the simplest and most common record type. The problem with using a plain A record for an ALB is that the ALB's IP addresses are not static — AWS changes them as the load balancer scales or fails over across Availability Zones. Hardcoding an IP in an A record and hoping it never changes is not a strategy you want to rely on.
 
-**CNAME records** map one hostname to another hostname, and the resolver follows the chain until it reaches an A record. You could in theory create a CNAME pointing `library.example.com` to the ALB's generated hostname. However, CNAMEs cannot be placed at the **zone apex** — the root of the domain itself (e.g., `example.com` without a subdomain). This is a constraint in the DNS protocol: a zone apex must always contain an SOA and NS record, and the presence of a CNAME at the apex would be technically invalid. If your application lives at the root of a domain rather than a subdomain, CNAMEs do not work.
+**CNAME records** map one hostname to another hostname, and the resolver follows the chain until it reaches an A record. You could in theory create a CNAME pointing `library.example.com` to the ALB's generated hostname. However, CNAMEs cannot be placed at the **zone apex** — the root of the domain itself (e.g., `example.com` without a subdomain). This is a constraint in the DNS protocol: a zone apex must always contain SOA and NS records, and a CNAME at the apex would be invalid. If your application lives at the root of a domain rather than a subdomain, CNAMEs do not work.
 
-**AWS alias records** are Route 53's solution to both problems.[^1] An alias record behaves like a CNAME in that it points to another DNS name, but Route 53 resolves it internally and returns the current A record of the target — the actual IP addresses of the ALB at query time. Because Route 53 resolves the alias within AWS, there is no extra DNS hop from the client's perspective. Alias records are free (Route 53 does not charge per query for alias records pointing to AWS resources), they work at the zone apex, and they support health evaluation: Route 53 can automatically stop returning the record if the target resource is unhealthy.
+**AWS alias records** are Route 53's solution to both problems.[^1] An alias record behaves like a CNAME in that it points to another DNS name, but Route 53 resolves it internally and returns the target's current A records — the actual IP addresses of the ALB at query time. Because Route 53 resolves the alias within AWS, there is no extra DNS hop from the client's perspective. Alias records are free (Route 53 does not charge per query for alias records pointing to AWS resources), they work at the zone apex, and they support health evaluation: Route 53 can automatically stop returning the record if the target resource is unhealthy.
 
 ---
 
 ## Route 53 concepts
 
-**Hosted zones** are Route 53's container for DNS records for a single domain. A **public hosted zone** serves DNS responses to the open internet — any resolver worldwide can query it for `library.example.com`. A **private hosted zone** is visible only within one or more VPCs and is used for internal service discovery. You need a public hosted zone.
+**Hosted zones** are Route 53's container for DNS records for a single domain. A **public hosted zone** serves DNS responses to the internet — any resolver worldwide can query it for `library.example.com`. A **private hosted zone** is visible only within one or more VPCs and is used for internal service discovery. You need a public hosted zone.
 
-When you register a domain through Route 53 (or point an externally-registered domain at Route 53 by updating the domain's NS records with your registrar), Route 53 creates the hosted zone and becomes the authoritative name server for that domain. Every record you add to the hosted zone is served by Route 53's globally distributed DNS infrastructure.
+When you register a domain through Route 53 (or point an externally registered domain at Route 53 by updating the domain's NS records with your registrar), Route 53 creates the hosted zone and becomes the authoritative name server for that domain. Every record you add to the hosted zone is served by Route 53's globally distributed DNS infrastructure.
 
 **Record sets** are the individual DNS entries within a hosted zone. Each record has a name, a type, a TTL, and a value (or, for alias records, a target resource). You can have multiple records with the same name but different types.
 
-**Routing policies** control how Route 53 selects which record to return when there are multiple records with the same name. For this section you only need **simple routing**, which returns all values for a name without any health-check or geographic logic. The other policies — weighted, latency-based, failover, geolocation — are relevant for multi-region deployments and are outside the scope of this chapter.
+**Routing policies** control how Route 53 selects which record to return when there are multiple records with the same name. For this section you only need **simple routing**, which returns all values for a name without health-check or geographic logic. The other policies — weighted, latency-based, failover, geolocation — are relevant for multi-region deployments and are outside the scope of this chapter.
 
 ---
 
@@ -98,7 +98,7 @@ Walk through each block.
 
 ## The chicken-and-egg ordering problem
 
-There is a sequencing dependency here that Terraform's dependency graph cannot automatically resolve. The `data "aws_lb" "ingress"` data source reads an ALB that does not exist in AWS until after you deploy the Kubernetes Ingress resource — and the Ingress resource is deployed with `kubectl apply`, outside of Terraform. If you run `terraform apply` before deploying the application, the data source will fail with "No load balancers found."
+Terraform's dependency graph cannot resolve this sequencing automatically. The `data "aws_lb" "ingress"` data source reads an ALB that does not exist in AWS until after you deploy the Kubernetes Ingress resource — and the Ingress resource is deployed with `kubectl apply`, outside of Terraform. If you run `terraform apply` before deploying the application, the data source will fail with "No load balancers found."
 
 Two approaches handle this.
 

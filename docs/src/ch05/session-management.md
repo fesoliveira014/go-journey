@@ -1,6 +1,6 @@
 # 5.3 Session Management
 
-The gateway needs to know who the current user is on every request. In Chapter 4, we built JWT-based authentication for gRPC services using metadata headers. For the browser, we use the same JWTs -- but stored in cookies instead of gRPC metadata.
+The gateway needs to know who the current user is on every request. In Chapter 4, we built JWT-based authentication for gRPC services using metadata headers. For the browser, we use the same JWTs—but stored in cookies instead of gRPC metadata.
 
 ---
 
@@ -10,12 +10,12 @@ There are two common places to store a JWT in the browser:
 
 | Storage | XSS protection | CSRF protection | Sent automatically |
 |---|---|---|---|
-| **`localStorage`** | Vulnerable -- any JavaScript can read it | Not vulnerable | No -- you must add an `Authorization` header manually |
-| **HttpOnly cookie** | Protected -- JavaScript cannot access the cookie | Needs `SameSite` attribute | Yes -- the browser sends it on every request |
+| **`localStorage`** | Vulnerable—any JavaScript can read it | Not vulnerable | No—you must add an `Authorization` header manually |
+| **HttpOnly cookie** | Protected—JavaScript cannot access the cookie | Needs `SameSite` attribute | Yes—the browser sends it on every request |
 
-We use HttpOnly cookies. The tradeoff is clear: `localStorage` is vulnerable to XSS (if an attacker injects JavaScript into your page, they can steal the token), while HttpOnly cookies are invisible to JavaScript entirely. The CSRF risk from cookies is mitigated by the `SameSite` attribute, which prevents the browser from sending the cookie on cross-origin requests.
+We use HttpOnly cookies. `localStorage` is vulnerable to XSS (if an attacker injects JavaScript into your page, they can steal the token), while HttpOnly cookies are invisible to JavaScript entirely. The CSRF risk from cookies is mitigated by the `SameSite` attribute, which prevents the browser from sending the cookie on cross-origin requests.
 
-If you have worked with Spring Security, this is the same tradeoff between `JwtAuthenticationFilter` (reading from `Authorization` header, typically used by SPAs storing tokens in `localStorage`) and cookie-based session management.
+If you have worked with Spring Security, this is the same trade-off between `JwtAuthenticationFilter` (reading from `Authorization` header, typically used by SPAs storing tokens in `localStorage`) and cookie-based session management.
 
 ---
 
@@ -40,10 +40,10 @@ func setSessionCookie(w http.ResponseWriter, token string) {
 
 Each attribute matters:
 
-- **`HttpOnly: true`** -- The cookie is invisible to JavaScript. `document.cookie` will not include it. This is your primary defense against XSS token theft.
-- **`SameSite: Lax`** -- The cookie is sent on same-site requests and top-level navigations (clicking a link) but not on cross-site sub-requests (embedded images, iframes, AJAX from another domain). This prevents most CSRF attacks. `Strict` would also block the cookie on top-level navigations from other sites, which breaks OAuth2 callbacks.
-- **`MaxAge: 86400`** -- The cookie expires in 24 hours (matching the JWT expiration from Chapter 4). `MaxAge` is preferred over `Expires` because it is relative, not absolute -- no clock skew issues.
-- **`Path: "/"`** -- The cookie is sent for all paths. Without this, the cookie would only apply to the path that set it.
+- **`HttpOnly: true`**—The cookie is invisible to JavaScript. `document.cookie` will not include it. This is your primary defense against XSS token theft.
+- **`SameSite: Lax`**—The cookie is sent on same-site requests and top-level navigations (clicking a link) but not on cross-site sub-requests (embedded images, iframes, AJAX from another domain). This prevents most CSRF attacks. `Strict` would also block the cookie on top-level navigations from other sites, which breaks OAuth2 callbacks.
+- **`MaxAge: 86400`**—The cookie expires in 24 hours (matching the JWT expiration from Chapter 4). `MaxAge` is preferred over `Expires` because it is relative, not absolute—no clock skew issues.
+- **`Path: "/"`**—The cookie is sent for all paths. Without this, the cookie would only apply to the path that set it.
 - **`Secure`** is omitted because we are running on `localhost` over HTTP during development. In production, you must add `Secure: true` so the cookie is only sent over HTTPS.
 
 Clearing the cookie on logout sets `MaxAge: -1`, which tells the browser to delete it immediately:
@@ -91,15 +91,15 @@ func (s *Server) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-Notice the error handling: when login fails, we re-render the form with the email pre-filled (`"Email": email`) so the user does not have to re-type it. We do not pre-fill the password for security reasons.
+Notice the error handling: when login fails, we re-render the form with the email pre-filled (`"Email": email`) so the user does not have to re-type it. Pre-filling the password would leak it into browser autofill caches and HTML source.
 
-The `http.StatusSeeOther` (303) status code tells the browser to follow the redirect with a GET request, even though the original request was a POST. This is the "redirect" in PRG -- the browser's address bar now shows `/books`, and refreshing the page sends a harmless GET instead of re-posting the login form.
+The `http.StatusSeeOther` (303) status code tells the browser to follow the redirect with a GET request, even though the original request was a POST. This is the "redirect" in PRG—the browser's address bar now shows `/books`, and refreshing the page sends a harmless GET instead of re-posting the login form.
 
 ---
 
 ## Auth Middleware
 
-The auth middleware runs on every request. It reads the session cookie, validates the JWT, and injects the user's identity into the request context. If validation fails (expired token, tampered token, no cookie), the request continues as anonymous -- the middleware does not block it.
+The auth middleware runs on every request. It reads the session cookie, validates the JWT, and injects the user's identity into the request context. If validation fails (expired token, tampered token, no cookie), the request continues as anonymous—the middleware does not block it.
 
 ```go
 // services/gateway/internal/middleware/auth.go
@@ -123,9 +123,9 @@ func Auth(next http.Handler, jwtSecret string) http.Handler {
 }
 ```
 
-This is a "soft" auth middleware -- it enriches the context when a valid token is present but never rejects a request. Individual handlers decide whether to require authentication (by checking `userFromContext`). This design means public pages like the catalog work for anonymous users, while protected pages like admin CRUD can redirect to login.
+This is a "soft" auth middleware—it enriches the context when a valid token is present but never rejects a request. Individual handlers decide whether to require authentication (by checking `userFromContext`). This design means public pages like the catalog work for anonymous users, while protected pages like admin CRUD can redirect to login.
 
-Compare this to Spring Security's filter chain: in Spring, you configure URL patterns in `SecurityFilterChain` to require authentication. In our gateway, the middleware always runs and handlers opt-in to requiring auth. Both approaches work -- the Go version is more explicit about the decision point.
+Compare this to Spring Security's filter chain: in Spring, you configure URL patterns in `SecurityFilterChain` to require authentication. In our gateway, the middleware always runs and handlers opt-in to requiring auth. Both approaches work—the Go version is more explicit about the decision point.
 
 ---
 
@@ -154,7 +154,7 @@ sequenceDiagram
     G-->>B: Set session cookie + 303 Redirect to /books
 ```
 
-The gateway acts as a redirect orchestrator. It does not handle OAuth2 tokens directly -- it passes the authorization code and state parameter to the Auth service, which exchanges them for user information and returns a JWT.
+The gateway acts as a redirect orchestrator. It does not handle OAuth2 tokens directly—it passes the authorization code and state parameter to the Auth service, which exchanges them for user information and returns a JWT.
 
 ```go
 // services/gateway/internal/handler/auth.go
@@ -185,13 +185,13 @@ func (s *Server) OAuth2Callback(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-`OAuth2Start` uses `302 Found` (not 303) because we want the browser to follow the redirect with the same method -- standard for OAuth2 authorization redirects. `OAuth2Callback` uses `303 See Other` after setting the cookie, following the PRG pattern.
+`OAuth2Start` uses `302 Found` (not 303) because we want the browser to follow the redirect with the same method—standard for OAuth2 authorization redirects. `OAuth2Callback` uses `303 See Other` after setting the cookie, following the PRG pattern.
 
 ---
 
 ## Flash Messages
 
-Flash messages are one-time notifications displayed after a redirect -- "Book created", "Welcome back!", etc. In Spring, you would use `RedirectAttributes.addFlashAttribute()` backed by the session store. We use a simpler approach: a short-lived cookie, HMAC-signed so the client cannot tamper with it.
+Flash messages are one-time notifications displayed after a redirect—"Book created", "Welcome back!", etc. In Spring, you would use `RedirectAttributes.addFlashAttribute()` backed by the session store. We use a simpler approach: a short-lived cookie, HMAC-signed so the client cannot tamper with it.
 
 ```go
 // services/gateway/internal/handler/render.go
@@ -231,15 +231,15 @@ func (s *Server) consumeFlash(w http.ResponseWriter, r *http.Request) string {
 
 The pattern:
 
-1. Before a redirect, `setFlash` writes an HMAC-signed cookie with `MaxAge: 10` (10 seconds -- enough time for the redirect to complete).
+1. Before a redirect, `setFlash` writes an HMAC-signed cookie with `MaxAge: 10` (10 seconds—enough time for the redirect to complete).
 2. The `render` function calls `consumeFlash`, which reads the cookie, verifies the signature, and immediately deletes the cookie by setting `MaxAge: -1`.
 3. The template displays the flash message if it exists.
 
-This is stateless -- no server-side session store needed.
+This is stateless—no server-side session store needed.
 
 ### Why sign the cookie?
 
-An early version of this handler wrote the message to the cookie as plaintext. Nothing seemed wrong with that at first: `html/template` auto-escapes, so even a tampered `<script>` payload would render as harmless text. But treating "it would be escaped at render time" as your only defence is fragile:
+An early version of this handler wrote the message to the cookie as plaintext. Nothing seemed wrong with that at first: `html/template` auto-escapes, so even a tampered `<script>` payload would render as harmless text. But treating "it would be escaped at render time" as your only defense is fragile:
 
 - Any future code path that puts the flash value into a URL, a `Location` header, or a log message bypasses HTML escaping.
 - An attacker who can set cookies on your domain (XSS elsewhere, a poisoned CDN, a sloppy third-party script) can silently hand-craft flash messages that look like they came from the server. Trust in UI messaging erodes.
@@ -247,13 +247,13 @@ An early version of this handler wrote the message to the cookie as plaintext. N
 
 Signing with [`gorilla/securecookie`][securecookie] closes all of that off with one line of server-side crypto. The server writes `HMAC(key, message) || message`, reads it back with the same key, and discards anything that does not verify. A tampered value decodes to an empty string; the user sees no flash, which is the correct failure mode.
 
-The key must be at least 32 random bytes, read from the `FLASH_COOKIE_KEY` environment variable at startup (the gateway fails fast if it is unset -- same 12-Factor philosophy as `JWT_SECRET`). Generate one with:
+The key must be at least 32 random bytes, read from the `FLASH_COOKIE_KEY` environment variable at startup (the gateway fails fast if it is unset—same 12-Factor philosophy as `JWT_SECRET`). Generate one with:
 
 ```bash
 openssl rand -hex 32
 ```
 
-The codec is wired into the `Server` via a functional option so tests can spin up a server with a random per-process key without touching the 30+ constructor call sites:
+The codec is wired into the `Server` via a functional option so tests can spin up a server with a random per-process key without touching more than 30 constructor call sites:
 
 ```go
 srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl,
@@ -266,7 +266,7 @@ srv := handler.New(authClient, catalogClient, reservationClient, searchClient, t
 
 ## Logout
 
-Logout is straightforward -- clear the session cookie and redirect:
+Logout is straightforward—clear the session cookie and redirect:
 
 ```go
 func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
@@ -275,16 +275,16 @@ func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-The JWT itself is not invalidated -- it is still valid until its `exp` claim. But without the cookie, the browser will not send it, and the user is effectively logged out. As discussed in section 4.1, true JWT revocation requires a blocklist or token versioning, which we intentionally omit for simplicity.
+The JWT itself is not invalidated—it is still valid until its `exp` claim. But without the cookie, the browser will not send it, and the user is effectively logged out. As discussed in section 4.1, true JWT revocation requires a blocklist or token versioning, which we intentionally omit for simplicity.
 
-The logout route is `POST /logout`, not `GET /logout`. This is important: GET requests should not have side effects. A malicious page could embed `<img src="https://yoursite.com/logout">` and log users out. Using POST with a form submission prevents this.
+The logout route is `POST /logout`, not `GET /logout`. This is important: GET requests should not have side effects. A malicious page could embed `<img src="https://example.com/logout">` and log users out. Using POST with a form submission prevents this.
 
 ---
 
 ## References
 
-[^1]: [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html) -- Best practices for session management in web applications.
-[^2]: [MDN -- Using HTTP cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies) -- Comprehensive reference on cookie attributes (HttpOnly, SameSite, Secure, etc.).
-[^3]: [RFC 6265 -- HTTP State Management Mechanism](https://datatracker.ietf.org/doc/html/rfc6265) -- The cookie specification.
-[^4]: [Post/Redirect/Get pattern](https://en.wikipedia.org/wiki/Post/Redirect/Get) -- Wikipedia article on the PRG pattern.
-[^5]: [OWASP Cross-Site Request Forgery Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html) -- CSRF prevention techniques including SameSite cookies.
+[^1]: [OWASP Session Management Cheat Sheet](https://cheatsheetseries.owasp.org/cheatsheets/Session_Management_Cheat_Sheet.html)—Best practices for session management in web applications.
+[^2]: [MDN—Using HTTP cookies](https://developer.mozilla.org/en-US/docs/Web/HTTP/Cookies)—Comprehensive reference on cookie attributes (HttpOnly, SameSite, Secure, etc.).
+[^3]: [RFC 6265—HTTP State Management Mechanism](https://datatracker.ietf.org/doc/html/rfc6265)—The cookie specification.
+[^4]: [Post/Redirect/Get pattern](https://en.wikipedia.org/wiki/Post/Redirect/Get)—Wikipedia article on the PRG pattern.
+[^5]: [OWASP Cross-Site Request Forgery Prevention](https://cheatsheetseries.owasp.org/cheatsheets/Cross-Site_Request_Forgery_Prevention_Cheat_Sheet.html)—CSRF prevention techniques including SameSite cookies.

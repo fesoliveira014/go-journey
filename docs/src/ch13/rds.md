@@ -8,25 +8,25 @@ This section replaces all three StatefulSets with RDS instances provisioned by T
 
 ---
 
-## Why RDS Over StatefulSets in Production
+## Why RDS over StatefulSets in production
 
-StatefulSets are the right tool for running databases in environments where managed services are not available — on-premises clusters, air-gapped environments, cost-constrained setups. For AWS, the tradeoffs shift:
+StatefulSets are the right tool for running databases in environments where managed services are not available — on-premises clusters, air-gapped environments, cost-constrained setups. For AWS, the trade-offs shift:
 
 **Operational overhead.** A StatefulSet PostgreSQL instance requires you to manage `pg_basebackup` schedules, WAL archiving, backup retention policies, and restore procedures. RDS handles all of this with a few Terraform parameters.
 
-**Durability.** RDS Multi-AZ keeps a synchronous standby replica in a second Availability Zone. If the primary instance fails or its AZ becomes unavailable, RDS promotes the standby automatically, typically within 60 to 120 seconds. Achieving the same durability with a StatefulSet requires replication configuration, health probes, and a failover controller such as Patroni.
+**Durability.** RDS Multi-AZ keeps a synchronous standby replica in a second Availability Zone. If the primary instance fails or its AZ becomes unavailable, RDS promotes the standby automatically, typically within 60–120 seconds. Achieving the same durability with a StatefulSet requires replication configuration, health probes, and a failover controller such as Patroni.
 
 **Patching.** Minor PostgreSQL releases (16.4 → 16.5) include security and bug fixes. RDS can apply these automatically during a configured maintenance window. Patching a StatefulSet means updating the image tag, triggering a rolling restart, and verifying replication state before and after.
 
 **Storage.** RDS `gp3` volumes can be scaled independently of compute. A StatefulSet's PersistentVolumeClaim can be expanded on most StorageClasses, but the database must be restarted in some cases and the operation is less predictable.
 
-The cost tradeoff runs the other way: a `db.t3.micro` RDS instance costs more per month than the compute and storage a StatefulSet would consume on a single worker node. For production systems handling real data, the operational savings almost always justify the cost difference.
+The cost trade-off runs the other way: a `db.t3.micro` RDS instance costs more per month than the compute and storage a StatefulSet would consume on a single worker node. For production systems handling real data, the operational savings almost always justify the cost difference.
 
 ---
 
 ## Terraform Configuration
 
-All three databases are provisioned in a single file. A `for_each` on a locals map keeps the code DRY — adding a fourth database requires one line in `locals`, not another block of repeated HCL.
+All three databases are provisioned in a single file. A `for_each` on a locals map avoids repetition — adding a fourth database requires one line in `locals`, not another block of repeated HCL.
 
 ```hcl
 # terraform/rds.tf
@@ -148,7 +148,7 @@ In Chapter 12, each application service's ConfigMap contained a `DATABASE_URL` p
 postgresql://postgres:$(POSTGRES_PASSWORD)@postgres-catalog-0.postgres-catalog.data.svc.cluster.local:5432/catalog?sslmode=disable
 ```
 
-There are two things that must change for RDS:
+Two things must change for RDS:
 
 1. **The hostname** is now the RDS endpoint, which looks like `library-catalog.xxxx.us-east-1.rds.amazonaws.com`. The exact value is a Terraform output, covered below.
 
@@ -251,7 +251,7 @@ Note that `endpoint` in the Terraform `aws_db_instance` resource includes the po
 
 ---
 
-## What Changed
+## What changed
 
 | Component | Chapter 12 | Chapter 13 |
 |-----------|-----------|-----------|

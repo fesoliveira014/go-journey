@@ -29,9 +29,9 @@ Consider two log lines from a book creation failure:
 
 The unstructured line is readable by a human scanning a terminal. The structured line is queryable by a machine. With structured logs flowing into Loki, you can write queries like:
 
-- `{container_name="catalog"} | json | level="ERROR"` -- all errors from the catalog
-- `{container_name=~".+"} | json | trace_id="4bf92f35..."` -- every log line from every service involved in a single request
-- `{container_name="catalog"} | json | book_id="abc123"` -- everything that happened to a specific book
+- `{container_name="catalog"} | json | level="ERROR"`—all errors from the catalog
+- `{container_name=~".+"} | json | trace_id="4bf92f35..."`—every log line from every service involved in a single request
+- `{container_name="catalog"} | json | book_id="abc123"`—everything that happened to a specific book
 
 The `trace_id` field is the bridge between logging and tracing. When you see a slow trace in Tempo, you click it, and Grafana queries Loki for all log lines with that `trace_id`. This is trace-to-log correlation, and it only works if your logs are structured and carry the trace ID.
 
@@ -41,19 +41,19 @@ In the Java world, SLF4J with Logback does this via MDC (Mapped Diagnostic Conte
 
 ## Go's `log/slog` Package
 
-Go 1.21 introduced `log/slog` in the standard library[^1]. Before this, Go's `log` package was deliberately minimal -- `log.Printf("message: %v", err)` with no levels, no structured fields, no handlers. The community used third-party libraries (zerolog, zap, logrus) to fill the gap. `slog` brings structured logging into the stdlib with a design that learned from all of them.
+Go 1.21 introduced `log/slog` in the standard library[^1]. Before this, Go's `log` package was deliberately minimal—`log.Printf("message: %v", err)` with no levels, no structured fields, no handlers. The community used third-party libraries (zerolog, zap, logrus) to fill the gap. `slog` brings structured logging into the stdlib with a design that learned from all of them.
 
 ### Core Concepts
 
-**Logger** -- the type you call methods on: `slog.Info()`, `slog.Error()`, `slog.InfoContext()`. There is a global default logger accessed via package-level functions.
+**Logger**—the type you call methods on: `slog.Info()`, `slog.Error()`, `slog.InfoContext()`. There is a global default logger accessed via package-level functions.
 
-**Handler** -- the interface that decides how to format and write log records. Two built-in handlers exist:
-- `slog.TextHandler` -- human-readable key=value format
-- `slog.JSONHandler` -- machine-readable JSON (what we use in production)
+**Handler**—the interface that decides how to format and write log records. Two built-in handlers exist:
+- `slog.TextHandler`—human-readable key=value format
+- `slog.JSONHandler`—machine-readable JSON (what we use in production)
 
-**Record** -- a single log entry containing the time, level, message, and attributes.
+**Record**—a single log entry containing the time, level, message, and attributes.
 
-**Attributes** -- key-value pairs attached to a record. Added via variadic arguments:
+**Attributes**—key-value pairs attached to a record. Added via variadic arguments:
 
 ```go
 slog.Info("book created", "book_id", "abc123", "title", "The Go Programming Language")
@@ -64,7 +64,7 @@ This produces:
 {"time":"...","level":"INFO","msg":"book created","book_id":"abc123","title":"The Go Programming Language"}
 ```
 
-**Levels** -- `slog.LevelDebug`, `slog.LevelInfo`, `slog.LevelWarn`, `slog.LevelError`. These map directly to SLF4J's `DEBUG`, `INFO`, `WARN`, `ERROR`.
+**Levels**—`slog.LevelDebug`, `slog.LevelInfo`, `slog.LevelWarn`, `slog.LevelError`. These map directly to SLF4J's `DEBUG`, `INFO`, `WARN`, `ERROR`.
 
 ### The `Handler` Interface
 
@@ -79,10 +79,10 @@ type Handler interface {
 }
 ```
 
-- `Enabled` -- called before constructing the record. Return `false` to skip the log entirely (like SLF4J's `isDebugEnabled()`).
-- `Handle` -- called to process the record. This is where formatting and writing happen.
-- `WithAttrs` -- returns a new handler with pre-set attributes (like MDC values that persist across log calls).
-- `WithGroup` -- returns a new handler that nests attributes under a named group.
+- `Enabled`—called before constructing the record. Return `false` to skip the log entirely (like SLF4J's `isDebugEnabled()`).
+- `Handle`—called to process the record. This is where formatting and writing happen.
+- `WithAttrs`—returns a new handler with pre-set attributes (like MDC values that persist across log calls).
+- `WithGroup`—returns a new handler that nests attributes under a named group.
 
 You can wrap one handler with another to add behavior. This is exactly what our `TraceLogHandler` does.
 
@@ -131,8 +131,8 @@ func (h *TraceLogHandler) WithGroup(name string) slog.Handler {
 
 The implementation is a decorator pattern. `Handle` is the interesting method:
 
-1. Extract the span from the context via `trace.SpanFromContext(ctx)`. This is an OTel API call -- it returns the current span stored in `ctx`, or a no-op span if none exists.
-2. Check `sc.IsValid()` -- this prevents injecting zero-valued trace/span IDs when there is no active trace (e.g., during startup logging before any request has arrived).
+1. Extract the span from the context via `trace.SpanFromContext(ctx)`. This is an OTel API call—it returns the current span stored in `ctx`, or a no-op span if none exists.
+2. Check `sc.IsValid()`—this prevents injecting zero-valued trace/span IDs when there is no active trace (e.g., during startup logging before any request has arrived).
 3. If valid, add `trace_id` and `span_id` as string attributes to the record.
 4. Delegate to the inner `JSONHandler` for the actual JSON formatting and writing.
 
@@ -162,7 +162,7 @@ Go does not have thread-locals (goroutines are not threads, and context is expli
 2. The context is passed explicitly through the call chain: `handler(ctx) → service(ctx) → repo(ctx)`
 3. The `TraceLogHandler` extracts the span from the context at log time
 
-The Go approach is more explicit but has the same outcome. The key discipline is: always pass `ctx` and always use `slog.InfoContext(ctx, ...)` instead of `slog.Info(...)`. If you forget the context, the log line is still emitted -- it just lacks trace fields.
+The Go approach is more explicit but has the same outcome. The key discipline is: always pass `ctx` and always use `slog.InfoContext(ctx, ...)` instead of `slog.Info(...)`. If you forget the context, the log line is still emitted—it just lacks trace fields.
 
 ---
 
@@ -202,7 +202,7 @@ func TestTraceLogHandler_WithActiveSpan(t *testing.T) {
 }
 ```
 
-The test creates a real `TracerProvider` with an in-memory exporter (no network calls). It starts a span, logs through the handler, and checks that the JSON output contains the correct `trace_id` and `span_id`. The in-memory exporter (`tracetest.NewInMemoryExporter`) is part of the OTel SDK's test utilities -- use it whenever you need to verify tracing behavior in unit tests without a live Collector.
+The test creates a real `TracerProvider` with an in-memory exporter (no network calls). It starts a span, logs through the handler, and checks that the JSON output contains the correct `trace_id` and `span_id`. The in-memory exporter (`tracetest.NewInMemoryExporter`) is part of the OTel SDK's test utilities—use it whenever you need to verify tracing behavior in unit tests without a live Collector.
 
 The second test (`TestTraceLogHandler_WithoutSpan`) verifies that logging without a span does not inject empty trace fields. The third (`TestTraceLogHandler_InvalidSpanContext`) verifies that an invalid (zero-valued) span context is treated the same as no span.
 
@@ -311,7 +311,7 @@ otelgrpc server handler  →  creates server span, stores in ctx
         → GORM query  →  creates DB span from ctx
 ```
 
-Every layer passes `ctx`. This is Go's explicit context propagation model. It requires more function parameters than Java's thread-local approach, but it is unambiguous -- you can trace exactly where the context comes from by reading the code.
+Every layer passes `ctx`. This is Go's explicit context propagation model. It requires more function parameters than Java's thread-local approach, but it is unambiguous—you can trace exactly where the context comes from by reading the code.
 
 ---
 
@@ -331,7 +331,7 @@ Every layer passes `ctx`. This is Go's explicit context propagation model. It re
 
 ## References
 
-[^1]: [log/slog package documentation](https://pkg.go.dev/log/slog) -- Official Go standard library documentation for structured logging.
-[^2]: [slog proposal and design document](https://go.googlesource.com/proposal/+/master/design/56345-structured-logging.md) -- Jonathan Amsterdam's design document explaining the rationale behind slog's API.
-[^3]: [SLF4J MDC documentation](https://www.slf4j.org/manual.html#mdc) -- The Java equivalent of context-aware logging, using thread-local storage.
-[^4]: [OpenTelemetry Trace Context in Go](https://pkg.go.dev/go.opentelemetry.io/otel/trace#SpanFromContext) -- API for extracting the current span from a Go context.
+[^1]: [log/slog package documentation](https://pkg.go.dev/log/slog)—Official Go standard library documentation for structured logging.
+[^2]: [slog proposal and design document](https://go.googlesource.com/proposal/+/master/design/56345-structured-logging.md)—Jonathan Amsterdam's design document explaining the rationale behind slog's API.
+[^3]: [SLF4J MDC documentation](https://www.slf4j.org/manual.html#mdc)—The Java equivalent of context-aware logging, using thread-local storage.
+[^4]: [OpenTelemetry Trace Context in Go](https://pkg.go.dev/go.opentelemetry.io/otel/trace#SpanFromContext)—API for extracting the current span from a Go context.

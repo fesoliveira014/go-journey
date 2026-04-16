@@ -1,6 +1,6 @@
 # 12.5 Kustomize Environments
 
-At the end of sections 11.3 and 11.4, the project has roughly thirty manifest files — Deployments, Services, ConfigMaps, StatefulSets, PersistentVolumeClaims, Ingress rules — organized across three namespaces. They work correctly in kind. The problem appears the moment you think about EKS.
+At the end of sections 12.3 and 12.4, the project has roughly thirty manifest files — Deployments, Services, ConfigMaps, StatefulSets, PersistentVolumeClaims, Ingress rules — organized across three namespaces. They work correctly in kind. The problem appears the moment you think about EKS.
 
 In a real AWS cluster, secrets must come from AWS Secrets Manager or Kubernetes Secrets populated by the External Secrets Operator, not from literal values in YAML files. Resource limits should be larger to reflect actual capacity. Critical services should run as at least two replicas. Image references should carry explicit tags and always pull from ECR. None of those changes apply to your local kind cluster, where lightweight single-replica pods and embedded credentials are exactly right.
 
@@ -79,7 +79,7 @@ deploy/k8s/
         └── kustomization.yaml
 ```
 
-The manifest files in `base/` are the ones you wrote in sections 11.3 and 11.4, moved into this structure. They contain no environment-specific values — no credentials, no replica counts, no resource limits that differ between environments. Those are the overlay's responsibility.
+The manifest files in `base/` are the ones you wrote in sections 12.3 and 12.4, moved into this structure. They contain no environment-specific values — no credentials, no replica counts, no resource limits that differ between environments. Those are the overlay's responsibility.
 
 ---
 
@@ -185,7 +185,7 @@ env:
         key: POSTGRES_PASSWORD
 ```
 
-If the name changes every time the secret content changes, you would have to update every Deployment that references it. During active development — where you change a secret value frequently — this friction is counterproductive.
+If the name changes every time the secret content changes, `kubectl get secret postgres-catalog-secret` stops working; you have to remember the hashed name. Kustomize does rewrite `secretKeyRef.name` references automatically in pods it manages, but ad-hoc debugging becomes harder. During active development — where you change a secret value frequently — this friction is counterproductive.
 
 `disableNameSuffixHash: true` keeps the name predictable. For production, consider leaving the hash enabled and using `replacements` to propagate the generated name into the Deployment specs automatically. That is a Chapter 13 topic.
 
@@ -207,7 +207,7 @@ To apply everything in one command:
 kubectl apply -k deploy/k8s/overlays/local
 ```
 
-This is the local equivalent of `docker compose up`. It submits all ~30 manifests plus the generated Secrets to the API server in a single operation, creating or updating each resource as needed.
+This is the local equivalent of `docker compose up`. It submits all thirty or so manifests plus the generated Secrets to the API server in a single operation, creating or updating each resource as needed.
 
 To verify the result:
 
@@ -287,11 +287,11 @@ The overlay model introduces four Kustomize primitives worth knowing explicitly.
 
 **Strategic merge patches** apply a partial YAML document on top of an existing resource, using the Kubernetes API schema to decide how to merge fields. A patch for a Deployment that specifies only `spec.replicas: 3` leaves all other fields unchanged. A patch that specifies a container by name merges into that container without affecting others. This is the most readable patching mechanism for simple changes.
 
-**JSON 6902 patches** are precise surgical operations using RFC 6902 patch operations (`add`, `remove`, `replace`, `move`, `copy`). They address fields by JSON pointer path (`/spec/template/spec/containers/0/imagePullPolicy`). Use these when a strategic merge patch cannot express what you need — for example, changing a single element in a list identified by index.
+**JSON Patch (RFC 6902) operations** are precise surgical operations using RFC 6902 patch operations (`add`, `remove`, `replace`, `move`, `copy`). They address fields by JSON pointer path (`/spec/template/spec/containers/0/imagePullPolicy`). Use these when a strategic merge patch cannot express what you need — for example, changing a single element in a list identified by index.
 
 **`secretGenerator` and `configMapGenerator`** create Kubernetes Secrets and ConfigMaps from literal values, files, or environment files. They keep credential values out of base manifests and provide the hash-suffix rollout mechanism described earlier.
 
-Two additional primitives appear in the production overlay comments but are not used in the local one:
+Two additional primitives worth knowing, though not shown in either overlay:
 
 **`namePrefix` / `nameSuffix`** prepend or append a string to every resource name in the kustomization. Useful for multi-tenant clusters where teams share a namespace: `namePrefix: team-a-` ensures there are no name collisions without modifying base manifests.
 

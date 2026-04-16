@@ -6,7 +6,7 @@ Every Go project starts by answering one question: *how does the toolchain find,
 
 ## Go Modules
 
-If you are coming from the JVM world, a Go module is roughly the equivalent of a Maven `pom.xml` or a Gradle `build.gradle` — it declares the name of the project, the minimum Go version required, and all external dependencies. Unlike Maven or Gradle, Go bakes module support directly into the toolchain (`go mod`) with no plugin layer.
+If you come from the JVM world, a Go module resembles a Maven `pom.xml` or Gradle `build.gradle` file — it declares the name of the project, the minimum Go version required, and all external dependencies. Unlike Maven or Gradle, Go bakes module support directly into the toolchain (`go mod`) with no plugin layer.
 
 A module is a directory tree whose root contains a `go.mod` file. Every `.go` source file in that tree belongs to exactly one module.
 
@@ -22,7 +22,7 @@ go 1.26.1
 
 Three things worth unpacking:
 
-**`module` — the module path.** This is the canonical import path prefix for every package inside this module. Any file anywhere in the tree can import a package from this module using that prefix. The convention is to use the repository URL as the module path — for example, `github.com/<user>/<repo>/<optional-subdirectory>`. This is not just convention for readability; it is how `go get` and the Go proxy infrastructure locate and download modules.
+**`module` — the module path.** This is the canonical import path prefix for every package inside this module. Any file anywhere in the tree can import a package from this module using that prefix. The convention is to use the repository URL as the module path — for example, `github.com/<user>/<repo>/<optional-subdirectory>`. This is not just a convention for readability; it is how `go get` and the Go proxy infrastructure locate and download modules.
 
 Contrast this with Java packages, where the reverse-domain convention (`com.example.myapp`) is separate from the artifact coordinates in `pom.xml`. In Go, they are the same string.
 
@@ -38,13 +38,13 @@ cd services/gateway
 go mod init github.com/fesoliveira014/library-system/services/gateway
 ```
 
-That single command writes `go.mod`. Nothing else is required to start writing Go code in that directory.
+That single command writes `go.mod`; nothing else is required to start writing Go.
 
 ---
 
 ## Go Workspaces
 
-This project is a monorepo: multiple independently deployable services live inside a single repository, each with its own `go.mod`. That raises a problem — how does the toolchain resolve an import from a sibling service during local development, without publishing it to a registry first?
+This project is a monorepo: multiple independently deployable services live inside a single repository, each with its own `go.mod`. That raises a problem — how does the toolchain resolve an import from a sibling service during local development without first publishing it to a registry?
 
 The answer is `go.work`, introduced in Go 1.18. A workspace file at the repository root tells the toolchain to resolve specific module paths to local directories instead of fetching them from the network. It does not replace `go.mod` — each module retains its own dependency graph and builds independently. The workspace is a development-time overlay.
 
@@ -69,17 +69,17 @@ go work use ./services/gateway
 go work sync
 ```
 
-`go work sync` downloads any dependencies that are listed in a module's `go.mod` but not yet reflected in the workspace's lock state. It is safe to run at any time and idempotent.
+`go work sync` downloads any dependencies that are listed in a module's `go.mod` but not yet reflected in the workspace's lock state. The command is idempotent and safe to run at any time.
 
 ---
 
 ## Project Structure Conventions
 
-Go has no mandated project layout, but the community has converged on conventions that most open-source projects follow. There is no `src/` directory — that is a Java/Maven artifact Go does not need.
+Go has no mandated project layout, but the community has converged on conventions that most open-source projects follow. There is no `src/` directory — that is a Java/Maven convention Go does not use.
 
 ### `cmd/`
 
-The `cmd/` directory holds the entry points for executables. Each subdirectory under `cmd/` corresponds to one binary. If a module produces a single binary, it is common to place `main.go` directly in `cmd/` without a further subdirectory. The gateway service does exactly this:
+The `cmd/` directory holds executable entry points. Each subdirectory under `cmd/` corresponds to one binary. If a module produces a single binary, it is common to place `main.go` directly in `cmd/` without a further subdirectory. The gateway service does exactly this:
 
 ```
 services/gateway/

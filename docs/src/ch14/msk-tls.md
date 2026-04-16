@@ -1,4 +1,4 @@
-# 14.4 Kafka Encryption: MSK TLS
+# 14.4 — Kafka Encryption: MSK TLS
 
 Chapter 13 deployed the MSK cluster with `client_broker = "PLAINTEXT"` and opened port 9092 in the security group. The comment in the Terraform file acknowledged the gap: port 9094 and TLS were deferred to this chapter. This section closes that gap.
 
@@ -65,7 +65,7 @@ The `client_broker` field accepts three values:
 
 ### `terraform/vpc.tf` — Adding the TLS Security Group Rule
 
-The current security group allows inbound TCP on port 9092. That rule is no longer needed once `client_broker = "TLS"` is applied — MSK will stop listening on 9092 — but instead of removing the old rule immediately, it is cleaner to add the new one first, apply both, verify the TLS connection, and then remove the plaintext rule in a follow-up apply. For a fresh deployment you can add only the TLS rule:
+The current security group allows inbound TCP on port 9092. That rule is no longer needed once `client_broker = "TLS"` is applied; MSK stops listening on 9092. Even so, it is cleaner to add the TLS rule first, verify the connection, and then remove the plaintext rule in a follow-up apply. For a fresh deployment you can add only the TLS rule:
 
 ```hcl
 # terraform/vpc.tf
@@ -85,7 +85,7 @@ The `source_security_group_id` references the EKS managed node group security gr
 
 ### `terraform/outputs.tf` — Adding the TLS Bootstrap Output
 
-MSK exposes two separate attributes for bootstrap broker strings: `bootstrap_brokers` for the plaintext listener and `bootstrap_brokers_tls` for the TLS listener. Chapter 13's `outputs.tf` already exported the plaintext string. Add the TLS equivalent:
+MSK exposes two attributes for bootstrap broker strings: `bootstrap_brokers` for the plaintext listener and `bootstrap_brokers_tls` for the TLS listener. Chapter 13's `outputs.tf` already exported the plaintext string. Add the TLS equivalent:
 
 ```hcl
 output "msk_bootstrap_brokers_tls" {
@@ -177,7 +177,7 @@ The base ConfigMaps under `deploy/k8s/base/library/` are not touched. They conti
 
 ## Go Client TLS Configuration
 
-Here is the part that surprises engineers coming from other ecosystems: you probably do not need to change the application code at all, and you certainly do not need to bundle a custom CA certificate.
+Here is the part that surprises engineers coming from other ecosystems: you probably do not need to change the application code, and you certainly do not need a custom CA bundle.
 
 MSK TLS certificates are issued by Amazon Trust Services, Amazon's public certificate authority. The root certificates for Amazon Trust Services are included in the system trust store on every major Linux distribution, including the base images used by the library services (scratch-based images built on top of Alpine or distroless)[^3]. Go's `crypto/tls` package uses the system trust store by default. When the Kafka client connects to port 9094, it performs a standard TLS handshake, verifies the broker's certificate against the system roots, and proceeds. No custom CA bundle, no `InsecureSkipVerify`, no manual certificate distribution.
 
@@ -213,7 +213,7 @@ producer, err := kafka.NewProducer(&kafka.ConfigMap{
 })
 ```
 
-The one exception to "no code change needed" arises if your container images use a stripped-down base that does not include a CA bundle — for example, a truly empty `scratch` image. In that case, Go's `crypto/tls` cannot find any system roots and the TLS handshake will fail with an error like `x509: certificate signed by unknown authority`. The fix is to copy the CA bundle into the image during the Docker build:
+The one exception to "no code change needed" arises if your container images use a stripped-down base that does not include a CA bundle — for example, an empty `scratch` image. In that case, Go's `crypto/tls` cannot find any system roots and the TLS handshake will fail with an error like `x509: certificate signed by unknown authority`. The fix is to copy the CA bundle into the image during the Docker build:
 
 ```dockerfile
 FROM alpine:3.20 AS certs

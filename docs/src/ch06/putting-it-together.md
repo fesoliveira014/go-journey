@@ -61,7 +61,7 @@ After login, you should be redirected to the home page. The navigation bar shoul
 
 ## Step 5: Browse the Catalog
 
-Navigate to `http://localhost:8080/books`. You should see all 16 seeded books listed with their titles, authors, and genres. Click on any book to see its details page, including available copies.
+Navigate to `http://localhost:8080/books`. You should see all sixteen seeded books listed with their titles, authors, and genres. Click on any book to see its details page, including available copies.
 
 ---
 
@@ -69,13 +69,13 @@ Navigate to `http://localhost:8080/books`. You should see all 16 seeded books li
 
 Click the **Admin** link in the navigation, or go to `http://localhost:8080/admin`. You should see three cards:
 
-- **Users** -- links to `/admin/users`
-- **Reservations** -- links to `/admin/reservations`
-- **Books** -- links to the "Add Book" form
+- **Users** — links to `/admin/users`
+- **Reservations** — links to `/admin/reservations`
+- **Books** — links to the "Add Book" form
 
-Click **View Users**. You should see a table with at least one row: the admin account you just created, with role `admin`.
+Click **View Users**. You should see a table with one row: the admin account you just created, with role `admin`.
 
-Click **View Reservations**. The table should be empty -- no one has reserved any books yet.
+Click **View Reservations**. The table should be empty — no one has reserved any books yet.
 
 ---
 
@@ -110,8 +110,8 @@ This confirms the full flow: the reservation service resolves the book title fro
 
 ## What's Next
 
-At this point the library system is functional: users can register, browse, and reserve books; admins can manage the catalog and monitor activity. But the services are mostly isolated -- the reservation service calls catalog and auth synchronously via gRPC, and the search service is not yet connected.
+At this point the library system is functional: users can register, browse, and reserve books; admins can manage the catalog and monitor activity. But the services are tightly coupled — the reservation service calls catalog and auth synchronously via gRPC, and the search service is not yet connected.
 
 In **Chapter 7**, we introduce **Kafka** and **event-driven architecture**. The catalog service will publish `book.created`, `book.updated`, and `book.deleted` events. The search service will consume these events to build and maintain a search index. The reservation service will publish `reservation.created` and `reservation.returned` events that the catalog service consumes to update available copy counts.
 
-This shift from synchronous RPC to asynchronous events is where the microservices architecture starts to pay for its complexity -- services become more decoupled, more resilient, and more independently deployable.
+This shift from synchronous RPC to asynchronous events is where the microservices architecture starts to pay for its complexity — services become more decoupled, more resilient, and more independently deployable.

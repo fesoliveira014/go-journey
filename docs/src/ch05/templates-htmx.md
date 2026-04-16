@@ -1,8 +1,8 @@
 # 5.2 Templates & HTMX
 
-Go's `html/template` package is a server-side template engine that produces HTML. If you have used Thymeleaf with Spring, the concept is familiar: you write HTML files with special directives that the server evaluates before sending the response. The difference is that Go templates are not XML-attribute-based (like Thymeleaf's `th:text`) -- they use a `{{...}}` syntax embedded in the HTML.
+Go's `html/template` package is a server-side template engine for HTML output. If you have used Thymeleaf with Spring, the concept is familiar: you write HTML files with special directives that the server evaluates before sending the response. The difference is that Go templates are not XML-attribute-based (like Thymeleaf's `th:text`)—they use a `{{...}}` syntax embedded in the HTML.
 
-This section covers the template system, explains a subtle gotcha that will bite you if you do not know about it, and introduces HTMX for progressive enhancement.
+This section covers the template system, explains a subtle gotcha, and introduces HTMX for progressive enhancement.
 
 ---
 
@@ -19,11 +19,11 @@ A Go template is an HTML file with **actions** enclosed in double curly braces. 
 | `{{template "name" .}}` | Include a named template, passing data | `th:replace="~{fragment}"` |
 | `{{block "name" .}}...{{end}}` | Define a block with a default body (overridable) | Thymeleaf layout block |
 
-The dot (`.`) is the **cursor** -- it refers to the current data context. Inside a `{{range}}`, the dot shifts to the current element. This is the single most confusing thing about Go templates for newcomers.
+The dot (`.`) is the **cursor**—it refers to the current data context. Inside a `{{range}}`, the dot shifts to the current element. This is the most common source of confusion for newcomers.
 
 ### Auto-Escaping
 
-Go's `html/template` package (not `text/template`) automatically escapes values based on context. A string rendered inside an HTML element is HTML-escaped. A string inside a `<script>` tag is JavaScript-escaped. This prevents XSS attacks by default -- you do not need to remember to call an escape function on every variable.
+Go's `html/template` package (not `text/template`) automatically escapes values based on context. A string rendered inside an HTML element is HTML-escaped. A string inside a `<script>` tag is JavaScript-escaped. This prevents XSS attacks by default—no per-variable escape call is needed.
 
 ---
 
@@ -69,7 +69,7 @@ The `{{block "title" .}}Library System{{end}}` action defines a block named `"ti
 {{end}}
 ```
 
-The `{{template "nav" .}}` action includes a **partial** -- a reusable fragment defined in a separate file:
+The `{{template "nav" .}}` action includes a **partial**—a reusable fragment defined in a separate file:
 
 ```html
 <!-- services/gateway/templates/partials/nav.html -->
@@ -93,7 +93,7 @@ The `{{template "nav" .}}` action includes a **partial** -- a reusable fragment 
 {{end}}
 ```
 
-Notice that the nav template accesses `.User` -- this comes from the `PageData` struct that wraps every template rendering:
+Notice that the nav template accesses `.User`—this comes from the `PageData` struct that wraps every template rendering:
 
 ```go
 type PageData struct {
@@ -116,7 +116,7 @@ Here is where Go templates get tricky. If you naively parse all your templates i
 tmpl, err := template.ParseGlob("templates/*.html")
 ```
 
-You will hit a problem: every page template defines `{{define "content"}}...{{end}}`. When parsed into a single set, the **last file parsed wins** -- only one "content" definition survives. All pages render the same content block.
+You will hit a problem: every page template defines `{{define "content"}}...{{end}}`. When parsed into a single set, the **last file parsed wins**—only one "content" definition survives. All pages render the same content block.
 
 In Thymeleaf, this is not an issue because each template file is an independent document that Thymeleaf processes separately. Go's template system works differently: all `{{define}}` blocks in a parsed set share a single namespace.
 
@@ -208,13 +208,13 @@ func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, dat
 }
 ```
 
-The key call is `tmpl.ExecuteTemplate(w, "base.html", pd)` -- it starts rendering from `base.html`, which pulls in the page's overridden `"content"` and `"title"` blocks.
+The key call is `tmpl.ExecuteTemplate(w, "base.html", pd)`—it starts rendering from `base.html`, which pulls in the page's overridden `"content"` and `"title"` blocks.
 
 ---
 
 ## HTMX: Hypermedia-Driven Interactivity
 
-HTMX[^1] is a small JavaScript library (14KB) that lets you add dynamic behavior to server-rendered HTML without writing JavaScript. Its philosophy is that the server should return **HTML fragments**, not JSON -- the browser swaps fragments into the DOM. This is the hypermedia approach, and it is a natural fit for a Go BFF.
+HTMX[^1] is a small JavaScript library (14 KB) that lets you add dynamic behavior to server-rendered HTML without writing JavaScript. Its philosophy is that the server should return **HTML fragments**, not JSON—the browser swaps fragments into the DOM. This is the hypermedia approach, and it is a natural fit for a Go BFF.
 
 ### The Three Key Attributes
 
@@ -228,7 +228,7 @@ That is the core of HTMX. There are more attributes for triggers, indicators, an
 
 ### Building the Catalog Filter
 
-Our catalog page uses HTMX for genre filtering. When the user selects a genre from a dropdown, HTMX issues a GET request to `/books?genre=Programming` and swaps the response into the book list -- no full page reload.
+Our catalog page uses HTMX for genre filtering. When the user selects a genre from a dropdown, HTMX issues a GET request to `/books?genre=Programming` and swaps the response into the book list—no full page reload.
 
 ```html
 <!-- services/gateway/templates/catalog.html -->
@@ -305,7 +305,7 @@ func (s *Server) BookList(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-For an HTMX request, the handler renders only the `"book_cards"` partial -- a bare list of `<div>` elements with no `<html>`, `<head>`, or layout. HTMX swaps this HTML fragment directly into the `#book-list` container. For a full page load (or a browser with JavaScript disabled), the handler renders the complete `catalog.html` page.
+For an HTMX request, the handler renders only the `"book_cards"` partial—a bare list of `<div>` elements with no `<html>`, `<head>`, or layout. HTMX swaps this HTML fragment directly into the `#book-list` container. For a full page load (or a browser with JavaScript disabled), the handler renders the complete `catalog.html` page.
 
 The `renderPartial` method executes a named template from the base set without the page layout:
 
@@ -322,7 +322,7 @@ func (s *Server) renderPartial(w http.ResponseWriter, name string, data any) {
 }
 ```
 
-This is progressive enhancement: the page works without JavaScript (you just get full-page reloads on filter changes), but with HTMX it feels like an SPA.
+This is progressive enhancement: The page works without JavaScript (you get full-page reloads on filter changes), but with HTMX it feels like an SPA.
 
 ---
 
@@ -340,13 +340,13 @@ HTMX is *not* a good fit when:
 - You need offline support
 - Your team already has deep React/Vue/Angular expertise and the application demands it
 
-For our library system -- catalog browsing with filters and admin CRUD forms -- HTMX is the right tool. It adds interactivity with zero JavaScript in our codebase and keeps all rendering logic on the server.
+For our library system—catalog browsing with filters and admin CRUD forms—HTMX is the right tool. It adds interactivity with zero JavaScript in our codebase and keeps all rendering logic on the server.
 
 ---
 
 ## References
 
-[^1]: [HTMX documentation](https://htmx.org/docs/) -- Official HTMX reference and examples.
-[^2]: [Go html/template package](https://pkg.go.dev/html/template) -- Standard library template documentation.
-[^3]: [Hypermedia Systems (book)](https://hypermedia.systems/) -- Free online book on hypermedia-driven application architecture by the HTMX authors.
-[^4]: [Go template tutorial](https://gowebexamples.com/templates/) -- Practical examples of Go's template system.
+[^1]: [HTMX documentation](https://htmx.org/docs/)—Official HTMX reference and examples.
+[^2]: [Go html/template package](https://pkg.go.dev/html/template)—Standard library template documentation.
+[^3]: [Hypermedia Systems (book)](https://hypermedia.systems/)—Free online book on hypermedia-driven application architecture by the HTMX authors.
+[^4]: [Go template tutorial](https://gowebexamples.com/templates/)—Practical examples of Go's template system.

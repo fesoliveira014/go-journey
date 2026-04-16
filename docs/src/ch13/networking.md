@@ -1,6 +1,6 @@
 # 13.2 — VPC and Networking
 
-Every resource you deploy to AWS lives inside a **Virtual Private Cloud** (VPC). A VPC is an isolated, software-defined network that you own within the AWS region of your choosing. EKS worker nodes need IP addresses. RDS and MSK need subnets with routing rules that prevent them from being directly reachable from the internet. The Application Load Balancer that fronts the cluster needs a public subnet so it can accept traffic from clients. None of that is possible without a well-designed VPC.
+Every resource you deploy to AWS lives inside a **Virtual Private Cloud** (VPC). A VPC is an isolated, software-defined network that you own within the AWS region of your choosing. EKS worker nodes need IP addresses. RDS and MSK need subnets whose routing prevents direct reachability from the internet. The Application Load Balancer that fronts the cluster needs a public subnet so it can accept traffic from clients. None of that is possible without a well-designed VPC.
 
 This section designs the VPC for the library system, explains the reasoning behind each decision, and writes the Terraform that provisions it.
 
@@ -12,7 +12,7 @@ The library system is deployed into two Availability Zones. An Availability Zone
 
 Each AZ contains two subnets: one public and one private.
 
-**Public subnets** are associated with the VPC's Internet Gateway, which means resources in them can receive traffic from the internet (if they have a public IP) and can initiate outbound connections directly. The Application Load Balancer lives here, because it must accept inbound HTTPS from clients. The NAT Gateway lives here too — it is itself a managed AWS resource that needs a route to the Internet Gateway so it can relay outbound traffic from private subnets.
+**Public subnets** are associated with the VPC's Internet Gateway, which means resources in them can receive traffic from the internet (if they have a public IP) and can initiate outbound connections directly. The Application Load Balancer lives here, because it must accept inbound HTTPS from clients. The NAT Gateway lives here too — itself a managed AWS resource that needs a route to the Internet Gateway so it can relay outbound traffic from private subnets.
 
 **Private subnets** have no direct route to the internet. Resources here — EKS worker nodes, RDS, MSK — can reach the internet for outbound connections (to pull container images from ECR, for example) by routing through the NAT Gateway, but nothing on the internet can reach them directly. This is the correct posture for compute and data resources.
 
@@ -56,7 +56,7 @@ graph TD
     NAT --> IGW
 ```
 
-A few details worth noting. The NAT Gateway is deployed into a single public subnet — `10.0.101.0/24` in AZ 1 — and shared by both private subnets. This is the `single_nat_gateway = true` configuration. A fully redundant deployment would place one NAT Gateway in each AZ, so that a failure in AZ 1's public subnet does not cut off outbound access for nodes in AZ 2. For a learning project, the cost of two NAT Gateways (~$65/month each, plus data transfer) is not justified. In production, revisit this.
+The NAT Gateway is deployed into a single public subnet — `10.0.101.0/24` in AZ 1 — and shared by both private subnets. This is the `single_nat_gateway = true` configuration. A fully redundant deployment would place one NAT Gateway in each AZ, so that a failure in AZ 1's public subnet does not cut off outbound access for nodes in AZ 2. For a learning project, the cost of two NAT Gateways (~$65/month each, plus data transfer) is not justified. In production, revisit this.
 
 The CIDR block `10.0.0.0/16` gives you 65,536 IP addresses to distribute across subnets. The private subnets use `10.0.1.0/24` and `10.0.2.0/24` (256 addresses each). The public subnets use `10.0.101.0/24` and `10.0.102.0/24`. The gap between the low numbers (1, 2) and the high numbers (101, 102) is intentional — it leaves room to add subnets for future purposes (database-only subnets, intra-service tiers) without renumbering anything.
 
@@ -116,7 +116,7 @@ Walk through each block.
 
 **`azs`, `private_subnets`, `public_subnets`** are parallel lists. The first private subnet (`10.0.1.0/24`) and first public subnet (`10.0.101.0/24`) are placed in the first AZ; the second pair goes in the second AZ. The module creates the subnets, route tables, and route table associations automatically.
 
-**`enable_nat_gateway = true`** tells the module to create at least one NAT Gateway and configure private subnet route tables to send `0.0.0.0/0` (all non-local traffic) through it. **`single_nat_gateway = true`** constrains it to one, shared NAT Gateway rather than one per AZ.
+**`enable_nat_gateway = true`** tells the module to create at least one NAT Gateway and configure private subnet route tables to send `0.0.0.0/0` (all non-local traffic) through it. **`single_nat_gateway = true`** constrains it to one shared NAT Gateway rather than one per AZ.
 
 **`enable_dns_hostnames` and `enable_dns_support`** are required for EKS. EKS nodes register themselves with the Kubernetes control plane using their DNS hostnames. RDS and MSK also provide DNS endpoints (rather than IP addresses) so that failovers are transparent to clients. Both must be enabled at the VPC level.
 

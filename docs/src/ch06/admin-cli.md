@@ -2,7 +2,7 @@
 
 ## The Problem
 
-The auth service's `Register` RPC always creates users with the `"user"` role. This is the correct default -- you do not want new sign-ups to be admins. But it means there is no way to create the first admin account through the application itself. You could run raw SQL:
+The auth service's `Register` RPC always creates users with the `"user"` role. This is the correct default — you do not want new sign-ups to be admins. But it means there is no way to create the first admin account through the application itself. You could run raw SQL:
 
 ```sql
 UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
@@ -14,9 +14,9 @@ That works, but it is fragile. You need to know the table and column names, you 
 
 ## Design Decision: Why Direct DB Access?
 
-The admin CLI connects directly to PostgreSQL using GORM, bypassing the auth service entirely. This might seem wrong -- elsewhere in this project, we have been careful to route all operations through gRPC. But bootstrapping is different:
+The admin CLI connects directly to PostgreSQL using GORM, bypassing the auth service entirely. This might seem wrong — elsewhere in this project, we have been careful to route all operations through gRPC. But bootstrapping is different:
 
-- **The gRPC API cannot do this.** There is no `PromoteUser` RPC, and adding one would create a security surface area that needs protection (who can call it? the first admin? how do you authorize the first admin?).
+- **The gRPC API cannot do this.** There is no `PromoteUser` RPC, and adding one would create a security surface that needs protection (who can call it? the first admin? how do you authorize the first admin?).
 - **This is an ops tool, not a feature.** It will be run once by an operator, not called by other services. It does not need to participate in the service mesh, emit events, or be load-balanced.
 - **Direct DB access is the simplest correct solution.** The CLI reuses the same GORM model as the auth service, so it stays in sync with schema migrations.
 
@@ -65,9 +65,9 @@ func main() {
 	}
 ```
 
-Go's `flag` package is intentionally simple. Flags are defined with `flag.String` (or `flag.Int`, `flag.Bool`, etc.), which returns a pointer. After `flag.Parse()`, the pointer is dereferenced to get the value. This is one of Go's more awkward APIs -- the pointer indirection exists because `flag.Parse` needs to write values after the variables are declared.
+Go's `flag` package is intentionally minimal. Flags are defined with `flag.String` (or `flag.Int`, `flag.Bool`, etc.), which returns a pointer. After `flag.Parse()`, the pointer is dereferenced to get the value. This is one of Go's more awkward APIs — the pointer indirection exists because `flag.Parse` needs to write values after the variables are declared.
 
-If you are coming from Java/Kotlin, this is the equivalent of a bare-bones `args` parser. For more complex CLIs, libraries like `cobra` or `urfave/cli` provide subcommands and help generation, but for a three-flag tool, `flag` is the right choice.
+If you are coming from Java/Kotlin, this is roughly equivalent to a bare-bones `args` parser. For more complex CLIs, libraries like Cobra or `urfave/cli` provide subcommands and help generation, but for a three-flag tool, `flag` is the right choice.
 
 ### Database Connection
 
@@ -85,7 +85,7 @@ If you are coming from Java/Kotlin, this is the equivalent of a bare-bones `args
 
 The `DATABASE_URL` is a standard PostgreSQL connection string (e.g., `postgres://user:pass@host:port/dbname?sslmode=disable`). The `pkgdb.Open` helper sets the same connection-pool defaults the service uses (see [Chapter 2](../ch02/repository-pattern.md#configuring-the-connection-pool)).
 
-> **Why no `AutoMigrate`?** An early draft of this CLI called `db.AutoMigrate(&model.User{})` on startup so the tool would work against a fresh database. That turned out to be the wrong instinct — the `auth` service already runs versioned `golang-migrate` migrations on startup, so by the time anyone runs this CLI the `users` table definitely exists. Calling `AutoMigrate` on top of a database that was provisioned with raw SQL migrations is a recipe for schema drift: GORM happily adds columns it sees in the struct, but never drops ones it doesn't, and it writes nothing to `schema_migrations`. The CLI just assumes the schema is in place.
+> **Why no `AutoMigrate`?** An early draft of this CLI called `db.AutoMigrate(&model.User{})` on startup so the tool would work against a fresh database. That turned out to be the wrong instinct — the `auth` service already runs versioned `golang-migrate` migrations on startup, so by the time anyone runs this CLI the `users` table definitely exists. Calling `AutoMigrate` on top of a database that was provisioned with raw SQL migrations is a recipe for schema drift: GORM happily adds columns it sees in the struct, but never drops ones it doesn't, and it writes nothing to `schema_migrations`. The CLI assumes the schema is in place.
 
 ### Password Hashing
 
@@ -133,15 +133,15 @@ The logic is intentionally idempotent:
 1. If a user with that email already exists, update their role to `"admin"` and reset their password and name.
 2. If no user exists, create a new one with the `"admin"` role.
 
-This means you can safely run the CLI multiple times. If you forget your admin password, just re-run it with a new one. If a regular user needs to be promoted, point the CLI at their email.
+This means you can safely run the CLI multiple times. If you forget your admin password, re-run it with a new one. If a regular user needs to be promoted, point the CLI at their email.
 
-Note the use of GORM's `First` and `Save` -- `First` returns an error if no record is found (GORM's `ErrRecordNotFound`), and `Save` performs a full update on the existing record. This is different from `Updates`, which only updates non-zero fields.
+Note the use of GORM's `First` and `Save` — `First` returns an error if no record is found (GORM's `ErrRecordNotFound`), and `Save` performs a full update on the existing record. This is different from `Updates`, which only updates non-zero fields.
 
 ---
 
 ## Usage
 
-With the stack running via Docker Compose, the auth database is exposed on port 5434 (as defined in `deploy/.env`):
+With the stack running via Docker Compose, the auth database is exposed on port 5434 (set in `deploy/.env`):
 
 ```bash
 DATABASE_URL="postgres://postgres:postgres@localhost:5434/auth?sslmode=disable" \
@@ -179,4 +179,4 @@ psql "postgres://postgres:postgres@localhost:5434/auth?sslmode=disable" \
 - **Bootstrapping tools bypass the API by design.** They solve problems that the API cannot solve (creating the first privileged account).
 - **Reuse domain models.** The CLI imports `model.User` from the auth service, keeping it in sync with the schema automatically.
 - **Idempotency matters.** Running the tool twice should not fail or create duplicates.
-- **Keep it simple.** A single-file `main.go` with `flag` is appropriate for a tool with three arguments. Reach for `cobra` when you have subcommands.
+- **Keep it simple.** A single-file `main.go` with `flag` is appropriate for a tool with three arguments. Reach for Cobra when you have subcommands.

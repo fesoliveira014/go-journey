@@ -1,8 +1,8 @@
-# 14.2 TLS with ACM
+# 14.2 — TLS with ACM
 
 TLS is table stakes for any production web application. Browsers label plain HTTP connections as "Not Secure" in the address bar, OAuth2 providers refuse to complete login flows when the redirect URI is HTTP, and any session token or API response that crosses an unencrypted connection is readable by anyone on the same network path. None of these are theoretical concerns — they are the default behavior of the tooling your users are already running.
 
-The good news is that there is no longer a cost reason to skip TLS. AWS Certificate Manager issues and automatically renews certificates for free when they are used with AWS services — ALB, CloudFront, API Gateway. The certificate you provision in this section will never expire without intervention, because ACM handles renewal roughly 30 days before the current certificate's expiration. You do nothing. The certificate rotates.
+There is no longer a cost reason to skip TLS. AWS Certificate Manager issues and automatically renews certificates for free when they are used with AWS services — ALB, CloudFront, or API Gateway. The certificate you provision in this section will never expire without intervention, because ACM handles renewal roughly 30 days before the current certificate's expiration. You do nothing. The certificate rotates.
 
 By the end of this section, `https://library.example.com` will return a valid certificate issued by Amazon, and any request to `http://library.example.com` will receive a 301 redirect to the HTTPS URL. The application pods will see plain HTTP, which is entirely correct — and the next section explains why.
 
@@ -85,11 +85,11 @@ resource "aws_acm_certificate_validation" "app" {
 
 Walk through each resource:
 
-**`aws_acm_certificate.app`** submits the certificate request to ACM for `var.domain_name`. Setting `validation_method = "DNS"` tells ACM to generate a CNAME record for ownership verification rather than sending a validation email. The `lifecycle` block with `create_before_destroy = true` is important: when you update a certificate — for example, to add a Subject Alternative Name — Terraform provisions the new certificate before destroying the old one. Without it, the ALB would briefly have no valid certificate during the update[^3].
+**`aws_acm_certificate.app`** submits the certificate request to ACM for `var.domain_name`. Setting `validation_method = "DNS"` tells ACM to generate a CNAME record for ownership verification rather than sending a validation email. The `lifecycle` block with `create_before_destroy = true` is important: when you update a certificate — for example, to add a Subject Alternative Name — Terraform provisions the new certificate before destroying the old one. Without it, the ALB would briefly have no valid certificate[^3].
 
 **`aws_route53_record.cert_validation`** uses a `for_each` expression to iterate over `domain_validation_options` — the set of CNAME records ACM requires. For a single-domain certificate there is one record; for a certificate covering multiple domains or wildcards, there would be more. The expression keys the map by domain name so that adding domains later does not reorder or replace existing records. `allow_overwrite = true` makes the resource idempotent: if a previous `apply` already wrote the record and the state was lost, Terraform updates rather than errors.
 
-**`aws_acm_certificate_validation.app`** is not a real AWS resource — it is a Terraform construct that polls the ACM API and blocks until the certificate status changes from `PENDING_VALIDATION` to `ISSUED`. The `depends_on` is implicit here: because `validation_record_fqdns` references `aws_route53_record.cert_validation`, Terraform knows to create the DNS records before waiting for validation. The ALB listener attachment depends on `aws_acm_certificate_validation.app`, which forces the full validation chain to complete before the certificate is attached to traffic.
+**`aws_acm_certificate_validation.app`** is a Terraform construct, not a real AWS resource. It polls the ACM API and blocks until the certificate status changes from `PENDING_VALIDATION` to `ISSUED`. The `depends_on` is implicit here: because `validation_record_fqdns` references `aws_route53_record.cert_validation`, Terraform knows to create the DNS records before waiting for validation. The ALB listener attachment depends on `aws_acm_certificate_validation.app`, which forces the full validation chain to complete before the certificate is attached to traffic.
 
 ---
 
@@ -116,7 +116,7 @@ Replace `ACM_CERTIFICATE_ARN` with the output from `terraform output certificate
 
 **`certificate-arn`** attaches the ACM certificate to the ALB. The AWS Load Balancer Controller reads this annotation and calls the ELB API to associate the certificate with the HTTPS listener. Without this annotation, the ALB has no certificate and cannot terminate TLS. The value is the full ARN in the form `arn:aws:acm:us-east-1:123456789012:certificate/...`[^4].
 
-**`listen-ports`** declares which ports the ALB should open. The default is `[{"HTTP": 80}]` — a single HTTP listener. Overriding it to include both port 80 and port 443 causes the controller to create two listeners on the ALB: one for plain HTTP and one for HTTPS. Both must be present for the redirect to work; the redirect is applied to the HTTP listener, and it needs somewhere to redirect to.
+**`listen-ports`** declares which ports the ALB should open. The default is `[{"HTTP": 80}]` — a single HTTP listener. Overriding it to include both port 80 and port 443 causes the controller to create two listeners on the ALB: one for plain HTTP and one for HTTPS. Both listeners must exist for the redirect to work: the redirect is applied to the HTTP listener and needs a target.
 
 **`ssl-redirect: "443"`** configures the HTTP listener to return a 301 redirect to the same URL on port 443. Any request arriving at `http://library.example.com/books` is redirected to `https://library.example.com/books`. The redirect preserves the full path and query string. This is a property of the ALB listener rule, not an application-level redirect — the pod never sees the HTTP request at all.
 
@@ -194,7 +194,7 @@ For certificate chain inspection, use `openssl s_client`:
 openssl s_client -connect library.example.com:443 -servername library.example.com
 ```
 
-The output includes the full certificate chain. Look for `Verify return code: 0 (ok)` at the end, which confirms that the certificate chains to a trusted root in OpenSSL's certificate store. You will see two certificates in the chain: the domain certificate issued by ACM and Amazon's intermediate CA.
+The output includes the full certificate chain. Look for `Verify return code: 0 (ok)` at the end, which confirms that the certificate chains to a trusted root in OpenSSL's certificate store. You will see two certificates in the chain: the domain certificate issued by ACM and Amazon's intermediate Certificate Authority (CA).
 
 ---
 
@@ -209,7 +209,7 @@ output "certificate_arn" {
 }
 ```
 
-This output is needed in two places: manually, to paste into the Ingress patch file as shown above, and potentially by a CI/CD step that generates the overlay automatically via `terraform output`. Chapter 14.5 revisits this when running the full end-to-end apply sequence.
+This output is needed in two places: manually, to paste into the Ingress patch file as shown above, and potentially by a CI/CD step that generates the overlay automatically via `terraform output`. Section 14.5 revisits this when running the full end-to-end apply sequence.
 
 ---
 

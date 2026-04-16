@@ -1,6 +1,6 @@
 # 4.2 The Auth Service
 
-With the fundamentals in place, we can now build the Auth service end to end. This section walks through each layer -- proto definition, database migration, repository, service, handler, and wiring -- following the same architecture patterns established in Chapter 2 for the Catalog service. If you followed that chapter, the structure will be familiar. The interesting differences are in the details: nullable fields for OAuth users, password hashing in the service layer, and a richer error-to-gRPC-code mapping in the handler.
+With the fundamentals in place, we can now build the Auth service end to end. This section walks through each layer—proto definition, database migration, repository, service, handler, and wiring—following the same architecture patterns established in Chapter 2 for the Catalog service. If you followed that chapter, the structure will be familiar. The interesting differences are in the details: nullable fields for OAuth users, password hashing in the service layer, and a richer error-to-gRPC-code mapping in the handler.
 
 ---
 
@@ -19,7 +19,7 @@ service AuthService {
 }
 ```
 
-The first three are the core authentication RPCs. `Register` and `Login` return an `AuthResponse` containing a JWT token and the user object. `ValidateToken` is used by other services (or a gateway) to verify a token and extract the user ID and role without needing the JWT secret themselves -- though in our architecture, services share the secret and validate locally via the interceptor.
+The first three are the core authentication RPCs. `Register` and `Login` return an `AuthResponse` containing a JWT token and the user object. Other services (or a gateway) call `ValidateToken` to verify a token and extract the user ID and role without holding the JWT secret themselves. In our architecture, however, services share the secret and validate locally via the interceptor.
 
 `GetUser` is a simple lookup by ID. `InitOAuth2` and `CompleteOAuth2` implement the OAuth2 authorization code flow, which we cover in detail in section 4.3.
 
@@ -32,7 +32,7 @@ message AuthResponse {
 }
 ```
 
-This pattern -- returning both the token and the user data in one response -- avoids a separate round-trip after login. The client gets everything it needs to display a profile and make authenticated requests.
+This pattern—returning both the token and the user data in one response—avoids a separate round-trip after login. The client gets everything it needs to display a profile and make authenticated requests.
 
 ---
 
@@ -62,7 +62,7 @@ CREATE INDEX idx_users_email ON users(email);
 
 Several design decisions deserve explanation:
 
-**`password_hash` is nullable.** OAuth users authenticate through Google -- they never set a password. Making this column `NOT NULL` would force us to store a dummy value, which is both inelegant and a potential security risk (what if someone tries to log in with the dummy password?). A `NULL` password hash explicitly means "this user cannot authenticate with a password." The `Login` handler checks for this:
+**`password_hash` is nullable.** OAuth users authenticate through Google—they never set a password. Making this column `NOT NULL` would force us to store a dummy value, which is both inelegant and a potential security risk (what if someone tries to log in with the dummy password?). A `NULL` password hash explicitly means "this user cannot authenticate with a password." The `Login` handler checks for this:
 
 ```go
 if user.PasswordHash == nil {
@@ -70,9 +70,9 @@ if user.PasswordHash == nil {
 }
 ```
 
-**The `valid_role` CHECK constraint** restricts the `role` column to `'user'` or `'admin'`. This is database-level enforcement -- even if a bug in the application tries to set `role = 'superadmin'`, PostgreSQL rejects it. Defense in depth.
+**The `valid_role` CHECK constraint** restricts the `role` column to `'user'` or `'admin'`. This is database-level enforcement—even if a bug in the application tries to set `role = 'superadmin'`, PostgreSQL rejects it. Defense in depth.
 
-**The `oauth_unique` composite constraint** ensures that each OAuth provider + ID combination is unique. A Google user with ID `12345` can only have one row. But the same email address could exist as both a password user and a Google user -- this is a deliberate choice. In a production system, you might want to merge these accounts. For our learning project, we keep it simple.
+**The `oauth_unique` composite constraint** ensures that each OAuth provider + ID combination is unique. A Google user with ID `12345` has only one row. But the same email address could exist as both a password user and a Google user—this is a deliberate choice. In a production system, you might want to merge these accounts. For this learning project, we keep it simple.
 
 **`uuid-ossp` extension** provides the `uuid_generate_v4()` function for generating UUIDs at the database level. Same pattern as the Catalog service's `books` table.
 
@@ -130,7 +130,7 @@ This is the same typed-error pattern we introduced in Chapter 2: GORM returns th
 
 ## Service Layer
 
-The service layer in `services/auth/internal/service/auth.go` contains the business logic. It depends on a `UserRepository` interface -- not the concrete GORM implementation:
+The service layer in `services/auth/internal/service/auth.go` contains the business logic. It depends on a `UserRepository` interface—not the concrete GORM implementation:
 
 ```go
 type UserRepository interface {
@@ -142,7 +142,7 @@ type UserRepository interface {
 }
 ```
 
-If you come from Spring, this is the same dependency inversion pattern -- a Spring `@Service` depends on a `@Repository` interface, not the JPA implementation. In Go, we achieve this without annotations or DI frameworks: the interface is defined in the `service` package (the consumer), and the `repository` package provides a concrete struct that satisfies it. No `@Autowired` magic -- the wiring happens explicitly in `main.go`.
+If you come from Spring, this is the same dependency inversion pattern—a Spring `@Service` depends on a `@Repository` interface, not the JPA implementation. In Go, we achieve this without annotations or DI frameworks: the interface is defined in the `service` package (the consumer), and the `repository` package provides a concrete struct that satisfies it. No `@Autowired` magic—the wiring happens explicitly in `main.go`.
 
 ### Registration Flow
 
@@ -172,7 +172,7 @@ func (s *AuthService) Register(ctx context.Context, email, password, name string
 }
 ```
 
-The flow is straightforward: validate, hash, persist, issue token. New users always get the `"user"` role. Promoting to admin is a deliberate manual operation (direct SQL update) -- there is no "register as admin" RPC.
+The flow is straightforward: validate, hash, persist, issue token. New users always get the `"user"` role. Promoting to admin is a deliberate manual operation (direct SQL update)—there is no "register as admin" RPC.
 
 ### Login Flow
 
@@ -200,7 +200,7 @@ func (s *AuthService) Login(ctx context.Context, email, password string) (string
 }
 ```
 
-Notice the security detail: whether the email does not exist, the user is OAuth-only, or the password is wrong, the same error is returned -- `ErrInvalidCredentials`. This prevents user enumeration attacks where an attacker probes different emails to discover which ones are registered.
+Notice the security detail: all three failure paths—email not found, OAuth-only user, wrong password—return the same error, `ErrInvalidCredentials`. This prevents user enumeration attacks where an attacker probes different emails to discover which ones are registered.
 
 ---
 
@@ -246,13 +246,13 @@ func toGRPCError(err error) error {
 }
 ```
 
-This is analogous to a Spring `@ControllerAdvice` exception handler that maps domain exceptions to HTTP status codes. The default case returns `Internal` with a generic message -- never leaking internal details to the client.
+This is analogous to a Spring `@ControllerAdvice` exception handler that maps domain exceptions to HTTP status codes. The default case returns `Internal` with a generic message—never leaking internal details to the client.
 
 ---
 
 ## DI Wiring in main.go
 
-The `main.go` wires everything together using constructor functions -- no framework, no reflection:
+The `main.go` wires everything together using constructor functions—no framework, no reflection:
 
 ```go
 // Configuration from environment. JWT_SECRET is required — no default.
@@ -279,7 +279,7 @@ grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 authv1.RegisterAuthServiceServer(grpcServer, authHandler)
 ```
 
-Each layer only knows about the layer directly below it. The handler does not know about GORM. The service does not know about gRPC. This is the same layered architecture as the Catalog service, and it makes testing straightforward -- you can mock any interface boundary.
+Each layer only knows about the layer directly below it. The handler does not know about GORM. The service does not know about gRPC. This is the same layered architecture as the Catalog service, and it makes testing straightforward—you can mock any interface boundary.
 
 > **Why `log.Fatal` on missing `JWT_SECRET`?** An earlier draft of this code fell back to `"dev-secret-change-in-production"` when the env var was unset. That pattern is dangerous: a misconfigured deployment (forgotten Kubernetes Secret, typo in a ConfigMap key) would silently start a production service that accepts tokens signed with a publicly known string. The [12-Factor App's Config factor](https://12factor.net/config) is clear here — config belongs in the environment, and missing required config should fail fast. Development defaults belong in a `.env` file or Compose env block, not in the binary itself.
 
@@ -319,14 +319,14 @@ The Register and Login responses include both a `token` string and a `user` obje
 - Nullable `password_hash` supports both email/password and OAuth-only users
 - The service layer handles all business logic (hashing, validation) while the handler handles gRPC translation
 - Domain errors map to specific gRPC codes via `toGRPCError`
-- DI wiring is explicit in `main.go` -- no framework magic
+- DI wiring is explicit in `main.go`—no framework magic
 
 ---
 
 ## References
 
-[^1]: [gRPC status codes](https://grpc.io/docs/guides/status-codes/) -- official documentation on gRPC canonical status codes and when to use each.
-[^2]: [GORM documentation](https://gorm.io/docs/) -- the Go ORM used for database access in both the Auth and Catalog services.
-[^3]: [golang-migrate](https://github.com/golang-migrate/migrate) -- the migration tool used for database schema management.
-[^4]: [Dependency Inversion Principle](https://en.wikipedia.org/wiki/Dependency_inversion_principle) -- the SOLID principle behind interface-based DI in Go.
-[^5]: [User enumeration prevention](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#authentication-responses) -- OWASP guidance on preventing user enumeration through consistent error messages.
+[^1]: [gRPC status codes](https://grpc.io/docs/guides/status-codes/)—official documentation on gRPC canonical status codes and when to use each.
+[^2]: [GORM documentation](https://gorm.io/docs/)—the Go ORM used for database access in both the Auth and Catalog services.
+[^3]: [golang-migrate](https://github.com/golang-migrate/migrate)—the migration tool used for database schema management.
+[^4]: [Dependency Inversion Principle](https://en.wikipedia.org/wiki/Dependency_inversion_principle)—the SOLID principle behind interface-based DI in Go.
+[^5]: [User enumeration prevention](https://cheatsheetseries.owasp.org/cheatsheets/Authentication_Cheat_Sheet.html#authentication-responses)—OWASP guidance on preventing user enumeration through consistent error messages.

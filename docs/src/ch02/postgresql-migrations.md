@@ -6,7 +6,7 @@ The Catalog service needs a database. This section gets PostgreSQL running local
 
 ## Running PostgreSQL Locally
 
-The fastest way to get a development PostgreSQL instance is Docker. No installation, no path configuration, no version conflicts — just one command:
+The fastest way to get a development PostgreSQL instance is Docker. No installation, no path configuration, no version conflicts — a single command does it:
 
 ```bash
 docker run -d \
@@ -30,7 +30,7 @@ To connect with `psql` (the PostgreSQL CLI):
 psql -h localhost -U postgres -d catalog
 ```
 
-When prompted, enter the password `postgres`. You'll land at the `catalog=#` prompt. Useful commands to remember:
+When prompted, enter the password `postgres`. You'll land at the `catalog=#` prompt. Commands worth knowing:
 
 | Command | Description |
 |---|---|
@@ -43,7 +43,7 @@ When prompted, enter the password `postgres`. You'll land at the `catalog=#` pro
 
 ## Why Versioned Migrations?
 
-Before reaching for a migration tool, it's worth understanding what goes wrong without one.
+Before reaching for a migration tool, consider what goes wrong without one.
 
 ### The problem with manual schema changes
 
@@ -52,15 +52,15 @@ On a solo project with a single database, the typical flow looks like: connect t
 - **No shared state**: other developers don't know what changes you made, or in what order. Their local DB drifts from yours.
 - **No history**: six months later, you can't tell if a column was always there or added late. There's no `git log` for your schema.
 - **No rollback**: if the change is wrong, you need to reverse it manually — and remember exactly what you changed.
-- **No environment parity**: the schema in production, staging, and local dev gradually diverge.
+- **No environment parity**: the schemas in production, staging, and local dev gradually diverge.
 
 ### Why GORM AutoMigrate is dangerous in production
 
-GORM ships a feature called `AutoMigrate` that creates or alters tables to match your Go struct definitions. It sounds convenient and is genuinely useful for exploratory development. You should not use it in production for two reasons:
+GORM ships a feature called `AutoMigrate` that creates or alters tables to match your Go struct definitions. It sounds convenient and is useful for exploratory development. You should not use it in production for two reasons:
 
 1. **It never drops columns.** If you remove a field from your struct, `AutoMigrate` leaves the column in the database untouched. Over time, the schema accumulates ghost columns that exist in the DB but nowhere in your code. Reads and writes may silently behave differently than you expect.
 
-2. **It has no version tracking.** There's no record of what was applied, when, or in what order. You can't roll back. You can't replay. You can't audit. Every environment is potentially in a different state with no way to tell.
+2. **It has no version tracking.** There's no record of what was applied, when, or in what order. You can't roll back. You can't replay. You can't audit. Every environment drifts silently with no way to tell.
 
 ### What golang-migrate gives you
 
@@ -138,7 +138,7 @@ Naming constraints (rather than letting PostgreSQL auto-generate a name) is impo
 
 **Indexes**
 
-`CREATE INDEX idx_books_genre ON books(genre)` and `idx_books_author ON books(author)` exist because the catalog supports filtering by genre and author. Without indexes, those queries would do a full table scan. For a library with thousands of books, that's acceptable; for one with millions, it isn't. Adding indexes in the migration that creates the table is the right time — you're declaring "this column will be queried" alongside the schema definition.[^2]
+The two index statements exist because the catalog supports filtering by genre and author. Without indexes, those queries would do a full table scan. For a library with thousands of books, that's acceptable; for one with millions, it isn't. Adding indexes in the migration that creates the table is the right time — you're declaring "this column will be queried" alongside the schema definition.[^2]
 
 ### The down migration
 
@@ -170,7 +170,7 @@ import "embed"
 var FS embed.FS
 ```
 
-The `//go:embed *.sql` directive is a compiler instruction.[^3] It tells the Go compiler to find all files matching `*.sql` relative to this source file and embed them into the compiled binary as a virtual filesystem. The `embed.FS` type (from the `embed` package, new in Go 1.16) exposes a standard `fs.FS` interface for reading those embedded files.
+The `//go:embed *.sql` directive is a compiler instruction.[^3] It tells the Go compiler to find all files matching `*.sql` relative to this source file and embed them into the compiled binary as a virtual filesystem. The `embed.FS` type (from the `embed` package, introduced in Go 1.16) exposes a standard `fs.FS` interface for reading those embedded files.
 
 Why embed rather than ship external files?
 
@@ -178,7 +178,7 @@ Why embed rather than ship external files?
 - **Immutability**: the migrations bundled with a given binary version are fixed. You can't accidentally run the wrong migrations against a database by deploying mismatched files.
 - **Simpler CI/CD**: one binary to test, one binary to ship, one binary to run.
 
-The tradeoff is that you can't add or modify migrations without recompiling. For database migrations, that's not a tradeoff — migrations should be immutable once deployed and always version-controlled with the code that depends on them.
+The trade-off is that you can't add or modify migrations without recompiling. For database migrations, that's not a trade-off — migrations should be immutable once deployed and always version-controlled with the code that depends on them.
 
 ---
 
@@ -222,7 +222,7 @@ Walking through each step:
 
 2. **`pgmigrate.WithInstance`** — creates a PostgreSQL migration driver from the connection. This driver manages the `schema_migrations` table.
 
-3. **`iofs.New(migrations.FS, ".")`** — creates a migration source from the embedded filesystem. The `"."` argument is the root directory within the embedded FS to search for migration files. This is where the `embed.FS` from the `migrations` package gets handed to golang-migrate.
+3. **`iofs.New(migrations.FS, ".")`** — creates a migration source from the embedded filesystem. The `"."` argument is the root directory inside the embedded filesystem to search for migration files. This is where the `embed.FS` from the `migrations` package gets handed to golang-migrate.
 
 4. **`migrate.NewWithInstance`** — wires the source and driver together. The string arguments (`"iofs"`, `"postgres"`) are driver names used internally.
 
