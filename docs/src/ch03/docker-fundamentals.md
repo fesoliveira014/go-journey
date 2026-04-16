@@ -1,6 +1,6 @@
 # 3.1 Docker Fundamentals
 
-Before writing any Dockerfiles, you need a solid mental model of what containers are and how Docker builds images. This section covers the foundational concepts. If you already have Docker experience, skim through and make sure the multi-stage build section is clear—it is central to the Dockerfiles we write in the next section.
+Before writing any Dockerfiles, you need a solid mental model of what containers are and how Docker builds images. If you already have Docker experience, skim this section and confirm the multi-stage build material is clear—it is central to the Dockerfiles we write in the next section.
 
 ---
 
@@ -50,7 +50,7 @@ The key difference: the JVM abstracts the CPU architecture and OS API. Container
 
 ## Images vs. Containers
 
-This distinction matters: An **image** is a read-only template—a blueprint. A **container** is a running instance of that image.
+This distinction matters: an **image** is a read-only template—a blueprint. A **container** is a running instance of that image.
 
 In object-oriented terms: an image is a class; a container is an object. You can create multiple containers from the same image, each with its own writable layer and its own state.
 
@@ -73,10 +73,12 @@ Docker images are built from a series of **layers**. Each instruction in a Docke
 
 This has a critical implication: **instruction order in your Dockerfile determines cache efficiency.**
 
+Pin these base images to the latest supported versions at time of building. The versions shown here were current when this chapter was written.
+
 Consider this naive Dockerfile:
 
 ```dockerfile
-FROM golang:1.26-alpine
+FROM golang:1.22-alpine
 WORKDIR /app
 COPY . .
 RUN go mod download
@@ -88,7 +90,7 @@ Every time you change *any* source file, the `COPY . .` layer is invalidated. Th
 Now consider the optimized version:
 
 ```dockerfile
-FROM golang:1.26-alpine
+FROM golang:1.22-alpine
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -102,7 +104,7 @@ Here we copy `go.mod` and `go.sum` first, then download dependencies. This layer
 
 ```mermaid
 graph BT
-    L1["Layer 1: FROM golang:1.26-alpine<br/>(base image, ~300MB)"]
+    L1["Layer 1: FROM golang:1.22-alpine<br/>(base image, ~300MB)"]
     L2["Layer 2: COPY go.mod go.sum<br/>(tiny, ~1KB)"]
     L3["Layer 3: RUN go mod download<br/>(dependencies, cached)"]
     L4["Layer 4: COPY . .<br/>(your source code)"]
@@ -119,13 +121,13 @@ The green layer is the key—it is expensive (network + disk I/O) but cached acr
 
 ## Multi-Stage Builds
 
-A naive Dockerfile produces an image that contains the Go toolchain (~300MB), all source code, all downloaded modules, *and* the compiled binary. For a Go service that compiles to a ~15MB static binary, this is wasteful and creates a larger attack surface.
+A naive Dockerfile produces an image that contains the Go toolchain (~300 MB), all source code, all downloaded modules, *and* the compiled binary. For a Go service that compiles to a ~15MB static binary, this is wasteful and creates a larger attack surface.
 
 Multi-stage builds solve this. You use one stage (the "builder") to compile your code and a second stage (the "runtime") that contains only the final binary:
 
 ```dockerfile
 # Stage 1: Build
-FROM golang:1.26-alpine AS builder
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -140,7 +142,7 @@ USER app
 ENTRYPOINT ["/usr/local/bin/server"]
 ```
 
-The `COPY --from=builder` instruction reaches into the builder stage and extracts only the compiled binary. The final image is based on `alpine:3.19` (~5MB), not `golang:1.26-alpine` (~300MB). The total image size ends up around 15–20 MB instead of more than 300 MB.
+The `COPY --from=builder` instruction reaches into the builder stage and extracts only the compiled binary. The final image is based on `alpine:3.19` (~5MB), not `golang:1.22-alpine` (~300MB). The total image size ends up around 15–20 MB instead of more than 300 MB.
 
 The `USER app` instruction switches to a non-root user. Running containers as root is a security risk: if the process is compromised, the attacker has root inside the container. Our Go binary is statically linked and needs no elevated privileges, so there is no reason to run as root.
 
@@ -163,7 +165,7 @@ In production, smaller images mean faster deploys, less bandwidth, and fewer Com
 
 Go produces static binaries. You *could* `scp` the binary to a server and run it. Why bother with Docker?
 
-1. **Dependency isolation.** Your service needs PostgreSQL connection strings, TLS certificates, and specific environment variables. A container bundles the runtime configuration expectations alongside the binary. The `Dockerfile` documents what the service needs to run.
+1. **Dependency isolation.** A service needs PostgreSQL connection strings, TLS certificates, and specific environment variables. A container bundles the runtime configuration expectations alongside the binary. The `Dockerfile` documents what the service needs to run.
 
 2. **Consistency across environments.** "It works on my machine" stops being a problem when the container *is* the machine. Development, CI, staging, and production all run the same image.
 

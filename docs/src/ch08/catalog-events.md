@@ -1,8 +1,8 @@
 # 8.1 Catalog Event Publishing
 
-When the catalog service creates, updates, or deletes a book, other parts of the system need to know about it. The search index needs to stay in sync. Future services—recommendations, analytics, audit logs—will want the same information. Rather than coupling every downstream consumer to the catalog's database or API, we publish **domain events** to Kafka and let consumers process them independently.
+When the Catalog Service creates, updates, or deletes a book, other parts of the system need to know about it. The search index needs to stay in sync. Future services—recommendations, analytics, audit logs—will want the same information. Rather than coupling every downstream consumer to the catalog's database or API, we publish **domain events** to Kafka and let consumers process them independently.
 
-This is the core idea behind event-driven architecture: the producer does not know or care who is listening. It publishes a fact ("book X was created") and moves on. Consumers subscribe to the topic and react on their own schedule. This decoupling is what makes it possible to add the search service without modifying any existing consumer code.
+This is the core idea behind event-driven architecture: the producer does not know or care who is listening. It publishes a fact ("book X was created") and moves on. Consumers subscribe to the topic and react on their own schedule. This decoupling is what makes it possible to add the Search Service without modifying any existing consumer code.
 
 If you have used Spring's `ApplicationEventPublisher` or Kotlin's `Flow`-based event buses, the concept is identical. The difference is that Kafka events cross process boundaries and survive restarts—they are durable, ordered, and replayable.
 
@@ -181,7 +181,7 @@ There is also `UpdateAvailability`, which publishes a `book.updated` event after
 
 ## The Kafka Publisher
 
-The concrete `EventPublisher` implementation uses **Sarama**, the most widely used Go Kafka client library[^1]. It wraps a `SyncProducer`—a producer that blocks until the broker acknowledges the message.
+The concrete `EventPublisher` implementation uses **Sarama**, historically the most popular Go Kafka client library[^1]. It wraps a `SyncProducer`—a producer that blocks until the broker acknowledges the message.
 
 ```go
 // services/catalog/internal/kafka/publisher.go
@@ -247,7 +247,7 @@ ctx, span := otelgo.Tracer("catalog").Start(ctx, "catalog.publish")
 defer span.End()
 ```
 
-The `headerCarrier` type adapts Sarama's `RecordHeader` slice to the `propagation.TextMapCarrier` interface that OpenTelemetry expects. This is boilerplate, but it is important: it allows a trace that starts with an HTTP request to the gateway to flow through the catalog service, into Kafka, and out to the search consumer—giving you end-to-end visibility across asynchronous boundaries.
+The `headerCarrier` type adapts Sarama's `RecordHeader` slice to the `propagation.TextMapCarrier` interface that OpenTelemetry expects. This is boilerplate, but it is important: it allows a trace that starts with an HTTP request to the gateway to flow through the Catalog Service, into Kafka, and out to the search consumer—giving you end-to-end visibility across asynchronous boundaries.
 
 ```go
 // services/catalog/internal/kafka/publisher.go
@@ -291,7 +291,7 @@ In Java/Kotlin Kafka clients, trace propagation is typically handled by an inter
 
 2. **Write a test for `CreateBook` event publishing.** Create a mock `EventPublisher` that stores published events in a slice. Call `CreateBook` and assert that exactly one `book.created` event was published with the correct book ID.
 
-3. **Implement a no-op publisher.** Write a `NopPublisher` that satisfies the `EventPublisher` interface but discards all events. When would you use this? (Hint: think about the catalog service's unit tests and local development without Kafka.)
+3. **Implement a no-op publisher.** Write a `NopPublisher` that satisfies the `EventPublisher` interface but discards all events. When would you use this? (Hint: think about the Catalog Service's unit tests and local development without Kafka.)
 
 4. **Think about failure modes.** If the Kafka broker is completely unreachable, `NewPublisher` will fail at startup. Is this the right behavior? What if you wanted the catalog to start even without Kafka? How would you change the code?
 

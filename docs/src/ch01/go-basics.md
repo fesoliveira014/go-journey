@@ -86,7 +86,7 @@ b := Book{
 b2 := Book{"978-0-13-468599-1", "The Go Programming Language", "Donovan & Kernighan", "Technology", 2015}
 ```
 
-**Embedding instead of inheritance.** Go has no `extends`. Composition is achieved by embedding one struct inside another:
+**Embedding instead of inheritance.** Go has no `extends`. Go achieves composition by embedding one struct inside another:
 
 ```go
 type Timestamps struct {
@@ -121,7 +121,7 @@ This is not inheritance. The embedded type has no knowledge of the outer type. T
 
 ### Interfaces
 
-In Java/Kotlin you write `implements Serializable`. In C++ you inherit from a pure-virtual base class. In Go, interface satisfaction is **implicit**: if your type has the methods, it satisfies the interface — no declaration required.
+In Java/Kotlin, you write `implements Serializable`. In C++ you inherit from a pure-virtual base class. In Go, interface satisfaction is **implicit**: if your type has the methods, it satisfies the interface — no declaration required.
 
 ```go
 // Standard library interface — defined in package fmt
@@ -191,7 +191,7 @@ books = []Book{b1, b2, b3}
 books = append(books, Book{Title: "Clean Code"})
 ```
 
-A nil slice and an empty slice behave the same for `len`, `append`, and `range` — but they are not equal under `reflect.DeepEqual`. The convention is to return a nil slice for "no results" rather than an empty one, and let callers use `len(result) == 0` to check emptiness.
+A nil slice and an empty slice behave the same for `len`, `append`, and `range` — but they are not equal under `reflect.DeepEqual`. The convention is to return a nil slice for "no results" rather than an empty one, and to let callers use `len(result) == 0` to check emptiness.
 
 **Iteration** always uses `range`:
 
@@ -241,6 +241,39 @@ Map iteration order is deliberately randomized on each run — do not rely on it
 
 ---
 
+### Pointers
+
+You know pointers from C. Go pointers are simpler — same concept, no arithmetic, and the runtime enforces nil safety automatically.
+
+```go
+b := Book{Title: "TGPL"}
+p := &b           // *Book — pointer to b
+p.Title = "The Go Programming Language" // implicit dereference, same as (*p).Title
+```
+
+`new(T)` allocates a zero-value T and returns a `*T`. Most Go code uses `&T{...}` instead.
+
+**When to use a pointer receiver vs. a value receiver:**
+
+- Use a **pointer receiver** when the method mutates the struct, or when the struct is large enough that copying is expensive.
+- Use a **value receiver** when the method only reads, the struct is small, and value semantics make intent clear.
+
+```go
+// pointer receiver — mutates state
+func (b *Book) SetYear(y int) {
+    b.Year = y
+}
+
+// value receiver — read-only, small struct
+func (b Book) String() string {
+    return b.Title
+}
+```
+
+Pick one consistently per type. Mixing pointer and value receivers on the same type is allowed but confusing — you will lose track of which interfaces the type satisfies.
+
+---
+
 ### Error Handling
 
 Go has no exceptions. Errors are values — functions return them as an additional return value, and callers check them explicitly.
@@ -284,48 +317,15 @@ if errors.Is(err, ErrNotFound) {
 }
 ```
 
-Contrast with Java: no try/catch, no checked exceptions, no `throws` declarations. The caller always knows a function can fail because the signature says so. The downside is that error handling is verbose — you will write `if err != nil` hundreds of times. The upside is that the control flow is always explicit and local. There are no surprise exceptions propagating through six stack frames.
+Contrast with Java: No try/catch, no checked exceptions, no `throws` declarations. The caller always knows a function can fail because the signature says so. The downside is that error handling is verbose — you will write `if err != nil` hundreds of times. The upside is that the control flow is always explicit and local. There are no surprise exceptions propagating through six stack frames.
 
-Contrast with C: returning an `int` error code loses the message and the chain. Go's `error` interface carries both the message and the wrapped cause, so you get readable stack-like context without stack-unwinding overhead.
+Contrast with C: Returning an `int` error code loses the message and the chain. Go's `error` interface carries both the message and the wrapped cause, so you get readable stack-like context without stack-unwinding overhead.
 
 One firm convention: **never ignore errors**. The blank identifier `_` can discard a return value, but silently discarding errors is considered a serious bug in Go code review.
 
 ```go
 _ = repo.Save(ctx, book) // do not do this
 ```
-
----
-
-### Pointers
-
-You know pointers from C. Go pointers are simpler — same concept, no arithmetic, and the runtime enforces nil safety automatically.
-
-```go
-b := Book{Title: "TGPL"}
-p := &b           // *Book — pointer to b
-p.Title = "The Go Programming Language" // implicit dereference, same as (*p).Title
-```
-
-`new(T)` allocates a zero-value T and returns a `*T`. Most Go code uses `&T{...}` instead.
-
-**When to use a pointer receiver vs. a value receiver:**
-
-- Use a **pointer receiver** when the method mutates the struct, or when the struct is large enough that copying is expensive.
-- Use a **value receiver** when the method only reads, the struct is small, and value semantics make intent clear.
-
-```go
-// pointer receiver — mutates state
-func (b *Book) SetYear(y int) {
-    b.Year = y
-}
-
-// value receiver — read-only, small struct
-func (b Book) String() string {
-    return b.Title
-}
-```
-
-Pick one consistently per type. Mixing pointer and value receivers on the same type is allowed but confusing — you will lose track of which interfaces the type satisfies.
 
 ---
 

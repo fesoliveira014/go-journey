@@ -6,7 +6,7 @@ Every push to `main` in this project builds five Docker images and pushes them t
 
 ## Image Tagging Strategy
 
-A Docker image tag is just a name pointing to an image digest. Tags are mutable — you can move them at any time. This creates a fundamental tension: human-readable convenience versus deployment safety.
+A Docker image tag is just a name pointing to an image digest. Tags are mutable---you can move them at any time. This creates a fundamental tension: human-readable convenience versus deployment safety.
 
 This project pushes two tags per image on every `main` build.
 
@@ -18,7 +18,7 @@ ghcr.io/myorg/library/catalog:latest
 
 `latest` always points to the most recent build. It is what you get when you `docker pull` without specifying a tag. This is convenient during local development — `docker compose pull` fetches the newest image without needing to know a specific identifier.
 
-The problem is that `latest` is not reproducible. Pull on Monday, pull on Wednesday after a new push, and you are running different code under the same name. In production, a deployment controller with `imagePullPolicy: Always` may pull a different image than other replicas when a pod restarts — a support and debugging nightmare.
+The problem is that `latest` is not reproducible. Pull on Monday, pull again on Wednesday after a new push, and you will be running different code under the same name. In production, a deployment controller with `imagePullPolicy: Always` may pull a different image than other replicas when a pod restarts — a support and debugging nightmare.
 
 Use `latest` for: local development, demo environments, quick pull-and-run.
 
@@ -36,7 +36,7 @@ The `sha-<commit>` tag is constructed from `sha-` plus the full 40-character Git
 2. Strip the `sha-` prefix to get the Git commit hash
 3. Run `git show <hash>` to see the exact code that built the image
 
-This is the tag to use in Kubernetes manifests committed to your GitOps repository. A code review on the manifest clearly shows which commit is being deployed. Rollback is `git revert` followed by applying the previous SHA tag.
+This is the tag to use in Kubernetes manifests committed to your GitOps repository. A code review on the manifest clearly shows which commit is being deployed. Rolling back is a `git revert` followed by applying the previous SHA tag.
 
 ### Semantic Versioning — Deferred
 
@@ -80,31 +80,7 @@ New packages created via GHCR default to private. To make images publicly pullab
 
 ## The `build-and-push` Job Walkthrough
 
-Here is the full job from `.github/workflows/main.yml`:
-
-```yaml
-  build-and-push:
-    needs: ci
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        service: [auth, catalog, gateway, reservation, search]
-    steps:
-      - uses: actions/checkout@v4
-      - uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: services/${{ matrix.service }}/Dockerfile
-          push: true
-          tags: |
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:sha-${{ github.sha }}
-            ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
-```
+The `build-and-push` job (shown in full in Section 10.3) runs on each merge to `main`. The key steps are summarized below; refer to the `main.yml` listing in the GitHub Actions section for the complete YAML.
 
 ### `needs: ci`
 
@@ -175,7 +151,7 @@ The `ci` job uses Earthly (`earthly +ci`) for lint and testing. The `build-and-p
 
 **OIDC integration** — GHA runners support OpenID Connect tokens for keyless signing with Sigstore/Cosign. `docker/build-push-action` fits naturally into this ecosystem.
 
-Earthly can push images with `earthly --push ./services/catalog+docker`, but it does not (as of early 2026) participate in GHA's built-in provenance and attestation pipeline. For production publishing, the Docker actions ecosystem is the standard and more feature-complete path.
+Earthly can push images with `earthly --push ./services/catalog+docker`, but it does not (as of early 2026) participate in GHA's built-in provenance and attestation pipeline. For production publishing, the Docker actions ecosystem is the more mature and feature-complete path.
 
 ### Why Earthly for Local Building
 

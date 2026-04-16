@@ -2,7 +2,7 @@
 
 Chapter 13 deployed the MSK cluster with `client_broker = "PLAINTEXT"` and opened port 9092 in the security group. The comment in the Terraform file acknowledged the gap: port 9094 and TLS were deferred to this chapter. This section closes that gap.
 
-The usual objection to encrypting intra-VPC traffic is that the VPC boundary already provides isolation — an attacker on the public internet cannot reach port 9092, so what is there to protect? The objection holds for the public internet, but the VPC boundary is not the only threat model. A compromised pod inside the cluster, a misconfigured VPC peering attachment, or a broad security group rule opened during debugging all create paths for lateral movement. Any process on the same VPC that can reach the MSK security group could read every Kafka message in transit if those messages are unencrypted. Enabling TLS closes that exposure with near-zero performance impact — modern server CPUs handle TLS at line rate using AES-NI hardware acceleration, and MSK brokers are no different[^1].
+The usual objection to encrypting intra-VPC traffic is that the VPC boundary already provides isolation — an attacker on the public internet cannot reach port 9092, so what is there to protect? The objection holds for the public internet, but the VPC boundary is not the only threat model. A compromised pod inside the cluster, a misconfigured VPC peering attachment, or a broad security group rule opened during debugging all create paths for lateral movement. Any process in the same VPC that can reach the MSK security group can read every Kafka message in transit if those messages are unencrypted. Enabling TLS closes that exposure with near-zero performance impact — modern server CPUs handle TLS at line rate using AES-NI hardware acceleration, and MSK brokers are no different[^1].
 
 The change is also required for compliance. SOC 2 Type II, PCI DSS, and most HIPAA interpretations require encryption in transit for all data. A finding that reads "Kafka traffic between EKS nodes and MSK is unencrypted" will fail an audit. Fixing it is a one-line Terraform change.
 
@@ -14,12 +14,12 @@ No application code changes are needed. The Go Kafka client libraries handle TLS
 
 ### `terraform/msk.tf` — Enabling the TLS Listener
 
-The `encryption_in_transit` block in `aws_msk_cluster.main` controls which listeners MSK activates. Update it from `PLAINTEXT` to `TLS`:
+The `encryption_in_transit` block in `aws_msk_cluster.library` controls which listeners MSK activates. Update it from `PLAINTEXT` to `TLS`:
 
 ```hcl
 # terraform/msk.tf
 
-resource "aws_msk_cluster" "main" {
+resource "aws_msk_cluster" "library" {
   cluster_name           = "${var.project_name}-kafka"
   kafka_version          = "3.6.0"
   number_of_broker_nodes = 2
@@ -38,8 +38,8 @@ resource "aws_msk_cluster" "main" {
   }
 
   configuration_info {
-    arn      = aws_msk_configuration.main.arn
-    revision = aws_msk_configuration.main.latest_revision
+    arn      = aws_msk_configuration.library.arn
+    revision = aws_msk_configuration.library.latest_revision
   }
 
   encryption_info {
@@ -59,7 +59,7 @@ The `client_broker` field accepts three values:
 | `TLS_PLAINTEXT` | Yes | Yes | Both listeners active — useful during migration |
 | `TLS` | No | Yes | TLS only — Chapter 14 target state |
 
-`TLS_PLAINTEXT` is the recommended setting during a migration on a cluster that is already serving traffic: it activates the TLS listener without disabling the plaintext one, so you can deploy the updated client configuration and verify it is working before removing the fallback. For a fresh deployment — which is our case — go straight to `TLS`. There are no existing consumers to migrate and no compatibility window to maintain.
+`TLS_PLAINTEXT` is the recommended setting during a migration on a cluster that is already serving traffic: it activates the TLS listener without disabling the plaintext one, so you can deploy the updated client configuration and verify it is working before removing the fallback. For a fresh deployment — which is the case here — go straight to `TLS`. There are no existing consumers to migrate and no compatibility window to maintain.
 
 `in_cluster = true` encrypts replication traffic between the two broker nodes. This setting is independent of `client_broker` and was already enabled implicitly in Chapter 13 (it is the default). It is set explicitly here for clarity[^2].
 
@@ -81,7 +81,7 @@ resource "aws_security_group_rule" "msk_ingress_tls" {
 }
 ```
 
-The `source_security_group_id` references the EKS managed node group security group, which is the same approach used by the `rds_ingress` rule for PostgreSQL. Only traffic originating from EKS worker nodes is permitted — no CIDR block, no `0.0.0.0/0`. This is the correct pattern for intra-VPC service-to-service access: whitelist the source security group, not a broad IP range.
+The `source_security_group_id` references the EKS managed node group security group, which is the same approach used by the `rds_ingress` rule for PostgreSQL. Only traffic originating from EKS worker nodes is permitted — no CIDR block, no `0.0.0.0/0`. This is the correct pattern for intra-VPC service-to-service access: allowlist the source security group, not a broad IP range.
 
 ### `terraform/outputs.tf` — Adding the TLS Bootstrap Output
 
@@ -90,7 +90,7 @@ MSK exposes two attributes for bootstrap broker strings: `bootstrap_brokers` for
 ```hcl
 output "msk_bootstrap_brokers_tls" {
   description = "MSK bootstrap broker string (TLS)"
-  value       = aws_msk_cluster.main.bootstrap_brokers_tls
+  value       = aws_msk_cluster.library.bootstrap_brokers_tls
 }
 ```
 
@@ -179,7 +179,7 @@ The base ConfigMaps under `deploy/k8s/base/library/` are not touched. They conti
 
 Here is the part that surprises engineers coming from other ecosystems: you probably do not need to change the application code, and you certainly do not need a custom CA bundle.
 
-MSK TLS certificates are issued by Amazon Trust Services, Amazon's public certificate authority. The root certificates for Amazon Trust Services are included in the system trust store on every major Linux distribution, including the base images used by the library services (scratch-based images built on top of Alpine or distroless)[^3]. Go's `crypto/tls` package uses the system trust store by default. When the Kafka client connects to port 9094, it performs a standard TLS handshake, verifies the broker's certificate against the system roots, and proceeds. No custom CA bundle, no `InsecureSkipVerify`, no manual certificate distribution.
+MSK TLS certificates are issued by Amazon Trust Services, Amazon's public certificate authority. The root certificates for Amazon Trust Services are included in the system trust store on every major Linux distribution, including the base images used by the library services (images built with multi-stage builds that copy the compiled binary into a scratch or distroless base)[^3]. Go's `crypto/tls` package uses the system trust store by default. When the Kafka client connects to port 9094, it performs a standard TLS handshake, verifies the broker's certificate against the system roots, and proceeds. No custom CA bundle, no `InsecureSkipVerify`, no manual certificate distribution.
 
 The only code change is enabling TLS in the client configuration. If the services use `sarama`:
 
@@ -225,7 +225,7 @@ COPY --from=builder /app/service /service
 ENTRYPOINT ["/service"]
 ```
 
-The library system's Dockerfiles already copy the CA bundle from Alpine, so this is handled. The point is worth understanding so that the error message — if you ever encounter it in a different project — does not send you down a rabbit hole of debugging TLS configuration when the actual fix is two Dockerfile lines.
+The library system's Dockerfiles already copy the CA bundle from Alpine, so this is handled. The point is worth understanding so that the error message — if you ever encounter it in a different project — does not send you down a rabbit hole of debugging TLS configuration when the fix is two Dockerfile lines.
 
 ---
 

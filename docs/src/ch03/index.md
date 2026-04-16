@@ -1,6 +1,6 @@
 # Chapter 3: Containerization
 
-In this chapter, we package the services built in Chapters 1 and 2 into Docker containers and orchestrate them with Docker Compose. By the end, you will have a single command that brings up PostgreSQL, the Catalog service, and the API Gateway—plus a development mode with hot-reload.
+In this chapter, we package the services from Chapters 1 and 2 into Docker containers and orchestrate them with Docker Compose. By the end, you will have a single command that brings up PostgreSQL, the Catalog service, and the API Gateway—plus a development mode with hot-reload.
 
 ## What You'll Learn
 
@@ -13,7 +13,7 @@ In this chapter, we package the services built in Chapters 1 and 2 into Docker c
 
 - Docker Desktop (or Docker Engine + Docker Compose plugin) installed and running
 - Chapters 1 and 2 completed—the Catalog and Gateway services must compile successfully
-- Basic terminal comfort (a given, since you've been building Go services)
+- Basic terminal proficiency
 
 ## What You'll Build
 
@@ -41,7 +41,7 @@ graph LR
     PG --- V["catalog-data<br/>(named volume)"]
 ```
 
-The Gateway listens on HTTP port 8080. The Catalog service exposes gRPC on port 50052 and connects to PostgreSQL over the bridge network. PostgreSQL data persists in a named Docker volume so it survives container restarts.
+The Gateway listens on HTTP port 8080. The Catalog service exposes gRPC on port 50052 and connects to PostgreSQL over the bridge network. PostgreSQL data persists in a named Docker volume, so it survives container restarts.
 
 All three containers share a single bridge network (`library-net`), which gives them DNS-based service discovery—the Catalog service connects to `postgres-catalog` by hostname, not by IP address.
 

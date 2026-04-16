@@ -4,7 +4,7 @@ Chapter 12 ended with every service running in a Kubernetes cluster on your lapt
 
 The answer is cloud infrastructure — virtual machines for nodes, a managed control plane, a VPC with subnets and routing tables, a container registry, a managed database, a managed Kafka cluster, IAM roles for service accounts. Assembling all of that by clicking through the AWS console works once, but it does not scale and it does not survive a new team member, a disaster recovery drill, or a cost-cutting experiment in a second region. You need a way to describe infrastructure in files, version-control those files alongside your application code, and apply changes reproducibly.
 
-That is what IaC tools do. Terraform is the most widely adopted of them.
+That is what Infrastructure as Code (IaC) tools do. Terraform is the most widely adopted of them.
 
 ---
 
@@ -12,7 +12,7 @@ That is what IaC tools do. Terraform is the most widely adopted of them.
 
 Terraform is an open-source IaC tool created by HashiCorp. You write configuration in **HCL** (HashiCorp Configuration Language) — a declarative syntax designed to be readable by humans and parseable by machines — and Terraform figures out how to make the real world match what you described.
 
-The mental model is deliberately similar to Kubernetes. In Chapter 12 you wrote a Deployment manifest that said "I want three replicas of the catalog service." Kubernetes reconciled reality toward that desired state. In Terraform you write a resource block that says "I want a VPC with this CIDR block." Terraform computes a plan — the diff between what exists and what you described — and applies it. The difference is that Kubernetes manages workloads inside a cluster; Terraform manages the cloud primitives the cluster itself sits on.
+The mental model is deliberately similar to Kubernetes. In Chapter 12 you wrote a Deployment manifest that said "I want three replicas of the Catalog Service." Kubernetes reconciled reality toward that desired state. In Terraform you write a resource block that says "I want a VPC with this CIDR block." Terraform computes a plan — the diff between what exists and what you described — and applies it. The difference is that Kubernetes manages workloads inside a cluster; Terraform manages the cloud primitives the cluster itself sits on.
 
 Terraform is not tied to AWS. The same tool drives resources in GCP, Azure, Cloudflare, GitHub, Datadog, and hundreds of other providers. Everything in this chapter uses the AWS provider, but the concepts transfer directly.
 
@@ -35,11 +35,11 @@ terraform {
 }
 
 provider "aws" {
-  region = var.region
+  region = var.aws_region
 }
 ```
 
-The `terraform` block pins the provider version — a critical practice, because provider updates can introduce breaking changes. The `~> 5.0` constraint allows patch and minor releases within the 5.x series but blocks a jump to 6.x. The `provider` block supplies runtime configuration; `var.region` references a variable defined elsewhere (covered below).
+The `terraform` block pins the provider version — a critical practice, because provider updates can introduce breaking changes. The `~> 5.0` constraint allows patch and minor releases within the 5.x series but blocks a jump to 6.x. The `provider` block supplies runtime configuration; `var.aws_region` references a variable defined elsewhere (covered below).
 
 Terraform downloads providers when you run `terraform init`. They are stored in a `.terraform/` directory local to your project and should not be committed to source control.
 
@@ -151,7 +151,7 @@ State is also Terraform's most sensitive artifact. It contains every attribute o
 
 ## State management
 
-For learning purposes, local state is fine. Terraform writes `terraform.tfstate` to the project directory, and nothing else is required. The risk is real: if you lose the file, Terraform loses track of what it created and you must either import resources manually or destroy and recreate them.
+For learning purposes, local state is fine. Terraform writes `terraform.tfstate` to the project directory, and nothing else is required. The risk is real: if you lose the file, Terraform loses track of what it created, and you must either import resources manually or destroy and recreate them.
 
 For any shared or long-lived environment, **remote state** is the standard. AWS's canonical setup uses an S3 bucket for storage and a DynamoDB table for locking — the lock prevents two operators from running `apply` simultaneously and producing conflicting state.
 
@@ -253,7 +253,7 @@ Do you really want to destroy all resources?
   Enter a value: yes
 ```
 
-The workflow mirrors what you know from `kubectl`: describe the desired state, preview the changes, apply them. The key difference is that `terraform apply` is not idempotent in the same sense as `kubectl apply` — some changes (resizing an RDS instance, modifying a security group rule) require brief downtime or trigger resource replacement. Always read the plan output before typing `yes`, and pay particular attention to any line marked `forces replacement`.
+The workflow mirrors what you know from `kubectl`: describe the desired state, preview the changes, apply them. The key difference is that `terraform apply` is not idempotent in the same sense as `kubectl apply` — some changes — resizing an RDS instance or modifying a security group rule — require brief downtime or trigger resource replacement. Always read the plan output before typing `yes`, and pay particular attention to any line marked `forces replacement`.
 
 ---
 

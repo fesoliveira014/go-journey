@@ -1,6 +1,6 @@
 # 7.3 Kafka Consumer
 
-Section 7.1 covered the theory of event-driven architecture. This section gets into the mechanical details: how the catalog service consumes reservation events from Kafka using the Sarama library's consumer group API.
+Section 7.1 covered the theory of event-driven architecture. This section gets into the mechanical details: how the Catalog Service consumes reservation events from Kafka using the Sarama library's consumer group API.
 
 If you have used Spring Kafka, consumer setup is a matter of annotating a method with `@KafkaListener` and letting the framework handle group management, deserialization, and offset commits. In Go with Sarama, you implement an interface and manage the consume loop explicitly. More code, but nothing is hidden.
 
@@ -47,7 +47,7 @@ type AvailabilityUpdater interface {
 }
 ```
 
-This is a **role interface**—it describes the one capability the consumer needs from the catalog service. The full `CatalogService` has many methods (Create, Update, Delete, List), but the consumer only calls `UpdateAvailability`. Defining a narrow interface means the consumer is decoupled from the rest of the catalog service. In tests, you mock one method, not twenty.
+This is a **role interface**—it describes the one capability the consumer needs from the Catalog Service. The full `CatalogService` has many methods (Create, Update, Delete, List), but the consumer only calls `UpdateAvailability`. Defining a narrow interface means the consumer is decoupled from the rest of the Catalog Service. In tests, you mock one method, not twenty.
 
 ---
 
@@ -86,7 +86,7 @@ The configuration, piece by piece:
 
 **`BalanceStrategyRoundRobin`** controls how partitions are distributed among consumers in the group during a rebalance. Round-robin assigns them evenly. Other strategies exist (`Range`, `Sticky`), but round-robin is the simplest and works well for most cases.
 
-**`OffsetOldest`** means that when the consumer group has no previously committed offset (first startup, or after offset expiry), it starts reading from the oldest available message. The alternative is `OffsetNewest`, which skips existing messages and reads only new ones. We use `OffsetOldest` so that if the catalog service was down while reservations were being made, it catches up on all missed events when it restarts.
+**`OffsetOldest`** means that when the consumer group has no previously committed offset (first startup, or after offset expiry), it starts reading from the oldest available message. The alternative is `OffsetNewest`, which skips existing messages and reads only new ones. We use `OffsetOldest` so that if the Catalog Service was down while reservations were being made, it catches up on all missed events when it restarts.
 
 **The `for` loop.** `group.Consume` blocks until the session ends (due to a rebalance or context cancellation). When it returns, we check if the context is done. If not, we loop back and rejoin—this handles rebalances gracefully. If the context is cancelled (application shutdown), we return.
 
@@ -127,7 +127,7 @@ Step by step:
 
 2. **Range over messages.** `claim.Messages()` is a Go channel. The `for range` loop reads messages until the channel closes (session end). This is a clean, idiomatic pattern—no polling, no sleep loops.
 
-3. **Extract trace context.** The producer injected OpenTelemetry headers into the Kafka message. We extract them here so the consumer's span is linked to the producer's trace. This gives you a single distributed trace from the HTTP request through the reservation service, through Kafka, into the catalog consumer.
+3. **Extract trace context.** The producer injected OpenTelemetry headers into the Kafka message. We extract them here so the consumer's span is linked to the producer's trace. This gives you a single distributed trace from the HTTP request through the Reservation Service, through Kafka, into the catalog consumer.
 
 4. **Handle the event.** `handleEvent` deserializes and processes the message. If it fails, we log and continue—we do not retry, and we do not mark the message.
 
@@ -194,7 +194,7 @@ The routing logic is a switch:
 - `reservation.returned` or `reservation.expired` -> increment availability (delta = +1)
 - Unknown event types -> log a warning and return nil (no error)
 
-Returning `nil` for unknown events is important. If the reservation service starts publishing a new event type (say, `reservation.extended`), the catalog consumer should not crash—it should ignore events it does not understand. This is the **tolerant reader** pattern: be liberal in what you accept.
+Returning `nil` for unknown events is important. If the Reservation Service starts publishing a new event type (say, `reservation.extended`), the catalog consumer should not crash—it should ignore events it does not understand. This is the **tolerant reader** pattern: be liberal in what you accept.
 
 ---
 
@@ -269,7 +269,7 @@ On the producer side, the equivalent adapter wraps a `*sarama.ProducerMessage` (
 
 ## Running the Consumer
 
-In the catalog service's `main.go`, the consumer runs as a background goroutine alongside the gRPC server. The typical pattern is:
+In the Catalog Service's `main.go`, the consumer runs as a background goroutine alongside the gRPC server. The typical pattern is:
 
 ```go
 go func() {

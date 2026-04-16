@@ -1,6 +1,6 @@
 # Chapter 2: First Microservice — Catalog Service
 
-In this chapter, we build the first standalone microservice: the **Catalog service**. It manages the book registry with full CRUD operations, exposes a gRPC API, stores data in PostgreSQL via GORM, and manages schema with versioned SQL migrations.
+In this chapter, we build the first standalone microservice: the **Catalog service**. It manages the book registry with full CRUD operations and exposes a gRPC API. Data is stored in PostgreSQL via GORM, and the schema is managed with versioned SQL migrations.
 
 ## What You'll Learn
 

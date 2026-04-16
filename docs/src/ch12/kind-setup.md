@@ -6,7 +6,7 @@ Before writing a single Kubernetes manifest, you need somewhere to run it. Cloud
 
 ## What kind Is
 
-kind stands for **Kubernetes IN Docker**. Each Kubernetes node — control plane or worker — is a Docker container running `containerd` and `kubelet`. The cluster looks and behaves like a real Kubernetes cluster from the outside: you interact with it through `kubectl`, pods schedule and run normally, Services and Ingresses work. But it takes seconds to create and seconds to destroy.
+kind stands for **Kubernetes IN Docker**. Each Kubernetes node—control plane or worker—is a Docker container running `containerd` and `kubelet`. The cluster looks and behaves like a real Kubernetes cluster from the outside: you interact with it through `kubectl`, pods schedule and run normally, Services and Ingresses work. But it takes seconds to create and seconds to destroy.
 
 This makes kind the right tool for:
 
@@ -14,7 +14,7 @@ This makes kind the right tool for:
 - Running cluster-level integration tests in CI (the Earthfile targets from Chapter 10 use this)
 - Experimenting with cluster configuration without touching a shared environment
 
-kind is not a production tool. It does not support multi-node networking across machines, persistent volumes backed by real storage, or cloud provider integrations. Use it where you use unit and integration tests — as a fast feedback loop.
+kind is not designed for production use. It does not support multi-node networking across machines, persistent volumes backed by real storage, or cloud provider integrations. Use it where you use unit and integration tests — as a fast feedback loop.
 
 ---
 
@@ -153,22 +153,22 @@ kubectl -n ingress-nginx describe pod -l app.kubernetes.io/component=controller
 
 This trips up almost everyone the first time. kind nodes are Docker containers, not VMs — they run `containerd` internally and do not share the Docker daemon on your host. When you build an image with `docker build` or `earthly +docker`, that image lives in your host Docker daemon's image store. The kind node cannot see it.
 
-If you try to deploy a pod referencing an image that only exists on the host, Kubernetes will attempt to pull it from a registry and fail (or use a cached version that is out of date). The symptom is pods stuck in `ImagePullBackOff`.
+If you deploy a pod referencing an image that exists only on the host, Kubernetes attempts to pull it from a registry and fails (or uses a stale cached version). The symptom is pods stuck in `ImagePullBackOff`.
 
 The fix is `kind load`:
 
 ```bash
-kind load docker-image library-system/catalog:latest --name library
+kind load docker-image library/catalog:latest --name library
 ```
 
-This copies the image from your host Docker daemon into the containerd store inside the kind node. After this command, any pod in the cluster can use `library-system/catalog:latest` without a registry pull.
+This copies the image from your host Docker daemon into the containerd store inside the kind node. After this command, any pod in the cluster can use `library/catalog:latest` without a registry pull.
 
 You must also set `imagePullPolicy: Never` (or `IfNotPresent`) in your pod spec, otherwise Kubernetes will try to pull from a registry anyway:
 
 ```yaml
 containers:
   - name: catalog
-    image: library-system/catalog:latest
+    image: library/catalog:latest
     imagePullPolicy: Never
 ```
 
@@ -185,11 +185,11 @@ In Chapter 10 you built container images with `earthly +docker`. That target pro
 earthly +docker
 
 # 2. Load each into the kind cluster
-kind load docker-image library-system/auth:latest      --name library
-kind load docker-image library-system/catalog:latest   --name library
-kind load docker-image library-system/reservation:latest --name library
-kind load docker-image library-system/search:latest     --name library
-kind load docker-image library-system/gateway:latest   --name library
+kind load docker-image library/auth:latest      --name library
+kind load docker-image library/catalog:latest   --name library
+kind load docker-image library/reservation:latest --name library
+kind load docker-image library/search:latest     --name library
+kind load docker-image library/gateway:latest   --name library
 
 # 3. Apply manifests (covered in upcoming sections)
 kubectl apply -f k8s/

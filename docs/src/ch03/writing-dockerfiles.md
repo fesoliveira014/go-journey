@@ -1,6 +1,6 @@
 # 3.2 Writing Dockerfiles
 
-Now that you understand how layers, caching, and multi-stage builds work, let's walk through the Dockerfiles in this project. We have two services to containerize: the Catalog service (which depends on generated protobuf code in `gen/`) and the Gateway (which imports a smaller subset of shared modules). Each presents different challenges.
+Now that you understand how layers, caching, and multi-stage builds work, we can walk through the Dockerfiles in this project. We have two services to containerize: the Catalog service (which depends on generated protobuf code in `gen/`) and the Gateway (which imports a smaller subset of shared modules). Each presents different build-context challenges.
 
 ---
 
@@ -10,7 +10,7 @@ Here is `services/catalog/Dockerfile` in its entirety:
 
 ```dockerfile
 # Stage 1: Build
-FROM golang:1.26-alpine AS builder
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
 
 # Disable workspace mode — we only copy this service and gen/, not all
@@ -52,12 +52,12 @@ Walk through it top to bottom.
 ### Base Image and Workspace
 
 ```dockerfile
-FROM golang:1.26-alpine AS builder
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
 ENV GOWORK=off
 ```
 
-We start from `golang:1.26-alpine`, the official Go image based on Alpine Linux. Alpine is a minimal Linux distribution (~5 MB)—using it as a base instead of the full Debian-based `golang:1.26` saves about 400 MB in the builder stage.
+We start from `golang:1.22-alpine`, the official Go image based on Alpine Linux. Alpine is a minimal Linux distribution (~5 MB)—using it as a base instead of the full Debian-based `golang:1.22` saves about 400 MB in the builder stage.
 
 `GOWORK=off` is the most important line in this Dockerfile, and it requires context.
 
@@ -71,7 +71,7 @@ But wait—if workspace mode is off and the module isn't published, how does the
 replace github.com/fesoliveira014/library-system/gen => ../../gen
 ```
 
-This `replace` directive tells Go: "When you encounter an import of `github.com/fesoliveira014/library-system/gen`, don't fetch it from GitHub—use the local directory `../../gen` instead." Since we copy `gen/` into `/app/gen/` and the catalog service lives at `/app/services/catalog/`, the relative path `../../gen` resolves correctly to `/app/gen`.
+This `replace` directive tells Go: "When you encounter an import of `github.com/fesoliveira014/library-system/gen`, don't fetch it from GitHub—use the local directory `../../gen` instead." Since we copy `gen/` into `/app/gen/` and the Catalog Service lives at `/app/services/catalog/`, the relative path `../../gen` resolves correctly to `/app/gen`.
 
 ### Two-Phase COPY for Cache Efficiency
 
@@ -100,7 +100,7 @@ WORKDIR /app/services/catalog
 RUN CGO_ENABLED=0 go build -o /bin/catalog ./cmd/
 ```
 
-Now we copy the full source. `gen/` contains the protobuf-generated Go code that the Catalog service imports. The build produces a static binary at `/bin/catalog`.
+Now we copy the full source. `gen/` contains the protobuf-generated Go code that the Catalog service imports. The build produces a static binary at `/bin/catalog`. (`pkg/auth/` and `pkg/otel/` `COPY` lines are omitted here for brevity—see the full Dockerfile above.)
 
 ### Runtime Stage
 
@@ -113,7 +113,7 @@ EXPOSE 50052
 ENTRYPOINT ["/usr/local/bin/catalog"]
 ```
 
-The runtime stage starts fresh from `alpine:3.19`. `addgroup` and `adduser` create a non-root system user (`-S` means system: no password, no home directory). `USER app` switches all subsequent commands and the container's runtime process to this user. Only the compiled binary is copied in. `EXPOSE 50052` documents the gRPC port—it does not publish the port; that happens at runtime with `-p` or in Compose. `ENTRYPOINT` sets the default command.
+The runtime stage starts fresh from `alpine:3.19`. `addgroup` and `adduser` create a non-root system user (`-S` means system: no password, no login shell). `USER app` switches all subsequent commands and the container's runtime process to this user. Only the compiled binary is copied in. `EXPOSE 50052` documents the gRPC port—it does not publish the port; that happens at runtime with `-p` or in Compose. `ENTRYPOINT` sets the default command.
 
 Running as non-root is a basic container-security practice. If the process is compromised, the attacker is confined to an unprivileged user instead of having root access inside the container.
 
@@ -146,7 +146,7 @@ catalog:
     dockerfile: services/catalog/Dockerfile
 ```
 
-This pattern is common in monorepos. The trade-off is that the entire repository is the build context, which means Docker sends everything to the daemon. This is where `.dockerignore` becomes essential.
+This pattern is standard in monorepo Docker builds. The trade-off is that the entire repository is the build context, which means Docker sends everything to the daemon. This is where `.dockerignore` becomes essential.
 
 ---
 
@@ -185,7 +185,7 @@ Here is `services/gateway/Dockerfile`:
 
 ```dockerfile
 # Stage 1: Build
-FROM golang:1.26-alpine AS builder
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
 
 ENV GOWORK=off
@@ -285,7 +285,7 @@ The Catalog service is harder to run standalone because it needs PostgreSQL. Tha
 <details>
 <summary>Solution</summary>
 
-The image sizes should be approximately 15–25 MB each, depending on the binary size. Compare this to the `golang:1.26-alpine` base image (~300 MB)—the multi-stage build cut the image size by over 90%.
+The image sizes should be approximately 15–25 MB each, depending on the binary size. Compare this to the `golang:1.22-alpine` base image (~300 MB)—the multi-stage build cut the image size by over 90%.
 
 ```bash
 $ docker images | grep -E 'catalog|gateway'

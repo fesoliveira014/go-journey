@@ -64,7 +64,7 @@ GORM ships a feature called `AutoMigrate` that creates or alters tables to match
 
 ### What golang-migrate gives you
 
-`golang-migrate`[^1] solves this with a simple model: every schema change is a pair of SQL files — an `up` migration that applies the change and a `down` migration that reverses it. Files are numbered sequentially. The tool tracks which migrations have been applied in a `schema_migrations` table it manages itself.
+`golang-migrate`[^1] solves this with a simple model: Every schema change is a pair of SQL files — an `up` migration that applies the change and a `down` migration that reverses it. Files are numbered sequentially. The tool tracks which migrations have been applied in a `schema_migrations` table it manages itself.
 
 The result:
 - Every environment can replay the full migration history from scratch
@@ -134,7 +134,7 @@ The two `CONSTRAINT` lines enforce business rules at the database level:
 - `available_lte_total` — available copies can never exceed total copies
 - `copies_non_negative` — neither count can go negative
 
-Naming constraints (rather than letting PostgreSQL auto-generate a name) is important. When a constraint is violated, the error message includes its name, which makes debugging from logs much faster. With an auto-generated name you'd see `books_available_copies_total_copies_check` or similar — with a named constraint you see `available_lte_total`, which is self-documenting.
+Naming constraints is important. When a constraint is violated, the error message includes its name, which makes debugging from logs much faster. With an auto-generated name you'd see `books_available_copies_total_copies_check` or similar — with a named constraint you see `available_lte_total`, which is self-documenting.
 
 **Indexes**
 
@@ -179,6 +179,8 @@ Why embed rather than ship external files?
 - **Simpler CI/CD**: one binary to test, one binary to ship, one binary to run.
 
 The trade-off is that you can't add or modify migrations without recompiling. For database migrations, that's not a trade-off — migrations should be immutable once deployed and always version-controlled with the code that depends on them.
+
+The next section shows how `runMigrations()` consumes this embedded filesystem.
 
 ---
 
@@ -240,7 +242,7 @@ Write a second migration that adds a `language` column to the `books` table.
 - File: `services/catalog/migrations/000002_add_language_column.up.sql`
 - Column: `language VARCHAR(50)` with a default of `'English'`
 - Write the corresponding down migration: `000002_add_language_column.down.sql`
-- Restart the catalog service (or run `psql` commands manually) and verify that:
+- Restart the Catalog Service (or run `psql` commands manually) and verify that:
   - After running the up migration, `\d books` shows the new `language` column
   - After running the down migration, the column is gone
 
@@ -280,7 +282,7 @@ psql -h localhost -U postgres -d catalog
 # language column should be absent
 ```
 
-If you're running the catalog service locally, stop it, apply the migration, and restart. The `runMigrations()` call at startup will pick up `000002` since it's higher than the last applied version recorded in `schema_migrations`.
+If you're running the Catalog Service locally, stop it, apply the migration, and restart. The `runMigrations()` call at startup will pick up `000002` since it's higher than the last applied version recorded in `schema_migrations`.
 
 </details>
 

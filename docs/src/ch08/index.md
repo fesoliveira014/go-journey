@@ -1,6 +1,6 @@
 # Chapter 8: Full-Text Search — Meilisearch & Event-Driven Indexing
 
-In this chapter we add full-text search to the library system. The Catalog service publishes `catalog.books.changed` events to Kafka whenever books are created, updated, or deleted. A new Search service consumes those events, maintains a Meilisearch index, and exposes Search and Suggest gRPC RPCs. The Gateway gets a search page with HTMX-powered autocomplete.
+In this chapter we add full-text search to the library system. The Catalog service publishes `catalog.books.changed` events to Kafka whenever books are created, updated, or deleted. A new Search service consumes those events, maintains a Meilisearch index, and exposes Search and Suggest gRPC RPCs. The gateway gets a search page with HTMX-powered autocomplete.
 
 ## What You'll Learn
 

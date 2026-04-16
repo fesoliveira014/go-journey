@@ -1,6 +1,6 @@
 # 12.2 Preparing Services for Kubernetes
 
-Before writing a single manifest, two code-level concerns need addressing: graceful shutdown and health checks. Docker Compose was forgiving about both: containers could exit abruptly without consequence, and Compose had no built-in mechanism to check whether a service was ready to handle traffic. Kubernetes is not forgiving. It manages pod termination with a structured lifecycle, routes traffic based on probe results, and will kill a pod that fails to terminate cleanly within a configurable window. Getting both right before touching YAML saves a lot of confusing debugging later.
+Before writing a single manifest, two code-level concerns need addressing: graceful shutdown and health checks. Docker Compose was forgiving about both—containers could exit abruptly without consequence, and Compose had no built-in mechanism to check whether a service was ready to handle traffic. Kubernetes is not forgiving. It manages pod termination with a structured lifecycle, routes traffic based on probe results, and will kill a pod that fails to terminate cleanly within a configurable window. Getting both right before touching YAML saves a lot of confusing debugging later.
 
 ---
 
@@ -29,7 +29,7 @@ sequenceDiagram
     end
 ```
 
-Two things are important here. First, Kubernetes issues endpoint removal and `SIGTERM` concurrently; a race exists between traffic stopping and your process receiving the signal. A `preStop` sleep hook (e.g., `sleep 5`) is the conventional workaround: it gives the load balancer time to drain in-flight connections before shutdown begins. Second, you have up to 30 seconds (by default) between `SIGTERM` and `SIGKILL`. Any work that exceeds that window is forcibly interrupted.
+Two things are important here. First, Kubernetes issues endpoint removal and `SIGTERM` concurrently; a race exists between traffic draining and your process receiving the signal. A `preStop` sleep hook (e.g., `sleep 5`) is the conventional workaround: it gives the load balancer time to drain in-flight connections before shutdown begins. Second, you have up to 30 seconds (by default) between `SIGTERM` and `SIGKILL`. Any work that exceeds that window is forcibly interrupted.
 
 ### Why It Matters
 
@@ -218,7 +218,7 @@ The gateway uses `net/http` rather than gRPC. The standard library's `http.Serve
 +}
 ```
 
-`server.ListenAndServe` (and the package-level `http.ListenAndServe`) returns `http.ErrServerClosed` when `Shutdown` is called — that is the normal exit path, not an error. The `err != http.ErrServerClosed` guard prevents a spurious error log on clean shutdown. The variable is named `sigCtx` to avoid shadowing the existing `ctx` declared at the top of `main` for OTel initialisation.
+`server.ListenAndServe` (and the package-level `http.ListenAndServe`) returns `http.ErrServerClosed` when `Shutdown` is called — that is the normal exit path, not an error. The `err != http.ErrServerClosed` guard prevents a spurious error log on clean shutdown. The variable is named `sigCtx` to avoid shadowing the existing `ctx` declared at the top of `main` for OTel initialization.
 
 ---
 
@@ -226,7 +226,7 @@ The gateway uses `net/http` rather than gRPC. The standard library's `http.Serve
 
 ### The gRPC Health Checking Protocol
 
-Kubernetes knows how to send HTTP requests and run shell commands as probes. Since Kubernetes 1.24, it also has native support for gRPC probes: you specify a port and the kubelet calls the standard `grpc.health.v1.Health/Check` RPC and expects a `SERVING` response[^3]. No sidecar, no shell script, no curl dependency in the image.
+Kubernetes knows how to send HTTP requests and run shell commands as probes. Since Kubernetes 1.24 (GA in 1.27), it also supports gRPC probes natively: you specify a port and the kubelet calls the standard `grpc.health.v1.Health/Check` RPC and expects a `SERVING` response[^3]. No sidecar, no shell script, no curl dependency in the image.
 
 The protocol[^2] defines a single RPC:
 

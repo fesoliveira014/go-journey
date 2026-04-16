@@ -14,9 +14,9 @@ When a browser navigates to `library.example.com`, it asks a DNS resolver (typic
 
 There are three record types relevant here.
 
-**A records** map a hostname directly to one or more IPv4 addresses. They are the simplest and most common record type. The problem with using a plain A record for an ALB is that the ALB's IP addresses are not static — AWS changes them as the load balancer scales or fails over across Availability Zones. Hardcoding an IP in an A record and hoping it never changes is not a strategy you want to rely on.
+**A records** map a hostname directly to one or more IPv4 addresses. They are the simplest and most common record type. The problem with using a plain A record for an ALB is that the ALB's IP addresses are not static — AWS changes them as the load balancer scales or fails over across Availability Zones. Hardcoding an IP in an A record and hoping it never changes is not a viable strategy.
 
-**CNAME records** map one hostname to another hostname, and the resolver follows the chain until it reaches an A record. You could in theory create a CNAME pointing `library.example.com` to the ALB's generated hostname. However, CNAMEs cannot be placed at the **zone apex** — the root of the domain itself (e.g., `example.com` without a subdomain). This is a constraint in the DNS protocol: a zone apex must always contain SOA and NS records, and a CNAME at the apex would be invalid. If your application lives at the root of a domain rather than a subdomain, CNAMEs do not work.
+**CNAME records** map one hostname to another hostname, and the resolver follows the chain until it reaches an A record. You could, in theory, create a CNAME pointing `library.example.com` to the ALB's generated hostname. However, CNAMEs cannot be placed at the **zone apex** — the root of the domain itself (e.g., `example.com` without a subdomain). This is a constraint in the DNS protocol: a zone apex must always contain SOA and NS records, and a CNAME at the apex would be invalid. If your application lives at the root of a domain rather than a subdomain, CNAMEs do not work.
 
 **AWS alias records** are Route 53's solution to both problems.[^1] An alias record behaves like a CNAME in that it points to another DNS name, but Route 53 resolves it internally and returns the target's current A records — the actual IP addresses of the ALB at query time. Because Route 53 resolves the alias within AWS, there is no extra DNS hop from the client's perspective. Alias records are free (Route 53 does not charge per query for alias records pointing to AWS resources), they work at the zone apex, and they support health evaluation: Route 53 can automatically stop returning the record if the target resource is unhealthy.
 
@@ -199,7 +199,7 @@ First, you can follow this section conceptually without applying the Terraform. 
 
 Second, services like **FreeDNS** (freedns.afraid.org) offer free subdomains under community-owned domains. You can register `library.yourname.mooo.com` and point it at your ALB. The catch is that FreeDNS is not Route 53, so you would use their web interface to create the CNAME record rather than the Terraform code in this section. ACM validation — covered in the next section — requires that you have DNS control, which FreeDNS does provide (you can add TXT records for validation), but the process is manual rather than automated through Terraform.
 
-The cleanest path is to register a domain. `.com` domains cost around $12/year through Route 53 itself, and the registration can be done entirely in the AWS console or via the `aws_route53domains_registered_domain` Terraform resource.[^4] The domain pays for itself in the time you save debugging certificate validation issues.
+The cleanest path is to register a domain. `.com` domains cost around $13/year through Route 53 itself, and the registration can be done entirely in the AWS console or via the `aws_route53domains_registered_domain` Terraform resource.[^4] The domain pays for itself in the time you save debugging certificate validation issues.
 
 ---
 

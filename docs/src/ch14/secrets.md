@@ -12,7 +12,7 @@ secretGenerator:
       - POSTGRES_PASSWORD=REPLACE_WITH_RDS_PASSWORD
 ```
 
-That comment describes a manual process: you run an AWS CLI command to retrieve the password, copy the output, paste it into the kustomization file or a shell command, run `kubectl apply`, and then delete the plaintext value from your terminal. It works once. It does not work well at any scale, and it introduces several problems that compound over time.
+That comment describes a manual process: you run an AWS CLI command to retrieve the password, copy the output, paste it into the kustomization file or a shell command, run `kubectl apply`, and then delete the plaintext value from your terminal. It works once. It does not scale, and it introduces several problems that compound over time.
 
 ---
 
@@ -22,7 +22,7 @@ That comment describes a manual process: you run an AWS CLI command to retrieve 
 
 **Rotation without downtime.** AWS Secrets Manager can rotate the RDS master password on a schedule — roughly every 30 days is a common policy. When it does, the old password stops working immediately. If your Kubernetes Secret still holds the old value, every pod that restarts or that reads the credential at connection-establishment time will fail with an authentication error. Manual rotation means someone has to notice the failure, retrieve the new password, update the Secret, and trigger a rolling restart — all while the application is broken.
 
-**Error-prone during re-deployments.** Placeholder values are sticky. If you run `kustomize build overlays/production | kubectl apply -f -` after pulling the latest git state on a fresh machine, the Secrets you created manually are already in the cluster — so nothing breaks immediately. But the day you run `terraform destroy` and `terraform apply` to rebuild the cluster for a new region or disaster recovery, you have to reconstruct every Secret by hand. The list of secrets grows over time, documentation for the process drifts, and at least one value is wrong.
+**Error-prone during re-deployments.** Placeholder values are sticky. If you run `kustomize build overlays/production | kubectl apply -f -` after pulling the latest git state on a fresh machine, the Secrets you created manually are already in the cluster — so nothing breaks immediately. But the day you run `terraform destroy` and `terraform apply` to rebuild the cluster for a new region or disaster recovery, you must reconstruct every Secret by hand. The list of secrets grows over time, documentation for the process drifts, and at least one value is wrong.
 
 **The principle of least manual intervention.** Infrastructure as code exists to make system state reproducible without human memory. A manual secret-pasting step is a gap in that reproducibility — a step that is not captured in any file that `git blame` can show you, not gated by any code review, and not executable by your CI pipeline without introducing its own secret-management problem.
 
@@ -75,7 +75,7 @@ Create `terraform/eso.tf`:
 # manually created JWT and Meilisearch secrets.
 module "eso_irsa" {
   source  = "terraform-aws-modules/iam/aws//modules/iam-role-for-service-accounts-eks"
-  version = "~> 5.34"
+  version = "~> 5.39"
 
   role_name = "${var.project_name}-external-secrets"
 
@@ -128,7 +128,7 @@ resource "helm_release" "external_secrets" {
 }
 ```
 
-The `namespace_service_accounts = ["external-secrets:external-secrets"]` entry is the binding between the Kubernetes identity and the IAM role. The trust policy it generates says: only tokens issued to the service account named `external-secrets` in the `external-secrets` namespace on this specific OIDC provider may call `AssumeRoleWithWebIdentity` for this role. A token issued to any other pod — even one in the same cluster — is denied.
+The `namespace_service_accounts = ["external-secrets:external-secrets"]` entry is the binding between the Kubernetes identity and the IAM role. The trust policy it generates says, in effect: only tokens issued to the service account named `external-secrets` in the `external-secrets` namespace on this specific OIDC provider may call `AssumeRoleWithWebIdentity` for this role. A token issued to any other pod — even one in the same cluster — is denied.
 
 Apply this before moving to the Kubernetes manifests:
 
@@ -343,7 +343,7 @@ spec:
         property: key
 ```
 
-Note that the Meilisearch ExternalSecret targets the `data` namespace — not `library` — because the Meilisearch StatefulSet runs in the `data` namespace. This also requires a SecretStore in the `data` namespace; see `secret-store.yaml` for the second SecretStore definition.
+Note that the Meilisearch ExternalSecret targets the `data` namespace — not `library` — because the Meilisearch StatefulSet runs in the `data` namespace. This also requires a SecretStore in the `data` namespace; create an identical SecretStore in the `data` namespace, changing only the `metadata.namespace` field.
 
 Each `ExternalSecret` maps a single field from a Secrets Manager secret to a single key in a Kubernetes Secret. The `target.name` matches exactly the name used in the StatefulSet or Deployment's `secretKeyRef.name` — `postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `jwt-secret`, and `meilisearch-secret`. No application manifest changes are required.
 
@@ -414,10 +414,14 @@ $ kubectl get externalsecrets -n library
 
 NAME                       STORE                 REFRESH INTERVAL   STATUS         READY
 jwt-secret                 aws-secrets-manager   1h                 SecretSynced   True
-meilisearch-secret         aws-secrets-manager   1h                 SecretSynced   True
 postgres-auth-secret       aws-secrets-manager   1h                 SecretSynced   True
 postgres-catalog-secret    aws-secrets-manager   1h                 SecretSynced   True
 postgres-reservation-secret aws-secrets-manager  1h                 SecretSynced   True
+
+$ kubectl get externalsecrets -n data
+
+NAME                       STORE                 REFRESH INTERVAL   STATUS         READY
+meilisearch-secret         aws-secrets-manager   1h                 SecretSynced   True
 ```
 
 The `STATUS` column shows `SecretSynced` and `READY` is `True` for each resource when ESO has successfully fetched the value from Secrets Manager and written it to the cluster. If any row shows `SecretSyncedError`, inspect the status condition for detail:

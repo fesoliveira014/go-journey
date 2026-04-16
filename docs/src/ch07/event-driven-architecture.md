@@ -1,8 +1,8 @@
 # 7.1 Event-Driven Architecture
 
-So far, our services communicate synchronously: the gateway calls the catalog service over gRPC, waits for a response, and renders the result. This works well for queries—the user asks for a book list and expects an immediate answer. But what happens when a user reserves a book? The reservation service needs to decrement the catalog's `available_copies` count. Should it call the catalog service directly and wait?
+So far, our services communicate synchronously: the gateway calls the Catalog Service over gRPC, waits for a response, and renders the result. This works well for queries—the user asks for a book list and expects an immediate answer. But what happens when a user reserves a book? The Reservation Service needs to decrement the catalog's `available_copies` count. Should it call the Catalog Service directly and wait?
 
-It could. A synchronous gRPC call from the reservation service to the catalog service would work. But it introduces **temporal coupling**: the reservation cannot succeed unless the catalog service is up and responding at that exact moment. If the catalog service is restarting, deploying, or experiencing a brief network hiccup, the reservation fails—even though the reservation itself was valid.
+It could. A synchronous gRPC call from the Reservation Service to the Catalog Service would work. But it introduces **temporal coupling**: the reservation cannot succeed unless the Catalog Service is up and responding at that exact moment. If the Catalog Service is restarting, deploying, or experiencing a brief network hiccup, the reservation fails—even though the reservation itself was valid.
 
 This is where event-driven architecture earns its keep.
 
@@ -23,9 +23,9 @@ Asynchronous communication (message queues, event streams) is the right choice w
 - You want to **decouple** the producer from the consumer—they do not need to know about each other
 - Multiple consumers might react to the same event independently
 
-In our system, when a user reserves a book, the reservation service records the reservation in its own database and returns success immediately. It then publishes a `reservation.created` event. The catalog service consumes that event and decrements `available_copies`. If the catalog service is temporarily down, the event sits in Kafka until it comes back. No data is lost, no reservation fails.
+In our system, when a user reserves a book, the Reservation Service records the reservation in its own database and returns success immediately. It then publishes a `reservation.created` event. The Catalog Service consumes that event and decrements `available_copies`. If the Catalog Service is temporarily down, the event sits in Kafka until it comes back. No data is lost, no reservation fails.
 
-The reservation service does call the catalog service synchronously for one thing: checking availability *before* creating the reservation. This is a deliberate read-before-write pattern—we need current data to make the decision. The async event flow handles the write side effect afterward.
+The Reservation Service does call the Catalog Service synchronously for one thing: checking availability *before* creating the reservation. This is a deliberate read-before-write pattern—we need current data to make the decision. The async event flow handles the write side effect afterward.
 
 If you have used Spring's `@TransactionalEventListener` or `ApplicationEventPublisher`, the concept is the same: decouple the "something happened" notification from the "react to it" logic. The difference is that Spring events are in-process by default (same JVM), while Kafka events cross process and machine boundaries.
 
@@ -39,7 +39,7 @@ Two terms get used loosely in messaging systems; the distinction matters.
 
 **Events** announce that something happened: "a reservation was created," "a book was returned." They are broadcast to anyone who cares. The publisher does not know (or care) who consumes them. They cannot "fail" in the same way—the fact already happened.
 
-This distinction maps to CQRS (Command Query Responsibility Segregation), a pattern where the write side (commands) and read side (queries) are modeled separately. Our system uses a lightweight version of this: the reservation service owns the write model (reservation records), and the catalog service maintains its own read-optimized data (available copy counts) by consuming events. Neither service directly modifies the other's database.
+This distinction maps to CQRS (Command Query Responsibility Segregation), a pattern where the write side (commands) and read side (queries) are modeled separately. Our system uses a lightweight version of this: the Reservation Service owns the write model (reservation records), and the Catalog Service maintains its own read-optimized data (available copy counts) by consuming events. Neither service directly modifies the other's database.
 
 The `ReservationEvent` struct in our codebase is a true event—it describes a fact in the past tense:
 
@@ -113,15 +113,15 @@ Historically, Kafka required Apache ZooKeeper for cluster metadata management. S
 
 ## The Sarama Client Library
 
-Go has several Kafka client libraries. We use **Sarama** (`github.com/IBM/sarama`), the oldest and best-known pure-Go implementation. It supports both producing and consuming, consumer groups, and all the Kafka protocol features we need.
+Go has several Kafka client libraries. We use **Sarama** (`github.com/IBM/sarama`), the oldest and most widely known pure-Go implementation. It supports both producing and consuming, consumer groups, and all the Kafka protocol features we need.
 
 The alternatives are:
 
-- **confluent-kafka-go**—a CGo wrapper around librdkafka. Better performance, but it requires a C toolchain to build.
+- **confluent-kafka-go**—a cgo wrapper around librdkafka. Better performance, but it requires a C toolchain to build.
 - **franz-go** (`github.com/twmb/franz-go`)—a newer pure-Go client with a more modern API, first-class support for transactions, and generally cleaner ergonomics. See its [comparison page][franz-comparison] for specifics.
 - **segmentio/kafka-go**—another pure-Go option, simpler API but fewer features.
 
-> **A note on picking a client in 2026.** Sarama is in maintenance mode. IBM still takes security patches and critical fixes, but active Go Kafka development has largely moved to franz-go — it is what most new Go-on-Kafka projects use today and is the client you will see in recent Kafka-related OSS code. We use Sarama in this book because (a) its API is closer to the raw Kafka protocol concepts most readers already know from other languages, so the code stays didactic, and (b) every Sarama idiom you learn here translates directly to "how would I do this in franz-go?" — the [migration notes][franz-comparison] are short. If you are starting a greenfield Go service against Kafka today, evaluate franz-go first and only fall back to Sarama if you hit a specific gap.
+> **A note on picking a client in 2026.** Sarama is in maintenance mode. IBM still accepts security patches and critical fixes, but active Go Kafka development has largely moved to franz-go — it is what most new Go-on-Kafka projects use today and is the client you will see in recent Kafka-related OSS code. We use Sarama in this book because (a) its API is closer to the raw Kafka protocol concepts most readers already know from other languages, so the code stays didactic, and (b) every Sarama idiom you learn here translates directly to "how would I do this in franz-go?" — the [migration notes][franz-comparison] are short. If you are starting a greenfield Go service against Kafka today, evaluate franz-go first and only fall back to Sarama if you hit a specific gap.
 >
 > Everything below is correct for Sarama. The patterns (consumer groups, offset commits, backpressure) are library-independent.
 
@@ -177,21 +177,23 @@ func (p *Publisher) Publish(ctx context.Context, event service.ReservationEvent)
 
 In production systems with high throughput or strict schema evolution requirements, you would use **Avro** or **Protobuf** with a Schema Registry. The Schema Registry enforces backward/forward compatibility rules, preventing a producer from publishing events that consumers cannot deserialize. For a learning project, JSON is fine—just know that it offers no schema enforcement and no built-in evolution guarantees.
 
+Section 7.3 covers the consumer side—how the Reservation Service reads and routes these events.
+
 ---
 
 ## Our Event Flow
 
 Here is the complete flow when a user reserves a book:
 
-1. **Gateway** receives `POST /books/{id}/reserve` and calls the reservation service via gRPC.
-2. **Reservation service** checks availability by calling the catalog service via gRPC (synchronous read).
-3. **Reservation service** creates the reservation record in its database.
-4. **Reservation service** publishes a `reservation.created` event to the `reservations` Kafka topic.
-5. **Catalog service** consumer picks up the event and decrements `available_copies` in the catalog database.
+1. **Gateway** receives `POST /books/{id}/reserve` and calls the Reservation Service via gRPC.
+2. **Reservation Service** checks availability by calling the Catalog Service via gRPC (synchronous read).
+3. **Reservation Service** creates the reservation record in its database.
+4. **Reservation Service** publishes a `reservation.created` event to the `reservations` Kafka topic.
+5. **Catalog Service** consumer picks up the event and decrements `available_copies` in the catalog database.
 
 Steps 1–4 are synchronous from the user's perspective—they get a response after step 3. Step 5 happens asynchronously. There is a brief window where the reservation exists but the catalog still shows the old availability count. This is **eventual consistency** in action.
 
-The same pattern applies in reverse for returns: the reservation service publishes `reservation.returned`, and the catalog consumer increments `available_copies`.
+The same pattern applies in reverse for returns: the Reservation Service publishes `reservation.returned`, and the catalog consumer increments `available_copies`.
 
 ---
 
@@ -264,7 +266,7 @@ We will cover observability in detail in a later chapter. For now, note that thi
 
 1. **Trace the event flow.** Starting from `ReservationService.CreateReservation`, follow the code path through the publisher, Kafka, and into the catalog consumer's `handleEvent`. Write down each function call in order, noting which service owns each step.
 
-2. **Design a new event.** Suppose we add a feature where admins can add more copies of a book. What event would the catalog service publish? What would the event type be named? Which services might consume it?
+2. **Design a new event.** Suppose we add a feature where admins can add more copies of a book. What event would the Catalog Service publish? What would the event type be named? Which services might consume it?
 
 3. **Outbox pattern sketch.** Write pseudocode for the Outbox pattern: instead of calling `publisher.Publish()` directly, the service writes an outbox row in the same database transaction. A background goroutine reads unpublished outbox rows and sends them to Kafka. What are the trade-offs compared to our current approach?
 
@@ -278,7 +280,7 @@ We will cover observability in detail in a later chapter. For now, note that thi
 
 [^1]: [Apache Kafka Documentation](https://kafka.apache.org/documentation/)—Official Kafka documentation covering topics, partitions, consumer groups, and delivery semantics.
 [^2]: [IBM/sarama GitHub repository](https://github.com/IBM/sarama)—The Sarama Go client library for Apache Kafka.
-[^3]: [Martin Kleppmann—Designing Data-Intensive Applications, Chapter 12](https://dataintensive.net/)—Excellent coverage of stream processing, event sourcing, and exactly-once semantics.
+[^3]: [Martin Kleppmann—Designing Data-Intensive Applications, Chapter 11](https://dataintensive.net/)—Excellent coverage of stream processing, event sourcing, and exactly-once semantics.
 [^4]: [Microservices.io—Event-Driven Architecture pattern](https://microservices.io/patterns/data/event-driven-architecture.html)—Pattern catalog entry with trade-off analysis.
 [^5]: [Chris Richardson—Transactional Outbox pattern](https://microservices.io/patterns/data/transactional-outbox.html)—The Outbox pattern for reliable event publishing.
 [^6]: [KRaft: Apache Kafka Without ZooKeeper](https://developer.confluent.io/learn/kraft/)—Overview of Kafka's built-in metadata management replacing ZooKeeper.

@@ -1,6 +1,6 @@
 ## 1.3 Building an HTTP Server
 
-Go ships with a production-capable HTTP server in its standard library. No framework required, no servlet container to configure, no application server to deploy to — `net/http` handles all of it. This section covers the core abstractions, builds the gateway's health and books endpoints line by line, and shows you how the server is wired together in `main`.
+Go ships with a production-capable HTTP server in its standard library.[^1] No framework required, no servlet container to configure, no application server to deploy to — `net/http` handles all of it. This section covers the core abstractions, builds the gateway's health and books endpoints line by line, and shows you how the server is wired together in `main`.
 
 ---
 
@@ -30,7 +30,7 @@ func (f HandlerFunc) ServeHTTP(w ResponseWriter, r *Request) {
 }
 ```
 
-This means any function with the signature `func(http.ResponseWriter, *http.Request)` can be used as a handler directly. You have seen this pattern before if you have used Kotlin's SAM interfaces or Java's `@FunctionalInterface` — it is the same idea. The type adapter lets the compiler treat a plain function as an object satisfying an interface.
+This means any function with the signature `func(http.ResponseWriter, *http.Request)` can be used as a handler directly. If you have used Kotlin's SAM interfaces or Java's `@FunctionalInterface`, you have seen this pattern. The type adapter lets the compiler treat a plain function as an object satisfying an interface.
 
 #### ServeMux: The Router
 
@@ -55,7 +55,7 @@ A handler reads from `*http.Request` and writes to `http.ResponseWriter`. Here i
 3. Write the status code (`w.WriteHeader(statusCode)`).
 4. Write the body (`w.Write(...)` or via an encoder).
 
-One important rule: **`WriteHeader` must be called before any call to `Write`**. Once you call `Write`, Go automatically sends `200 OK` if `WriteHeader` has not already been called; calling it afterwards is a no-op that logs a warning.
+One important rule: **`WriteHeader` must be called before any call to `Write`**. Once you call `Write`, Go automatically sends `200 OK` if `WriteHeader` has not already been called; calling it afterward is a no-op that logs a warning.
 
 Reading from the request:
 
@@ -175,34 +175,14 @@ func Books(w http.ResponseWriter, r *http.Request) {
 
 ### Wiring It Together: `main.go`
 
-File: `services/gateway/cmd/main.go`
+The `main.go` entry point from Section 1.1 wires the handlers to the router. The key additions are the route registrations:
 
 ```go
-package main
-
-import (
-    "fmt"
-    "log"
-    "net/http"
-    "os"
-    "github.com/fesoliveira014/library-system/services/gateway/internal/handler"
-)
-
-func main() {
-    port := os.Getenv("PORT")
-    if port == "" {
-        port = "8080"
-    }
-    mux := http.NewServeMux()
-    mux.HandleFunc("/healthz", handler.Health)
-    mux.HandleFunc("/books", handler.Books)
-    addr := fmt.Sprintf(":%s", port)
-    log.Printf("gateway listening on %s", addr)
-    if err := http.ListenAndServe(addr, mux); err != nil {
-        log.Fatalf("server failed: %v", err)
-    }
-}
+mux.HandleFunc("/healthz", handler.Health)
+mux.HandleFunc("/books", handler.Books)
 ```
+
+See Section 1.1 for the full `main.go` listing, including environment configuration and server startup.
 
 #### Environment Configuration
 

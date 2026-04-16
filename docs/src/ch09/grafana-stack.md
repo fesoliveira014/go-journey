@@ -17,7 +17,7 @@ Docker stdout (JSON)   ──►  Promtail  ──►  Loki (logs)
 
 There are two data paths. Traces and metrics flow from the services through the OTel Collector to their respective backends. Logs take a separate path: services write structured JSON to stdout, Docker captures it, and Promtail scrapes the Docker socket to ship logs to Loki.
 
-This separation is intentional. OTel's log support in Go is maturing but not yet the standard path. The Promtail approach is simpler, well-tested, and decouples the log pipeline from the OTel SDK. In production, you might consolidate everything through the Collector using the `filelog` receiver, but for a development stack this works well.
+This separation is intentional. OTel's log support in Go is maturing but is not yet the standard path. The Promtail approach is simpler, well-tested, and decouples the log pipeline from the OTel SDK. In production, you might consolidate everything through the Collector using the `filelog` receiver, but for a development stack this works well.
 
 ---
 
@@ -73,7 +73,7 @@ In production, you would add more processors here: `memory_limiter` to prevent t
 
 Two exporters, one per signal type:
 
-- `otlp/tempo` forwards traces to Tempo via OTLP/gRPC. The `/tempo` suffix is just a label—it lets you define multiple OTLP exporters with different configurations. `tls.insecure: true` disables TLS for the inter-container connection (acceptable in Docker Compose, not in production).
+- `otlp/tempo` forwards traces to Tempo via OTLP/gRPC. The `/tempo` suffix is just a label—it lets you define multiple OTLP exporters with different configurations. `tls.insecure: true` disables TLS for the inter-container connection---acceptable in Docker Compose, not in production.
 
 - `prometheus` exposes a Prometheus scrape endpoint on port 8889. Rather than pushing metrics to Prometheus, the Collector converts OTLP metrics to Prometheus format and serves them on an HTTP endpoint. Prometheus then pulls from this endpoint on its regular scrape interval. This push-to-pull conversion is one of the Collector's most useful features.
 
@@ -114,6 +114,8 @@ storage:
 The configuration is minimal for development. Tempo receives traces via OTLP/gRPC (from the Collector's `otlp/tempo` exporter) and stores them on local disk. The WAL (Write-Ahead Log) buffers incoming traces before they are flushed to the storage backend, providing durability across restarts.
 
 In production, you would use object storage (S3, GCS, Azure Blob) as the backend instead of local disk. Tempo is designed for this—it stores traces as compressed blocks in object storage, which is orders of magnitude cheaper than a traditional database. This is why Tempo can handle high trace volumes without breaking the budget.
+
+Tempo indexes traces by trace ID, service name, span name, and duration. Unlike Prometheus, it does not build inverted indexes over arbitrary labels — this is what keeps storage costs low. To query traces beyond a known trace ID, Tempo offers TraceQL, a query language that filters spans by attributes, duration, and structural relationships. For example, `{resource.service.name = "catalog" && duration > 500ms}` finds slow spans in the Catalog Service. TraceQL queries run in Grafana's Explore view against the Tempo datasource, so you do not need a separate tool.
 
 Tempo exposes an HTTP API on port 3200 that Grafana uses to query traces. You can also query directly:
 
@@ -214,7 +216,7 @@ After this pipeline, you can query Loki with:
 ```
 {container_name="catalog", level="ERROR"}
 ```
-And Loki will efficiently find all error logs from the catalog service without scanning every log line.
+And Loki will efficiently find all error logs from the Catalog Service without scanning every log line.
 
 ---
 
@@ -316,7 +318,7 @@ Here is how the pieces connect end-to-end:
 
 1. A user creates a book via the gateway. `otelhttp` creates a root span with trace ID `abc123...`.
 2. The gateway calls `catalog.CreateBook` via gRPC. `otelgrpc` propagates the trace context.
-3. The catalog service processes the request. GORM creates a DB span. The Kafka publisher injects the trace context into the message headers.
+3. The Catalog Service processes the request. GORM creates a DB span. The Kafka publisher injects the trace context into the message headers.
 4. Every `slog.ErrorContext(ctx, ...)` call in steps 2-3 includes `trace_id: abc123...` in the JSON output.
 5. Promtail scrapes the container logs, parses the JSON, and sends them to Loki with `trace_id` as a label.
 6. The OTel SDK sends spans to the Collector, which forwards them to Tempo.
@@ -331,6 +333,9 @@ This workflow—from metric alert, to trace, to logs—is the observability feed
 ## Docker Compose: The Complete Stack
 
 The observability services in `deploy/docker-compose.yml`:
+
+<details>
+<summary>Full Docker Compose configuration for the Grafana stack</summary>
 
 ```yaml
 otel-collector:
@@ -387,14 +392,16 @@ grafana:
     - tempo
     - prometheus
     - loki
-```
+```[^7]
 
 Notable details:
 
 - Promtail mounts `/var/run/docker.sock:ro` (read-only) to discover containers via the Docker API. This is a common pattern for Docker log collection but requires the socket to be accessible.
-- Grafana enables anonymous access (`GF_AUTH_ANONYMOUS_ENABLED`) for development convenience. In production, you would disable this and use proper authentication.
+- Grafana enables anonymous access (`GF_AUTH_ANONYMOUS_ENABLED`) for development convenience. In production, disable anonymous access and use proper authentication.
 - `tempo-data` is a named volume that persists trace data across container restarts.
 - The `depends_on` declarations ensure Grafana starts after its datasource backends. Note that `depends_on` only waits for container start, not readiness—Grafana handles reconnection internally.
+
+</details>
 
 ---
 
@@ -440,3 +447,4 @@ After `docker compose up`, verify each component:
 [^4]: [Grafana Loki Documentation](https://grafana.com/docs/loki/latest/)—LogQL query language, label design, and deployment modes.
 [^5]: [Promtail Configuration](https://grafana.com/docs/loki/latest/send-data/promtail/configuration/)—Pipeline stages, Docker service discovery, and relabeling.
 [^6]: [Grafana Provisioning](https://grafana.com/docs/grafana/latest/administration/provisioning/)—Auto-configuring datasources and dashboards via YAML files.
+[^7]: Container image versions were current at the time of writing. Check each project's release page for the latest stable version before deploying.

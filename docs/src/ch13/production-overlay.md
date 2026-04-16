@@ -8,7 +8,7 @@ Now you write the production overlay. At this point you have an EKS cluster, thr
 
 ## Restructuring the base for production
 
-One structural change comes first: Postgres and Kafka StatefulSets have no place in a production cluster. Production uses RDS and MSK. Including the in-cluster StatefulSets in the base and then having the production overlay try to delete or ignore them creates unnecessary complexity and risk.
+One structural change comes first: The Postgres and Kafka StatefulSets are unnecessary in the production cluster. Production uses RDS and MSK. Including the in-cluster StatefulSets in the base and then having the production overlay try to delete or ignore them creates unnecessary complexity and risk.
 
 The clean solution is to move the local infrastructure manifests out of the base and into a `local-infra/` component that only the local overlay includes:
 
@@ -48,9 +48,9 @@ deploy/k8s/
         └── kustomization.yaml   # references only ../../base (no local-infra)
 ```
 
-The base `kustomization.yaml` stays unchanged — it still references `data/`, `messaging/`, and `library/`. What changed is the *contents* of those directories: `data/` now contains only Meilisearch resources, and `messaging/` contains only the namespace manifest. Postgres and Kafka moved to `local-infra/`.
+The base *root* `kustomization.yaml` stays unchanged — it still references `data/`, `messaging/`, and `library/`. What changes are the *sub-kustomizations* inside those directories: `data/` now contains only Meilisearch resources, and `messaging/` contains only the namespace manifest. Postgres and Kafka moved to `local-infra/`.
 
-Update `deploy/k8s/base/data/kustomization.yaml` to remove the postgres entries, keeping only Meilisearch:
+Update the `data/` sub-kustomization at `deploy/k8s/base/data/kustomization.yaml` to remove the postgres entries, keeping only Meilisearch:
 
 ```yaml
 # deploy/k8s/base/data/kustomization.yaml
@@ -122,24 +122,24 @@ resources:
 # ---------------------------------------------------------------------------
 # Image references: rewrite local names to ECR URIs.
 # Kustomize matches on the image name field in every container spec across all
-# Deployments in the base. All containers using library-system/catalog will
+# Deployments in the base. All containers using library/catalog will
 # get the ECR URI assigned here, without touching any base manifest.
 # ---------------------------------------------------------------------------
 images:
-  - name: library-system/gateway
-    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/gateway
+  - name: library/gateway
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library/gateway
     newTag: latest
-  - name: library-system/auth
-    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/auth
+  - name: library/auth
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library/auth
     newTag: latest
-  - name: library-system/catalog
-    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/catalog
+  - name: library/catalog
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog
     newTag: latest
-  - name: library-system/reservation
-    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/reservation
+  - name: library/reservation
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library/reservation
     newTag: latest
-  - name: library-system/search
-    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/search
+  - name: library/search
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library/search
     newTag: latest
 
 generatorOptions:
@@ -258,7 +258,7 @@ spec:
 
 This patch doubles the base limits. The `target` selector in `kustomization.yaml` applies it to all Deployments in the `library` namespace. The `placeholder` names in `metadata.name` and the container `name` field are required YAML structure — the target selector is what actually routes the patch to the correct resources.
 
-In practice, you will want per-service tuning once you observe real usage in production. This single patch is a sensible starting point and avoids fragility from hardcoding limits in the base.
+In practice, you will want per-service tuning once you observe real usage in production. This single patch is a sensible starting point. It avoids the fragility of hardcoding per-service limits in the base.
 
 ### DATABASE_URL patches
 
@@ -429,7 +429,7 @@ The annotations drive the ALB Controller:
 
 - `scheme: internet-facing` creates a public-facing ALB. Use `internal` for one accessible only within the VPC.
 - `target-type: ip` registers pod IPs directly with the ALB target group instead of going through node ports. This is the recommended mode for EKS and removes an unnecessary hop through kube-proxy.
-- `certificate-arn` attaches the ACM certificate for TLS termination at the load balancer. Replace the placeholder ARN with the certificate provisioned by Terraform in section 13.1.
+- `certificate-arn` attaches the ACM certificate for TLS termination at the load balancer. Replace the placeholder ARN with the certificate provisioned by Terraform in section 14.2.
 - `ssl-redirect: "443"` instructs the ALB to issue a 301 redirect for plain HTTP requests, enforcing HTTPS without any application code change.
 
 The `spec.rules` block is inherited from the base manifest unchanged. The patch adds `ingressClassName: alb` to the spec and the full annotation set to `metadata.annotations`, leaving the routing rules untouched.
@@ -491,7 +491,7 @@ kubectl kustomize deploy/k8s/overlays/production
 Scan the output and confirm:
 
 1. Every Deployment shows `replicas: 2`.
-2. Every container image references the ECR URI, not `library-system/<svc>:latest`.
+2. Every container image references the ECR URI, not `library/<svc>:latest`.
 3. Every container shows `imagePullPolicy: Always`.
 4. The `auth`, `catalog`, and `reservation` Deployments show RDS hostnames in `DATABASE_URL` with `sslmode=require`.
 5. The `catalog-config`, `reservation-config`, and `search-config` ConfigMaps show the MSK bootstrap string in `KAFKA_BROKERS`.
@@ -534,7 +534,7 @@ kubectl create secret generic jwt-secret \
   --namespace library --dry-run=client -o yaml | kubectl apply -f -
 ```
 
-This is operational friction, not a permanent solution. It is preferable to committing credentials to git.
+This is operational friction, not a permanent solution — but it is preferable to committing credentials to git.
 
 ---
 

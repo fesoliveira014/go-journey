@@ -65,7 +65,7 @@ data:
   POSTGRES_USER: postgres
 ```
 
-These two values correspond to the Docker Compose environment variables `POSTGRES_CATALOG_DB` and `POSTGRES_CATALOG_USER`. The password is intentionally absent here — it belongs in a Secret.
+The `POSTGRES_DB` and `POSTGRES_USER` keys are the standard environment variables expected by the official Postgres Docker image. In the Docker Compose file from chapter 3, these were set via shell-level variables `POSTGRES_CATALOG_DB` and `POSTGRES_CATALOG_USER` (using `${VAR:-default}` expansion), but the container itself always sees `POSTGRES_DB` and `POSTGRES_USER`. The password is intentionally absent here — it belongs in a Secret.
 
 ### StatefulSet
 

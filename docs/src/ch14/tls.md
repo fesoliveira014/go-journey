@@ -2,7 +2,7 @@
 
 TLS is table stakes for any production web application. Browsers label plain HTTP connections as "Not Secure" in the address bar, OAuth2 providers refuse to complete login flows when the redirect URI is HTTP, and any session token or API response that crosses an unencrypted connection is readable by anyone on the same network path. None of these are theoretical concerns — they are the default behavior of the tooling your users are already running.
 
-There is no longer a cost reason to skip TLS. AWS Certificate Manager issues and automatically renews certificates for free when they are used with AWS services — ALB, CloudFront, or API Gateway. The certificate you provision in this section will never expire without intervention, because ACM handles renewal roughly 30 days before the current certificate's expiration. You do nothing. The certificate rotates.
+There is no longer a cost reason to skip TLS. AWS Certificate Manager issues and automatically renews certificates for free when they are used with AWS services — ALB, CloudFront, or API Gateway. The certificate you provision in this section will never expire without intervention, because ACM handles renewal up to sixty days before the current certificate's expiration. You do nothing. The certificate rotates.
 
 By the end of this section, `https://library.example.com` will return a valid certificate issued by Amazon, and any request to `http://library.example.com` will receive a 301 redirect to the HTTPS URL. The application pods will see plain HTTP, which is entirely correct — and the next section explains why.
 
@@ -16,7 +16,7 @@ ACM is a managed certificate authority that integrates natively with AWS load ba
 
 2. **Validate** — ACM offers two validation methods: DNS validation and email validation. DNS validation is the preferred method. ACM generates a CNAME record that you must add to your domain's DNS configuration. Once ACM detects that the record is present, validation completes and the certificate is issued. The whole process typically takes two to five minutes when the DNS is managed in Route 53.
 
-3. **Renew** — ACM checks the validation CNAME periodically. As long as the record is still present in Route 53 — and Terraform keeps it there — ACM renews the certificate automatically every 13 months[^1]. You receive no notifications, no renewal prompts, and no expiry pages.
+3. **Renew** — ACM checks the validation CNAME periodically. As long as the record is still present in Route 53 — and Terraform keeps it there — ACM renews the certificate automatically every thirteen months[^1]. You receive no notifications, no renewal prompts, and no expiry pages.
 
 The DNS validation method has an important advantage over email validation: it is fully automatable. Terraform can create the certificate request, write the validation CNAME to Route 53, and wait for ACM to report the certificate as `ISSUED` in a single `apply` run. Email validation requires a human to click a link, which breaks any infrastructure-as-code workflow.
 

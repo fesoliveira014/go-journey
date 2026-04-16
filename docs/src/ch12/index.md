@@ -1,8 +1,8 @@
 # Chapter 12: Kubernetes
 
-Chapter 3 got all five services running locally with Docker Compose: a single `docker compose up` starts PostgreSQL, Kafka, Meilisearch, and every application container. For development and demonstration that is the right tool. But Docker Compose is a single-machine orchestrator. If the machine running it goes down, every service goes with it. If the catalog service crashes, nothing restarts it. If traffic doubles overnight, there is no mechanism to add replicas. Deploying a new image means a gap in service while the old container stops and the new one starts.
+Chapter 3 got all five services running locally with Docker Compose: a single `docker compose up` starts PostgreSQL, Kafka, Meilisearch, and every application container. For development and demonstration that is the right tool. But Docker Compose is a single-machine orchestrator. If the machine running it goes down, every service goes with it. If the Catalog Service crashes, nothing restarts it automatically. If traffic doubles overnight, there is no mechanism to add replicas. Deploying a new image means a gap in service while the old container stops and the new one starts.
 
-Kubernetes is the production-grade answer to all of those problems. It is a platform for running containerized workloads across a cluster of machines, with built-in self-healing, rolling updates, service discovery, autoscaling, and declarative configuration management. The same mental model you developed in Chapter 3 carries forward — containers, images, environment variables, volume mounts — but Kubernetes layers a control plane on top that continuously reconciles what is running against what you declared you want.
+Kubernetes addresses all of those problems. It is a platform for running containerized workloads across a cluster of machines, with built-in self-healing, rolling updates, service discovery, autoscaling, and declarative configuration management. The same mental model you developed in Chapter 3 carries forward — containers, images, environment variables, volume mounts — but Kubernetes layers a control plane on top that continuously reconciles what is running against what you declared you want.
 
 This chapter introduces that control plane, maps the Docker Compose concepts you already know to their Kubernetes equivalents, and lays the groundwork for the sections that follow, where you will write real manifests and deploy the library system to a local cluster.
 
@@ -21,8 +21,6 @@ The most practical entry point into Kubernetes is a direct comparison with what 
 | `volumes:` | PersistentVolumeClaim | Persistent storage |
 | `docker-compose.yml` | Manifests (YAML) | Declarative desired state |
 | Port mapping to host | Ingress | External traffic routing |
-
-A few nuances are worth calling out.
 
 `depends_on` in Compose controls startup order — service B won't start until service A's container exists. Kubernetes has no startup ordering. Instead, it has **readiness probes**: a container signals that it is ready to receive traffic by passing a health check (an HTTP endpoint, a TCP connection, or an exec command). Kubernetes only routes traffic to a pod once its readiness probe passes. The implication is that your services must tolerate dependencies being temporarily unavailable and retry — a property called **graceful degradation** that is good practice in any distributed system.
 
@@ -74,9 +72,9 @@ On every worker node, two components handle the actual work of running container
 
 The most important conceptual shift from Compose to Kubernetes is the move from **imperative** to **declarative** operations.
 
-Docker Compose is imperative: you run `docker compose up` and Compose starts the containers you described. If a container crashes later, nothing brings it back unless you run the command again. If you want three copies of catalog, you decide when to start the second and third.
+Docker Compose is imperative: you run `docker compose up`, and Compose starts the containers you described. If a container crashes later, nothing brings it back unless you run the command again. If you want three copies of catalog, you decide when to start the second and third.
 
-Kubernetes is declarative: you write a manifest that says "I want three replicas of the catalog service running, using image `library/catalog:v1.2.0`, with 256 MiB of memory and 100m of CPU (= 0.1 CPU)." You apply that manifest once. Kubernetes stores it as the desired state and then continuously reconciles. If a pod crashes, the controller creates a replacement — not because you asked it to, but because the actual state (two running replicas) diverged from the desired state (three). If a node goes down, the pods on it are rescheduled to healthy nodes automatically.
+Kubernetes is declarative: you write a manifest that says "I want three replicas of the Catalog Service running, using image `library/catalog:v1.2.0`, with 256 MiB of memory and 100m of CPU (0.1 CPU cores)." You apply that manifest once. Kubernetes stores it as the desired state and then continuously reconciles. If a pod crashes, the controller creates a replacement — not because you asked it to, but because the actual state (two running replicas) diverged from the desired state (three). If a node goes down, the pods on it are rescheduled to healthy nodes automatically.
 
 This reconciliation loop runs forever. It is not a one-time action but an ongoing process. The practical consequence is that Kubernetes manifests are **idempotent**: applying the same manifest twice has the same effect as applying it once. If nothing has changed, nothing happens. If the image tag changed, Kubernetes performs a rolling update.
 
@@ -100,7 +98,7 @@ Kubernetes organizes everything around **resources** — typed objects stored in
 
 **Secret** is structurally identical to a ConfigMap but intended for sensitive data: passwords, API keys, TLS certificates, OAuth credentials. Secrets are base64-encoded and, by default, stored unencrypted at rest (etcd encryption can be enabled separately) and treated with additional care by the API server — they are not included in API responses unless explicitly requested.
 
-**Ingress** manages external HTTP and HTTPS traffic into the cluster. An Ingress resource defines routing rules: requests to `library.example.com/api` go to the gateway service; requests to `library.example.com/auth` go to the auth service. An Ingress Controller (a reverse proxy like nginx or Traefik that runs inside the cluster) reads these rules and configures itself accordingly. Ingress is what replaces the `ports:` host binding from Docker Compose for production deployments.
+**Ingress** manages external HTTP and HTTPS traffic into the cluster. An Ingress resource defines routing rules: requests to `library.example.com/api` go to the Gateway Service; requests to `library.example.com/auth` go to the Auth Service. An Ingress Controller (a reverse proxy like nginx or Traefik that runs inside the cluster) reads these rules and configures itself accordingly. Ingress is what replaces the `ports:` host binding from Docker Compose for production deployments.
 
 **PersistentVolumeClaim** is a request for storage. A PVC specifies the size, access mode (ReadWriteOnce for a single writer, ReadWriteMany for shared access), and optionally a StorageClass. The cluster satisfies the PVC by binding it to a PersistentVolume — the actual storage backend. Applications mount the PVC as a directory; they do not know whether the storage is a local disk, an NFS share, or a cloud volume.
 
@@ -222,7 +220,7 @@ The remaining sections build the Kubernetes deployment of the library system ste
 
 ---
 
-By the end of the chapter, every service you have built will be running in a real Kubernetes cluster — self-healing, namespace-isolated, and configured exactly as they would be in a production cloud deployment. The Docker Compose file will still exist for local development; Kubernetes is not a replacement for that workflow; it is the production target that all your work has been building toward.
+By the end of the chapter, every service you have built will be running in a real Kubernetes cluster — self-healing, namespace-isolated, and configured exactly as they would be in a production cloud deployment. The Docker Compose file will still exist for local development. Kubernetes is not a replacement for that workflow—it is the production target that all your work has been building toward.
 
 ---
 

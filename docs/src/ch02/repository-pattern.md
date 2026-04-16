@@ -1,6 +1,6 @@
 # 2.3 Repository Pattern with GORM
 
-Raw SQL migrations give you precise control over the database schema. But for day-to-day CRUD operations — inserting a record, fetching one by ID, running paginated queries — writing SQL strings by hand becomes tedious quickly. This is where an ORM earns its keep.
+Raw SQL migrations give you precise control over the database schema. But for day-to-day CRUD operations — inserting a record, fetching one by ID, running paginated queries — writing SQL strings by hand quickly becomes tedious. This is where an ORM earns its keep.
 
 This section introduces GORM (Go's dominant ORM), explains the repository pattern as a clean boundary around data access, and walks through every method in the Catalog service's `BookRepository`. You'll also see how to write integration tests against a real PostgreSQL database — not mocks, not in-memory fakes, the real thing.
 
@@ -44,8 +44,6 @@ type Book struct {
 }
 ```
 
-A few things worth calling out:
-
 - **`gorm:"type:uuid;primaryKey;default:uuid_generate_v4()"`** — tells GORM the column is a UUID primary key, and that the database should generate a new value if one isn't provided. The `uuid_generate_v4()` function comes from PostgreSQL's `uuid-ossp` extension, which is enabled in the migration.
 - **`uniqueIndex`** — GORM knows this field maps to a unique index. GORM won't create the index (migrations handle that), but the tag is documentation: it tells readers why a unique violation error might appear on this field.
 - **`CreatedAt` / `UpdatedAt`** — GORM's convention. If a struct has these fields, GORM automatically populates `CreatedAt` on insert and updates `UpdatedAt` on every update. No annotation required — the field names are enough. This is Go's convention-over-configuration at work.
@@ -86,7 +84,7 @@ sqlDB.SetConnMaxLifetime(5 * time.Minute)
 
 - `SetMaxOpenConns` caps in-flight queries. Pick a number such that `replicas × MaxOpenConns < postgres.max_connections − headroom`.
 - `SetMaxIdleConns` keeps a small pool of warm connections for burst traffic. Setting it above `SetMaxOpenConns` is pointless.
-- `SetConnMaxLifetime` forces the pool to recycle connections. Managed PostgreSQL services (AWS RDS, Cloud SQL) silently close idle connections after ~30 minutes; a bounded lifetime avoids handing stale connections to the app.
+- `SetConnMaxLifetime` forces the pool to recycle connections. Managed PostgreSQL services (AWS RDS, Cloud SQL) may close idle connections after a period (commonly around thirty minutes); a bounded lifetime avoids handing stale connections to the app.
 
 In this project the three services share a small `pkg/db.Open` helper that applies these defaults. Any of them can be overridden via `DB_MAX_OPEN_CONNS`, `DB_MAX_IDLE_CONNS`, and `DB_CONN_MAX_LIFETIME` environment variables. The [GORM documentation on connection pools](https://gorm.io/docs/connecting_to_the_database.html#Connection-Pool) explains the tuning knobs in more detail.
 
@@ -188,7 +186,7 @@ func (r *BookRepository) GetByID(ctx context.Context, id uuid.UUID) (*model.Book
 }
 ```
 
-`First` issues `SELECT * FROM books WHERE id = ? LIMIT 1 ORDER BY id`. The `ORDER BY id` is implicit with `First` — GORM sorts by primary key when you use `First` rather than `Take`. If no row matches, GORM returns `gorm.ErrRecordNotFound`.
+`First` issues `SELECT * FROM books WHERE id = ? ORDER BY id LIMIT 1`. The `ORDER BY id` is implicit with `First` — GORM sorts by primary key when you use `First` rather than `Take`. If no row matches, GORM returns `gorm.ErrRecordNotFound`.
 
 The pattern `errors.Is(err, gorm.ErrRecordNotFound)` is idiomatic Go error handling. `errors.Is` unwraps error chains, so it handles wrapped errors correctly. This is analogous to catching a `NoResultException` in JPA and rethrowing a domain-specific exception.
 
@@ -252,7 +250,7 @@ The `WHERE` clause includes `available_copies + ? >= 0` as a guard to prevent ne
 
 ## Pagination and Filtering
 
-The `List` method is where GORM's chainable API shines. The query is built up conditionally based on the provided filter, then a `Count` is executed on the same query scope before pagination is applied:
+The `List` method builds a query dynamically based on the provided filter, counts the total before paginating, and returns the result:
 
 ```go
 func (r *BookRepository) List(ctx context.Context, filter model.BookFilter, page model.Pagination) ([]*model.Book, int64, error) {

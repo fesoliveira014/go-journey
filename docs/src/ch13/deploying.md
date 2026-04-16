@@ -2,7 +2,7 @@
 
 This section is the payoff for everything in Chapter 13. The Terraform modules are written, the production Kustomize overlay is configured, and the ECR repositories, RDS cluster, and MSK broker are defined in code. Now you actually run it.
 
-**This costs real money.** The infrastructure spun up here — an EKS cluster with managed node groups, a Multi-AZ RDS Aurora cluster, an MSK broker, a NAT Gateway, and an Application Load Balancer — runs roughly $8–15 per day. Tear everything down with `terraform destroy` when you are finished. The teardown section at the end of this chapter shows the exact steps.
+**This costs real money.** The infrastructure spun up here — an EKS cluster with managed node groups, RDS instances, an MSK broker, a NAT Gateway, and an Application Load Balancer — runs roughly $8–15 per day. Tear everything down with `terraform destroy` when you are finished. The teardown section at the end of this chapter shows the exact steps.
 
 If you prefer not to deploy, the verification and troubleshooting sections describe the expected outputs at each step so you can follow along without incurring costs.
 
@@ -30,7 +30,7 @@ Terraform has been successfully initialized!
 terraform plan -out=tfplan
 ```
 
-Terraform will print a summary of every resource it intends to create. On first apply this is a long list — VPC, subnets, security groups, IAM roles, EKS cluster, node group, RDS cluster, MSK cluster, ECR repositories, and the ALB controller Helm release. Review the summary. If anything looks unexpected, stop here.
+Terraform will print a summary of every resource it intends to create. On first apply, this is a long list — VPC, subnets, security groups, IAM roles, EKS cluster, node group, RDS cluster, MSK cluster, ECR repositories, and the ALB controller Helm release. Review the summary. If anything looks unexpected, stop here.
 
 **Apply:**
 
@@ -46,12 +46,12 @@ Apply complete! Resources: 47 added, 0 changed, 0 destroyed.
 Outputs:
 
 ecr_repository_urls = {
-  "auth"        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/auth"
-  "catalog"     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/catalog"
+  "auth"        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library/auth"
+  "catalog"     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog"
   ...
 }
 cluster_name             = "library-system"
-msk_bootstrap_brokers_tls = "b-1.xxxxx.kafka.us-east-1.amazonaws.com:9094,..."
+msk_bootstrap_brokers    = "b-1.xxxxx.kafka.us-east-1.amazonaws.com:9092,..."
 rds_endpoints            = {
   "auth"        = "library-system-auth.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
   "catalog"     = "library-system-catalog.xxxxxxxxxxxx.us-east-1.rds.amazonaws.com:5432"
@@ -126,7 +126,7 @@ The `State` column should read `ACTIVE`.
 
 ## Retrieve RDS Credentials
 
-Terraform stored the RDS master password in AWS Secrets Manager. Retrieve it now — you will need it to create the per-service database users and to populate the Kubernetes secrets in the production overlay.
+Terraform stores the RDS credentials in Secrets Manager automatically (covered in section 13.4). Retrieve it now — you will need it to create the per-service database users and to populate the Kubernetes secrets in the production overlay.
 
 ```bash
 aws secretsmanager get-secret-value \
@@ -179,7 +179,7 @@ earthly +docker
 SERVICES=(gateway auth catalog reservation search)
 
 for svc in "${SERVICES[@]}"; do
-  docker tag "library-system/${svc}:latest" "${ECR_REGISTRY}/library/${svc}:latest"
+  docker tag "library/${svc}:latest" "${ECR_REGISTRY}/library/${svc}:latest"
   docker push "${ECR_REGISTRY}/library/${svc}:latest"
   echo "Pushed ${svc}"
 done
@@ -401,7 +401,7 @@ Delete any listed volumes manually:
 aws ec2 delete-volume --volume-id <volume-id>
 ```
 
-An orphaned volume costs roughly $0.08 per GB per month[^2]. It is small but it accumulates silently — always check.
+An orphaned volume costs roughly $0.08 per GB per month.[^2] It is small but it accumulates silently — always check.
 
 ---
 
@@ -422,7 +422,7 @@ If you are following along without running the infrastructure, here is a summary
 
 ---
 
-## What's Next
+## What's next
 
 The library system is running on AWS with managed database, message broker, and load balancer infrastructure. Chapter 14 hardens the deployment for production: configuring DNS with Route 53 and TLS with ACM, managing secrets with External Secrets Operator, and encrypting Kafka traffic. None of these changes touch application code — everything lives in Terraform and the production Kustomize overlay.
 

@@ -1,6 +1,6 @@
 # 12.3 Application Manifests
 
-With all five services containerized and the infrastructure layer (PostgreSQL, Kafka, Meilisearch) declared in the next section, we are ready to write the manifests for the application services themselves. Every service needs three resources: a Deployment that runs the container, a Service that gives it a stable DNS name inside the cluster, and a ConfigMap that injects non-sensitive configuration. Secrets are declared separately as placeholder objects that a local overlay will fill in with real values.
+With all five services containerized and the infrastructure layer (PostgreSQL, Kafka, Meilisearch) declared in the next section, we are ready to write the manifests for the application services themselves. Every service needs three resources: a Deployment that runs the container, a Service that gives it a stable DNS name inside the cluster, and a ConfigMap that injects non-sensitive configuration. Secrets are declared separately as placeholders that the local overlay fills with real values.
 
 All application resources live in the `library` namespace. Infrastructure resources live in `data` and `messaging`. Keeping namespaces separate has two practical benefits: you can delete all application resources with a single `kubectl delete namespace library` during development without touching your databases, and RBAC policies (covered in Chapter 13) can grant service accounts namespace-scoped permissions rather than cluster-wide ones.
 
@@ -32,7 +32,7 @@ The `data` and `messaging` namespace manifests are identical in structure (just 
 
 ## Catalog Deployment — full walkthrough
 
-The catalog service is a good template for all the others. Its manifest touches every field you need to understand, so we will walk through it in detail.
+The Catalog Service is a good template for all the others. Its manifest touches every field you need to understand, so we will walk through it in detail.
 
 ```yaml
 # deploy/k8s/base/library/catalog-deployment.yaml
@@ -63,7 +63,7 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-          image: library-system/catalog:latest
+          image: library/catalog:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 50052
@@ -110,16 +110,16 @@ spec:
 ### `metadata`
 
 - `name: catalog` — the name of the Deployment object. This is also what appears in `kubectl get deployments`.
-- `namespace: library` — places the object in our application namespace. If omitted, objects land in `default`, which is fine for experiments but undesirable in a real project.
+- `namespace: library` — places the object in our application namespace. If omitted, objects land in `default`—fine for experiments but undesirable in a real project.
 - `labels` — key-value pairs attached to the object. Labels on the Deployment itself are for your own organization (filtering with `kubectl get -l app=catalog`). They are distinct from the labels on the Pod template.
 
 ### `spec.replicas`
 
-How many Pod copies the controller should maintain. We use 1 during development. Increasing this to two or more enables rolling updates and basic availability during node maintenance, but requires that services handle multiple concurrent instances correctly — which ours do, since all state lives in PostgreSQL and Kafka.
+How many Pod copies the controller should maintain. We use 1 during development. Increasing this to two or more enables rolling updates and basic availability during node maintenance, but requires that services handle multiple concurrent instances correctly—which ours do, since all state lives in PostgreSQL and Kafka.
 
 ### `spec.selector.matchLabels`
 
-This is the link between the Deployment controller and the Pods it manages. The controller watches all Pods whose labels match this selector and reconciles toward the desired replica count. **The selector must match the labels in `spec.template.metadata.labels` exactly.** If they diverge, the controller cannot find its Pods and will continually create new ones.
+This is the link between the Deployment controller and the Pods it manages. The controller watches all Pods whose labels match this selector and reconciles toward the desired replica count. **The selector must match the labels in `spec.template.metadata.labels` exactly.** If they diverge, the controller cannot find its pods and continually creates new ones.
 
 Once a Deployment is created, `spec.selector` is immutable. To change it you must delete and recreate the Deployment.
 
@@ -129,9 +129,9 @@ Everything under `spec.template` describes the Pod that the Deployment creates. 
 
 #### `image` and `imagePullPolicy`
 
-`image: library-system/catalog:latest` references the image we built and loaded into kind in section 12.1. The `latest` tag is normally discouraged in production because it makes rollbacks ambiguous, but it is fine for a local development cluster where we control exactly what is in the cache.
+`image: library/catalog:latest` references the image we built and loaded into kind in section 12.1. The `latest` tag is normally discouraged in production because it makes rollbacks ambiguous, but it is fine for a local development cluster where we control exactly what is in the cache.
 
-`imagePullPolicy: IfNotPresent` is critical for kind. By default, Kubernetes tries to pull images from a registry. kind loads images directly into its internal containerd cache via `kind load docker-image`. If the pull policy is `Always`, the kubelet will still attempt a registry pull, which fails because `library-system/catalog:latest` does not exist in any public registry. `IfNotPresent` tells the kubelet: if the image is already present in the local cache, use it. This is the correct policy for locally built images in a kind cluster.
+`imagePullPolicy: IfNotPresent` is critical for kind. By default, Kubernetes tries to pull images from a registry. kind loads images directly into its internal containerd cache via `kind load docker-image`. If the pull policy is `Always`, the kubelet will still attempt a registry pull, which fails because `library/catalog:latest` does not exist in any public registry. `IfNotPresent` tells the kubelet: if the image is already present in the local cache, use it. This is the correct policy for locally built images in a kind cluster.
 
 #### `ports`
 
@@ -206,7 +206,7 @@ resources:
 
 `requests` are what the scheduler uses to decide which node can host the Pod. A node with 200m of unallocated CPU can host a Pod requesting 100m. `limits` are enforced at runtime by the Linux kernel's cgroup subsystem: if the container exceeds its memory limit, the kernel OOM-kills it; if it exceeds its CPU limit, it is throttled. Always set both — a Pod without requests cannot be scheduled intelligently, and a Pod without limits can starve its neighbors.
 
-The values here are intentionally small. The catalog service at rest uses almost no CPU and well under 50 MiB of RAM. Give your local cluster room to run all five services simultaneously.
+The values here are intentionally small. The Catalog Service at rest uses almost no CPU and well under 50 MiB of RAM. Give your local cluster room to run all five services simultaneously.
 
 #### Liveness and readiness probes
 
@@ -322,9 +322,18 @@ spec:
         app: auth
     spec:
       terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: auth
-          image: library-system/auth:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          image: library/auth:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
@@ -410,7 +419,7 @@ data:
 
 ### Reservation service
 
-Reservation uses port 50053, connects to Kafka, and calls the catalog service over gRPC to validate book availability before creating a reservation.
+Reservation uses port 50053, connects to Kafka, and calls the Catalog Service over gRPC to validate book availability before creating a reservation.
 
 ```yaml
 # deploy/k8s/base/library/reservation-deployment.yaml
@@ -432,9 +441,18 @@ spec:
         app: reservation
     spec:
       terminationGracePeriodSeconds: 30
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        fsGroup: 65534
       containers:
         - name: reservation
-          image: library-system/reservation:latest
+          securityContext:
+            allowPrivilegeEscalation: false
+            readOnlyRootFilesystem: true
+            capabilities:
+              drop: ["ALL"]
+          image: library/reservation:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
@@ -545,7 +563,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: search
-          image: library-system/search:latest
+          image: library/search:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
@@ -641,7 +659,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: gateway
-          image: library-system/gateway:latest
+          image: library/gateway:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
@@ -724,7 +742,7 @@ The local overlay (section 12.5) uses Kustomize's `secretGenerator` to create al
 
 The key names populated by the overlay (`JWT_SECRET`, `POSTGRES_PASSWORD`, `MEILI_MASTER_KEY`) match the `secretKeyRef.key` values in the Deployment manifests exactly. The OAuth2 client secret (`GOOGLE_CLIENT_SECRET`) is referenced by the auth Deployment with `optional: true`, so it only needs to be provided in environments where Google OAuth2 is configured.
 
-**Base64 is not encryption.** Anyone with read access to a Secret object — via `kubectl get secret jwt-secret -o yaml` — can decode the value with `base64 -d`. Secrets are only marginally better than ConfigMaps at rest (in etcd) unless you enable etcd encryption, and they are only as secure as your RBAC policy. The canonical solution for production is an external secret store (HashiCorp Vault, AWS Secrets Manager, GCP Secret Manager) synced to Kubernetes Secrets by an operator. We cover this in Chapter 14. For the local cluster, the local overlay's `secretGenerator` provides concrete values without putting them in version control.
+**Base64 is not encryption.** Anyone with read access to a Secret object—via `kubectl get secret jwt-secret -o yaml`—can decode the value with `base64 -d`. Secrets are only marginally better than ConfigMaps at rest (in etcd) unless you enable etcd encryption, and they are only as secure as your RBAC policy. The canonical solution for production is an external secret store (HashiCorp Vault, AWS Secrets Manager, GCP Secret Manager) synced to Kubernetes Secrets by an operator. We cover this in Chapter 14. For the local cluster, the local overlay's `secretGenerator` provides concrete values without putting them in version control.
 
 ---
 

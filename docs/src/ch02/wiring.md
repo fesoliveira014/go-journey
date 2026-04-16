@@ -6,7 +6,7 @@ Every component you have built so far — the repository, the service, the handl
 
 ## Constructor-Based Dependency Injection
 
-In Spring you might write:
+In Spring, you might write:
 
 ```kotlin
 // Spring — framework magic
@@ -17,7 +17,7 @@ class CatalogService(@Autowired val repo: BookRepository)
 class CatalogHandler(@Autowired val svc: CatalogService)
 ```
 
-The framework scans for annotations, builds a dependency graph, constructs objects in the right order, and wires them up for you. This is convenient—until something goes wrong and the stack trace runs through several layers of reflection before reaching your code.
+The framework scans for annotations, builds a dependency graph, constructs objects in the right order, and wires them up for you. Convenient—until a stack trace runs through layers of reflection.
 
 Go uses none of this. Dependency injection in Go is function calls:
 
@@ -47,9 +47,9 @@ func NewCatalogHandler(svc *service.CatalogService) *CatalogHandler {
 }
 ```
 
-The service constructor accepts a `BookRepository` **interface**, not a concrete type. This is the important detail: the service owns the interface definition and only knows that it has something to call `Create`, `GetByID`, and so on. In production, that turns out to be the GORM-backed struct. In tests it is the in-memory mock from the previous section. The service does not know or care which.
+The service constructor accepts a `BookRepository` **interface**, not a concrete type. This is the important detail: The service owns the interface definition and only knows that it has something to call `Create`, `GetByID`, and so on. In production, that turns out to be the GORM-backed struct. In tests it is the in-memory mock from the previous section. The service does not know or care which.
 
-This pattern is sometimes called **manual dependency injection**. For projects up to moderate complexity it is the right approach — it scales well, is easy to debug, and produces zero "magic". Larger projects sometimes introduce a dependency injection framework (`google/wire` is the most common in Go), but that is code generation over the same pattern, not a fundamentally different approach.
+This pattern is sometimes called **manual dependency injection**. For projects up to moderate complexity, it is the right approach — it scales well, is easy to debug, and produces zero "magic". Larger projects sometimes introduce a dependency injection framework (`google/wire` is the most common in Go), but that is code generation over the same pattern, not a fundamentally different approach.
 
 ---
 
@@ -182,7 +182,7 @@ grpcurl -plaintext localhost:50052 list
 
 ```
 catalog.v1.CatalogService
-grpc.reflection.v1alpha.ServerReflection
+grpc.reflection.v1.ServerReflection
 ```
 
 Drill into the methods on the service:
@@ -278,6 +278,8 @@ grpcurl -plaintext -d '{
 }' localhost:50052 catalog.v1.CatalogService.UpdateBook
 ```
 
+> **Note:** `UpdateBook` does not modify `available_copies` — that field is managed exclusively by the Reservation Service via the `UpdateAvailability` RPC.
+
 ### Delete a Book
 
 ```bash
@@ -305,9 +307,9 @@ The idiomatic proto3 solution is `google.protobuf.FieldMask` for partial updates
 
 ### UpdateAvailability as a Forward Reference
 
-You may notice `UpdateAvailability` in the handler and service — it adjusts `available_copies` by a signed delta. This RPC is not driven by catalog management; it is driven by the reservations service. When a user checks out a book, the reservations service will call `UpdateAvailability(id, -1)` on the catalog service. When the book is returned, it calls `UpdateAvailability(id, +1)`.
+You may notice `UpdateAvailability` in the handler and service — it adjusts `available_copies` by a signed delta. This RPC is not driven by catalog management; it is driven by the Reservation Service. When a user checks out a book, the Reservation Service will call `UpdateAvailability(id, -1)` on the Catalog Service. When the book is returned, it calls `UpdateAvailability(id, +1)`.
 
-This is part of the inter-service communication pattern covered in Chapter 7. The RPC exists now because the catalog service needs to own the availability invariant — no other service should directly manipulate `available_copies`. For now, you can exercise it via `grpcurl`:
+This is part of the inter-service communication pattern covered in Chapter 7. The RPC exists now because the Catalog Service needs to own the availability invariant — no other service should directly manipulate `available_copies`. For now, you can exercise it via `grpcurl`:
 
 ```bash
 grpcurl -plaintext -d '{"id": "a1b2c3d4-...", "delta": -1}' \
@@ -318,7 +320,7 @@ grpcurl -plaintext -d '{"id": "a1b2c3d4-...", "delta": -1}' \
 
 ## Exercise: Drive the Catalog with grpcurl
 
-Start the catalog service locally and work through the following scenario entirely using `grpcurl`.
+Start the Catalog Service locally and work through the following scenario entirely using `grpcurl`.
 
 **Setup:** Create 5 books across at least 2–3 genres. Suggested data:
 
@@ -448,7 +450,7 @@ grpcurl -plaintext -d '{"id": "<foundation-id>"}' \
 
 ## What Comes Next
 
-The catalog service is complete — domain model, repository, service, gRPC handler, and server wiring. The next chapter introduces the gateway service, which sits between external HTTP clients and the internal gRPC services. It is where REST-to-gRPC translation, authentication middleware, and request validation will live.
+The Catalog Service is complete — domain model, repository, service, gRPC handler, and server wiring. The next chapter introduces the Gateway Service, which sits between external HTTP clients and the internal gRPC services. It is where REST-to-gRPC translation, authentication middleware, and request validation will live.
 
 ---
 

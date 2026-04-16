@@ -1,6 +1,6 @@
 # 4.2 The Auth Service
 
-With the fundamentals in place, we can now build the Auth service end to end. This section walks through each layer—proto definition, database migration, repository, service, handler, and wiring—following the same architecture patterns established in Chapter 2 for the Catalog service. If you followed that chapter, the structure will be familiar. The interesting differences are in the details: nullable fields for OAuth users, password hashing in the service layer, and a richer error-to-gRPC-code mapping in the handler.
+With the fundamentals in place, we can now build the Auth service end to end. This section walks through each layer—proto definition, database migration, repository, service, handler, and wiring—following the same architecture patterns established in Chapter 2 for the Catalog service. If you followed Chapter 2, the structure will be familiar. The interesting differences are in the details: nullable fields for OAuth users, password hashing in the service layer, and a richer error-to-gRPC-code mapping in the handler.
 
 ---
 
@@ -70,11 +70,11 @@ if user.PasswordHash == nil {
 }
 ```
 
-**The `valid_role` CHECK constraint** restricts the `role` column to `'user'` or `'admin'`. This is database-level enforcement—even if a bug in the application tries to set `role = 'superadmin'`, PostgreSQL rejects it. Defense in depth.
+**The `valid_role` CHECK constraint** restricts the `role` column to `'user'` or `'admin'`. This is database-level enforcement—even if a bug in the application tries to set `role = 'superadmin'`, PostgreSQL rejects it. Defense in depth. A future migration can extend this constraint as the application adds new roles.
 
 **The `oauth_unique` composite constraint** ensures that each OAuth provider + ID combination is unique. A Google user with ID `12345` has only one row. But the same email address could exist as both a password user and a Google user—this is a deliberate choice. In a production system, you might want to merge these accounts. For this learning project, we keep it simple.
 
-**`uuid-ossp` extension** provides the `uuid_generate_v4()` function for generating UUIDs at the database level. Same pattern as the Catalog service's `books` table.
+**`uuid-ossp` extension** provides the `uuid_generate_v4()` function for generating UUIDs at the database level. Same pattern as the Catalog service's `books` table. PostgreSQL 13+ includes `gen_random_uuid()` natively without requiring an extension; this project uses `uuid-ossp` for compatibility with older versions.
 
 ---
 
@@ -142,7 +142,7 @@ type UserRepository interface {
 }
 ```
 
-If you come from Spring, this is the same dependency inversion pattern—a Spring `@Service` depends on a `@Repository` interface, not the JPA implementation. In Go, we achieve this without annotations or DI frameworks: the interface is defined in the `service` package (the consumer), and the `repository` package provides a concrete struct that satisfies it. No `@Autowired` magic—the wiring happens explicitly in `main.go`.
+If you come from Spring, this is the same dependency inversion pattern—a Spring `@Service` depends on a `@Repository` interface, not the JPA implementation. In Go, we achieve this without annotations or DI frameworks. The interface is defined in the `service` package (the consumer), and the `repository` package provides a concrete struct that satisfies it. No `@Autowired` magic—the wiring happens explicitly in `main.go`.
 
 ### Registration Flow
 
@@ -281,7 +281,7 @@ authv1.RegisterAuthServiceServer(grpcServer, authHandler)
 
 Each layer only knows about the layer directly below it. The handler does not know about GORM. The service does not know about gRPC. This is the same layered architecture as the Catalog service, and it makes testing straightforward—you can mock any interface boundary.
 
-> **Why `log.Fatal` on missing `JWT_SECRET`?** An earlier draft of this code fell back to `"dev-secret-change-in-production"` when the env var was unset. That pattern is dangerous: a misconfigured deployment (forgotten Kubernetes Secret, typo in a ConfigMap key) would silently start a production service that accepts tokens signed with a publicly known string. The [12-Factor App's Config factor](https://12factor.net/config) is clear here — config belongs in the environment, and missing required config should fail fast. Development defaults belong in a `.env` file or Compose env block, not in the binary itself.
+> **Production note:** **Why `log.Fatal` on missing `JWT_SECRET`?** An earlier draft of this code fell back to `"dev-secret-change-in-production"` when the env var was unset. That pattern is dangerous: a misconfigured deployment (forgotten Kubernetes Secret, typo in a ConfigMap key) would silently start a production service that accepts tokens signed with a publicly known string. The [12-Factor App's Config factor](https://12factor.net/config) is clear here — config belongs in the environment, and missing required config should fail fast. Development defaults belong in a `.env` file or Compose env block, not in the binary itself.
 
 ---
 

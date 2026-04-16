@@ -133,7 +133,7 @@ mux.HandleFunc("POST /admin/books/{id}", srv.AdminBookUpdate)
 mux.HandleFunc("POST /admin/books/{id}/delete", srv.AdminBookDelete)
 ```
 
-Each route maps to a method on the `Server` struct. The style is RESTful: `GET` for reads, `POST` for mutations. Notice that `POST /admin/books/{id}/delete` uses a POST, not a `DELETE` method—HTML forms can only submit `GET` and `POST`, so we use a URL suffix to distinguish the action. This is a standard pattern in server-rendered applications.
+Each route maps to a method on the `Server` struct. The style is RESTful: `GET` for reads, `POST` for mutations. Notice that `POST /admin/books/{id}/delete` uses POST, not DELETE—HTML forms support only GET and POST. This is a standard pattern in server-rendered applications.
 
 ---
 
@@ -209,6 +209,8 @@ authClient := authv1.NewAuthServiceClient(authConn)
 catalogClient := catalogv1.NewCatalogServiceClient(catalogConn)
 srv := handler.New(authClient, catalogClient, tmpl)
 ```
+
+The full `main.go` includes `defer authConn.Close()` and `defer catalogConn.Close()` calls omitted here for brevity.
 
 This is the "explicit wiring" philosophy of Go. It is more lines of code than `@SpringBootApplication`, but every dependency is visible and traceable. If you want to know what the gateway depends on, read `main.go`—it is all there.
 

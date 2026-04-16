@@ -108,7 +108,7 @@ func (s *Server) AdminBookCreate(w http.ResponseWriter, r *http.Request) {
         return
     }
 
-    setFlash(w, "Book created")
+    s.setFlash(w, "Book created")
     http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
 ```
@@ -127,7 +127,7 @@ _, err = s.catalog.UpdateBook(r.Context(), &catalogv1.UpdateBookRequest{
 })
 ```
 
-After a successful create or update, the handler sets a flash message and redirects—the PRG pattern from section 5.3.
+After a successful create or update, the handler sets a flash message and redirects—the PRG pattern from Section 5.3.
 
 ---
 
@@ -184,13 +184,13 @@ Notice that `InvalidArgument`, `AlreadyExists`, and `FailedPrecondition` pass th
 
 ## Docker Build
 
-The gateway Dockerfile follows the same multi-stage pattern from Chapter 3, with one addition: It copies the `templates/` and `static/` directories into the runtime image.
+The gateway Dockerfile follows the same multi-stage pattern from Chapter 3, with one addition: it copies the `templates/` and `static/` directories into the runtime image.
 
 ```dockerfile
 # services/gateway/Dockerfile
 
 # Stage 1: Build
-FROM golang:1.26-alpine AS builder
+FROM golang:1.22-alpine AS builder
 WORKDIR /app
 ENV GOWORK=off
 

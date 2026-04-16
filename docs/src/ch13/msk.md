@@ -1,6 +1,6 @@
 # 13.5 Amazon MSK
 
-Chapter 12 ran Kafka as a StatefulSet in the `messaging` namespace. That approach required you to manage KRaft quorum configuration, ordinal pod naming for stable advertised listeners, and persistent volume sizing yourself. Just as section 13.4 replaced the self-managed PostgreSQL StatefulSets with RDS, it is time to apply the same trade-off to Kafka: hand off the operational burden to a managed service and keep your focus on application logic.
+Chapter 12 ran Kafka as a StatefulSet in the `messaging` namespace. That approach required you to manage KRaft quorum configuration, ordinal pod naming for stable advertised listeners, and persistent volume sizing yourself. Just as section 13.4 replaced the self-managed PostgreSQL StatefulSets with RDS, this section applies the same trade-off to Kafka: hand off the operational burden to a managed service and keep your focus on application logic.
 
 Amazon Managed Streaming for Apache Kafka (MSK) is AWS's hosted Kafka offering. It runs the same Apache Kafka protocol — the same producer and consumer APIs, the same topic and partition model, the same consumer group semantics — so nothing in your application code changes. The difference is entirely operational: AWS provisions the broker nodes, handles KRaft controller elections, applies security patches, manages storage expansion, and exposes CloudWatch metrics without any configuration on your part.
 
@@ -52,7 +52,7 @@ Each property is worth understanding before you apply it.
 
 **`num.partitions=3`** is the default partition count for auto-created topics. Three partitions with two brokers means partitions are distributed across both brokers. Partition count sets the upper bound on consumer parallelism per consumer group — a consumer group with three members can process all three partitions in parallel.
 
-**`log.retention.hours=168`** retains log segments for seven days. Events older than one week are eligible for deletion. This is the MSK default and suits the library system well: events are consumed by the search service within seconds of publication; seven days provides ample replay window for any catch-up scenario.
+**`log.retention.hours=168`** retains log segments for seven days. Events older than one week are eligible for deletion. This is the MSK default and suits the library system well: events are consumed by the Search Service within seconds of publication; seven days provides ample replay window for any catch-up scenario.
 
 ---
 
@@ -96,7 +96,7 @@ resource "aws_msk_cluster" "library" {
 ```
 
 
-**`kafka.t3.small`** is the smallest available MSK instance type. It provides 2 GiB of memory per broker, which is sufficient for the library system's modest throughput. For a production workload you would size up to `kafka.m5.large` or larger and configure CloudWatch alarms on `KafkaDataLogsDiskUsed` and `MemoryUsed`.
+**`kafka.t3.small`** is the smallest available MSK instance type. It provides 2 GiB of memory per broker, which is sufficient for the library system's modest throughput. For a production workload, you would size up to `kafka.m5.large` or larger and configure CloudWatch alarms on `KafkaDataLogsDiskUsed` and `MemoryUsed`.
 
 **`number_of_broker_nodes = 2`** with two private subnets means MSK places one broker in each Availability Zone. This gives AZ-level fault tolerance: if one AZ becomes unavailable, the surviving broker continues serving producers and consumers, and replication catches up once the AZ recovers.
 
@@ -224,7 +224,7 @@ The base manifests remain unchanged and continue to work in kind with the in-clu
 
 ---
 
-## What Changes and What Does Not
+## What changes and what does not
 
 The move from a Kafka StatefulSet to MSK changes exactly one thing for your application code: the value of `KAFKA_BROKERS`. The Kafka client library does not know or care whether the bootstrap address is a Kubernetes pod FQDN or an MSK hostname. The protocol is identical. Consumer groups work the same way. Topic creation, message production, and offset management all behave the same way.
 

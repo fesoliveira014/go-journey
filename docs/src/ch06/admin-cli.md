@@ -2,7 +2,7 @@
 
 ## The Problem
 
-The auth service's `Register` RPC always creates users with the `"user"` role. This is the correct default — you do not want new sign-ups to be admins. But it means there is no way to create the first admin account through the application itself. You could run raw SQL:
+The Auth Service's `Register` RPC always creates users with the `"user"` role. This is the correct default — you do not want new sign-ups to be admins. But it means there is no way to create the first admin account through the application itself. You could run raw SQL:
 
 ```sql
 UPDATE users SET role = 'admin' WHERE email = 'admin@example.com';
@@ -14,11 +14,11 @@ That works, but it is fragile. You need to know the table and column names, you 
 
 ## Design Decision: Why Direct DB Access?
 
-The admin CLI connects directly to PostgreSQL using GORM, bypassing the auth service entirely. This might seem wrong — elsewhere in this project, we have been careful to route all operations through gRPC. But bootstrapping is different:
+The admin CLI connects directly to PostgreSQL using GORM, bypassing the Auth Service entirely. This might seem wrong—elsewhere in this project, we have been careful to route all operations through gRPC. But bootstrapping is different:
 
 - **The gRPC API cannot do this.** There is no `PromoteUser` RPC, and adding one would create a security surface that needs protection (who can call it? the first admin? how do you authorize the first admin?).
 - **This is an ops tool, not a feature.** It will be run once by an operator, not called by other services. It does not need to participate in the service mesh, emit events, or be load-balanced.
-- **Direct DB access is the simplest correct solution.** The CLI reuses the same GORM model as the auth service, so it stays in sync with schema migrations.
+- **Direct DB access is the simplest correct solution.** The CLI reuses the same GORM model as the Auth Service, so it stays in sync with schema migrations.
 
 In production environments, this pattern is common. Kubernetes operators often run one-off jobs (`kubectl exec`, init containers, or `Job` resources) that interact with databases directly. The important thing is to keep these tools in the same repository as the service they operate on, so they stay in sync.
 
@@ -44,10 +44,11 @@ import (
 	"gorm.io/gorm"
 
 	"github.com/fesoliveira014/library-system/services/auth/internal/model"
+	pkgdb "github.com/fesoliveira014/library-system/pkg/db"
 )
 ```
 
-The imports tell the story: this is a GORM + bcrypt program that reuses the auth service's `model.User` type. No gRPC, no HTTP, no Kafka.
+The imports tell the story: this is a GORM + bcrypt program that reuses the Auth Service's `model.User` type. No gRPC, no HTTP, no Kafka.
 
 ### Flag Parsing
 
@@ -65,7 +66,7 @@ func main() {
 	}
 ```
 
-Go's `flag` package is intentionally minimal. Flags are defined with `flag.String` (or `flag.Int`, `flag.Bool`, etc.), which returns a pointer. After `flag.Parse()`, the pointer is dereferenced to get the value. This is one of Go's more awkward APIs — the pointer indirection exists because `flag.Parse` needs to write values after the variables are declared.
+Go's `flag` package is intentionally minimal. Flags are defined with `flag.String` (or `flag.Int`, `flag.Bool`, etc.), which returns a pointer. After `flag.Parse()`, the pointer is dereferenced to get the value. This is one of Go's more awkward APIs—the pointer indirection exists because `flag.Parse` needs to write values after the variables are declared.
 
 If you are coming from Java/Kotlin, this is roughly equivalent to a bare-bones `args` parser. For more complex CLIs, libraries like Cobra or `urfave/cli` provide subcommands and help generation, but for a three-flag tool, `flag` is the right choice.
 
@@ -97,7 +98,7 @@ The `DATABASE_URL` is a standard PostgreSQL connection string (e.g., `postgres:/
 	hashStr := string(hash)
 ```
 
-This uses the same `bcrypt.DefaultCost` (10 rounds) as the auth service's registration flow. The password is never stored in plaintext. The `hashStr` variable exists because `model.User.PasswordHash` is a `*string` (nullable, since OAuth users do not have passwords).
+This uses the same `bcrypt.DefaultCost` (10 rounds) as the Auth Service's registration flow. The password is never stored in plaintext. The `hashStr` variable exists because `model.User.PasswordHash` is a `*string` (nullable, since OAuth users do not have passwords).
 
 ### Idempotent Upsert
 
@@ -135,7 +136,7 @@ The logic is intentionally idempotent:
 
 This means you can safely run the CLI multiple times. If you forget your admin password, re-run it with a new one. If a regular user needs to be promoted, point the CLI at their email.
 
-Note the use of GORM's `First` and `Save` — `First` returns an error if no record is found (GORM's `ErrRecordNotFound`), and `Save` performs a full update on the existing record. This is different from `Updates`, which only updates non-zero fields.
+Note the use of GORM's `First` and `Save`—`First` returns an error if no record is found (GORM's `ErrRecordNotFound`), and `Save` performs a full update on the existing record. This is different from `Updates`, which only updates non-zero fields.
 
 ---
 
@@ -177,6 +178,6 @@ psql "postgres://postgres:postgres@localhost:5434/auth?sslmode=disable" \
 ## Key Takeaways
 
 - **Bootstrapping tools bypass the API by design.** They solve problems that the API cannot solve (creating the first privileged account).
-- **Reuse domain models.** The CLI imports `model.User` from the auth service, keeping it in sync with the schema automatically.
+- **Reuse domain models.** The CLI imports `model.User` from the Auth Service, keeping it in sync with the schema automatically.
 - **Idempotency matters.** Running the tool twice should not fail or create duplicates.
 - **Keep it simple.** A single-file `main.go` with `flag` is appropriate for a tool with three arguments. Reach for Cobra when you have subcommands.

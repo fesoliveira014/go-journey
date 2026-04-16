@@ -2,7 +2,7 @@
 
 Section 13.8 built a deployment pipeline where GitHub Actions calls `kubectl apply`. When tests pass, the pipeline renders the production Kustomize overlay and pushes the result to EKS. This works, and for a single team with a single environment it is reasonable. But it encodes a directional assumption: the CI system holds the cluster's desired state and pushes it outward on demand.
 
-GitOps inverts that relationship. The cluster watches its own desired state in Git and pulls it in continuously. There is no push step. The CI pipeline's job ends at "commit the new image tag to the repository." From that moment, a controller running inside the cluster detects the change and reconciles. This section explains that model, introduces ArgoCD as the most widely adopted implementation, and maps out exactly how it would replace the pipeline you built in section 13.8 — without touching a line of application code.
+GitOps inverts that relationship. The cluster watches its own desired state in Git and pulls it in continuously. There is no push step. The CI pipeline's job ends at "commit the new image tag to the repository." From that moment, a controller running inside the cluster detects the change and reconciles. This section explains that model and introduces ArgoCD as the most widely adopted implementation. It maps out exactly how ArgoCD would replace the pipeline from section 13.8 — without touching a line of application code.
 
 This section is a discussion, not an implementation. ArgoCD is not added to the project here. The goal is to give you enough context to evaluate it against the simpler approach you already have and to know what adopting it later would require.
 
@@ -43,7 +43,7 @@ spec:
   source:
     repoURL: https://github.com/your-org/go-journey
     targetRevision: main
-    path: k8s/overlays/production
+    path: deploy/k8s/overlays/production
   destination:
     server: https://kubernetes.default.svc
     namespace: library
@@ -53,7 +53,7 @@ spec:
       selfHeal: true
 ```
 
-`path: k8s/overlays/production` is the Kustomize overlay directory you already have. ArgoCD detects Kustomize overlays automatically and runs `kustomize build` before applying. There is no ArgoCD-specific configuration inside the overlay itself.
+`path: deploy/k8s/overlays/production` is the Kustomize overlay directory you already have. ArgoCD detects Kustomize overlays automatically and runs `kustomize build` before applying. There is no ArgoCD-specific configuration inside the overlay itself.
 
 `syncPolicy.automated.selfHeal: true` enables drift correction — if someone applies a manual change to the cluster, ArgoCD reverts it on the next reconciliation cycle.
 
@@ -88,7 +88,7 @@ graph LR
     ACD -->|kustomize build + apply| EKS[EKS cluster]
 ```
 
-The CI pipeline's deployment step changes from `kubectl apply` to a Git commit. Instead of applying the rendered Kustomize overlay directly, the pipeline updates the image tag in the production overlay — for example, by writing a new value to `k8s/overlays/production/image-tags.yaml` — and commits it to the repository. ArgoCD polls the repository on a configurable interval (the default is three minutes; webhooks can reduce this to near-instant) and applies the change when it detects the commit.
+The CI pipeline's deployment step changes from `kubectl apply` to a Git commit. Instead of applying the rendered Kustomize overlay directly, the pipeline updates the image tag in the production overlay — for example, by writing a new value to `deploy/k8s/overlays/production/image-tags.yaml` — and commits it to the repository. ArgoCD polls the repository on a configurable interval (the default is three minutes; webhooks can reduce this to near-instant) and applies the change when it detects the commit.
 
 The CI pipeline's job boundaries change significantly. Previously, a successful pipeline both validated the code and mutated the cluster. With ArgoCD, those two responsibilities are separated: CI validates and publishes artifacts; ArgoCD is solely responsible for cluster mutations. This separation of concerns is easier to reason about and easier to audit.
 
@@ -107,7 +107,7 @@ When the CI pipeline builds and pushes a new image to ECR, the new image tag (ty
 ```yaml
 - name: Update image tag in overlay
   run: |
-    cd k8s/overlays/production
+    cd deploy/k8s/overlays/production
     kustomize edit set image \
       catalog=123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog:${{ github.sha }}
     git config user.name "github-actions[bot]"
@@ -128,9 +128,9 @@ ArgoCD also has an optional companion component called **ArgoCD Image Updater** 
 
 **Drift detection and correction.** The most operationally significant difference. If a team member runs `kubectl set image deployment/catalog catalog=wrong-image:latest` directly against production — intentionally as a hotfix, or accidentally — ArgoCD reverts it on the next sync cycle. The cluster converges back to what Git says within minutes. With a push pipeline, that drift persists until the next deployment.
 
-**Audit trail through Git history.** Every change to the cluster's state is a Git commit with an author, a timestamp, and a message. `git log k8s/overlays/production/` is your deployment history. `git show <sha>` shows exactly what changed. There is no separate deployment log to maintain, no CI job history to correlate. This matters for compliance and incident investigation.
+**Audit trail through Git history.** Every change to the cluster's state is a Git commit with an author, a timestamp, and a message. `git log deploy/k8s/overlays/production/` is your deployment history. `git show <sha>` shows exactly what changed. There is no separate deployment log to maintain, no CI job history to correlate. This matters for compliance and incident investigation.
 
-**Multi-environment management.** ArgoCD can watch multiple overlay directories simultaneously. Pointing one Application at `k8s/overlays/staging` and another at `k8s/overlays/production` gives you independent sync status and health views for each environment, in a single UI. Promoting a change from staging to production is a Git merge, not a pipeline parameterization.
+**Multi-environment management.** ArgoCD can watch multiple overlay directories simultaneously. Pointing one Application at `deploy/k8s/overlays/staging` and another at `deploy/k8s/overlays/production` gives you independent sync status and health views for each environment, in a single UI. Promoting a change from staging to production is a Git merge, not a pipeline parameterization.
 
 **Rollback via git revert.** Rolling back with `kubectl apply` requires knowing which image tag was running before and re-running the pipeline with that tag. Rolling back with ArgoCD is a `git revert` (or a click in the UI that performs the revert for you). The cluster is back to the previous state within minutes, and the revert is itself a commit — so the audit trail includes it.
 
@@ -146,7 +146,7 @@ ArgoCD also has an optional companion component called **ArgoCD Image Updater** 
 
 **The chicken-and-egg problem.** ArgoCD cannot install itself the first time. Something has to install ArgoCD into the cluster before it can manage anything. In practice this means keeping a small bootstrap script or Terraform module that runs once to install ArgoCD, after which ArgoCD can manage its own configuration and everything else. This is solvable, but it is a layer of bootstrapping complexity that does not exist with a pure `kubectl apply` approach.
 
-**Sync feedback in CI.** With `kubectl apply` in CI, the pipeline waits for the apply to complete and can fail the job if it does not. With ArgoCD, the CI pipeline commits an image tag and exits successfully — it does not wait for the sync to finish. Monitoring whether the deployment actually succeeded requires polling ArgoCD's API or using its CLI (`argocd app wait`) in a separate job. Getting "did the deploy succeed?" feedback back into the CI pipeline requires additional wiring.
+**Sync feedback in CI.** With `kubectl apply` in CI, the pipeline waits for the apply to complete and can fail the job if it does not. With ArgoCD, the CI pipeline commits an image tag and exits successfully — it does not wait for the sync to finish. Monitoring whether the deployment actually succeeded requires polling ArgoCD's API or using its CLI (`argocd app wait`) in a separate job. Getting "did the deploy succeed?" feedback into the CI pipeline requires additional wiring.
 
 **Overkill for a single team and environment.** For a single developer or a two-person team with one production environment and no compliance requirements, the operational overhead of ArgoCD is not justified by its benefits. The direct pipeline is simpler to understand, simpler to debug, and simpler to change. Complexity should be introduced in response to problems that exist, not in anticipation of problems that might exist.
 
@@ -170,9 +170,9 @@ The signal that a push pipeline is no longer sufficient usually comes from one o
 
 ArgoCD is not implemented in this project, and you should not feel compelled to add it. The pipeline in section 13.8 is sufficient for the learning context here, it is easier to follow step by step, and it avoids introducing a new system in a late chapter.
 
-What matters is that the groundwork for adopting ArgoCD later requires almost nothing new. The Kustomize overlay structure — `k8s/base/`, `k8s/overlays/staging/`, `k8s/overlays/production/` — is precisely the directory layout that ArgoCD expects as input. There are no ArgoCD-specific files inside an overlay; it reads standard Kustomize output.
+What matters is that the groundwork for adopting ArgoCD later requires almost nothing new. The Kustomize overlay structure — `deploy/k8s/base/`, `deploy/k8s/overlays/staging/`, `deploy/k8s/overlays/production/` — is precisely the directory layout that ArgoCD expects as input. There are no ArgoCD-specific files inside an overlay; it reads standard Kustomize output.
 
-Adopting ArgoCD when the project grows to where it makes sense is a three-step process: install ArgoCD into the cluster (typically via its Helm chart or the official install manifest), create an Application CRD pointing at `k8s/overlays/production`, and remove the `kubectl apply` step from the GitHub Actions pipeline. The application services, manifests, overlays, CI test stages, and ECR push steps all remain unchanged.
+Adopting ArgoCD when the project grows to where it makes sense is a three-step process: install ArgoCD into the cluster (typically via its Helm chart or the official install manifest), create an Application CRD pointing at `deploy/k8s/overlays/production`, and remove the `kubectl apply` step from the GitHub Actions pipeline. The application services, manifests, overlays, CI test stages, and ECR push steps all remain unchanged.
 
 The investment you have made in clean declarative manifests and well-structured Kustomize layers is not specific to any deployment model. It transfers to ArgoCD, Flux, or any other GitOps tool with no rework. When the team grows, or the environments multiply, or the first drift-caused incident happens, the migration path is clear.
 
@@ -180,6 +180,6 @@ The investment you have made in clean declarative manifests and well-structured 
 
 [^1]: ArgoCD Documentation: https://argo-cd.readthedocs.io/en/stable/
 [^2]: CNCF GitOps Principles: https://opengitops.dev/
-[^3]: Weaveworks — "GitOps — Operations by Pull Request": https://www.weave.works/blog/gitops-operations-by-pull-request
+[^3]: Weaveworks — "GitOps — Operations by Pull Request" (archived): https://web.archive.org/web/2024/https://www.weave.works/blog/gitops-operations-by-pull-request
 [^4]: ArgoCD Application CRD Reference: https://argo-cd.readthedocs.io/en/stable/operator-manual/application.yaml
 [^5]: ArgoCD AppProject CRD Reference: https://argo-cd.readthedocs.io/en/stable/operator-manual/appproject.yaml

@@ -1,6 +1,6 @@
 # Chapter 5: Gateway & Frontend
 
-Up to this point, the only way to interact with the library system is through `grpcurl` or a gRPC client library. That works for service-to-service communication, but end users need a browser-friendly interface. In this chapter, we build a **gateway service**—an HTTP server that renders HTML pages and delegates all business logic to the Auth and Catalog gRPC services behind it. This is the Backend-for-Frontend (BFF) pattern: a thin, presentation-focused layer tailored to a single client type (the browser).
+Until now, the only way to interact with the library system has been through `grpcurl` or a gRPC client library. That works for service-to-service communication, but end users need a browser-friendly interface. In this chapter, we build a **Gateway Service**—an HTTP server that renders HTML pages and delegates all business logic to the Auth and Catalog gRPC services behind it. This is the Backend-for-Frontend (BFF) pattern: a thin, presentation-focused layer tailored to a single client type (the browser).
 
 ## Architecture Overview
 
@@ -45,12 +45,12 @@ The gateway has no database and holds no business state; it is a translation lay
 
 ## Prerequisites
 
-- Chapters 1--4 completed (Auth and Catalog services running via Docker Compose)
+- Chapters 1–4 completed (Auth and Catalog services running via Docker Compose)
 - Familiarity with HTTP, cookies, and basic HTML forms
 
 ## Sections
 
-1. **[The BFF Pattern](./bff-pattern.md)**—What a BFF is, the Server struct, stdlib routing, and middleware
+1. **[The BFF Pattern](./bff-pattern.md)**—What a BFF is, the Server struct, stdlib routing, and middleware, the Server struct, stdlib routing, and middleware
 2. **[Templates & HTMX](./templates-htmx.md)**—Go templates, the clone-per-page pattern, and HTMX-powered filtering
 3. **[Session Management](./session-management.md)**—JWT cookies, login/logout flows, OAuth2 orchestration, and flash messages
 4. **[Admin CRUD](./admin-crud.md)**—Role guards, form handling, gRPC error mapping, and the Docker build

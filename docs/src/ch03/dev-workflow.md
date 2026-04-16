@@ -1,12 +1,12 @@
 # 3.4 Development Workflow
 
-The production Compose stack from the previous section builds optimized images and runs compiled binaries. Correct for deployment, painful for development: every code change requires rebuilding the Docker image and restarting the container. In this section, we set up a development workflow where your code changes trigger automatic rebuilds inside the running container.
+The production Compose stack from the previous section builds optimized images and runs compiled binaries—correct for deployment, but painful for development. Every code change requires rebuilding the Docker image and restarting the container. In this section, we set up a development workflow where your code changes trigger automatic rebuilds inside the running container.
 
 ---
 
 ## The Dev Override File Pattern
 
-Docker Compose supports **file merging**. When you pass multiple `-f` flags, Compose deep-merges the YAML files in order. The second file overrides matching keys from the first:
+Docker Compose supports **configuration merging** across multiple files. When you pass multiple `-f` flags, Compose deep-merges the YAML files in order. The second file overrides matching keys from the first:
 
 ```bash
 docker compose -f docker-compose.yml -f docker-compose.dev.yml up --build
@@ -92,7 +92,7 @@ Key settings:
 Here is `services/catalog/Dockerfile.dev`:
 
 ```dockerfile
-FROM golang:1.26-alpine
+FROM golang:1.22-alpine
 
 RUN go install github.com/air-verse/air@latest
 
@@ -114,18 +114,21 @@ CMD ["air", "-c", ".air.toml"]
 Key differences from the production Dockerfile:
 
 - **No multi-stage build.** We need the Go toolchain at runtime because Air calls `go build` on every change.
-- **Air installs** via `go install`. This adds the `air` binary to the Go toolchain's bin directory.
+- **Air is installed** via `go install`, which adds the `air` binary to the Go toolchain's bin directory.
 - **`CMD` instead of `ENTRYPOINT`.** `CMD` is easier to override if you want to debug something (e.g., `docker compose exec catalog sh`).
-- **No `CGO_ENABLED=0`.** The development build doesn't need to be fully static since the container has the necessary libraries.
+- **No `CGO_ENABLED=0`.** The development build does not need to be fully static since the container has the necessary libraries.
 
-The Gateway's `Dockerfile.dev` follows the same pattern, minus the `GOWORK=off` and `gen/` copy:
+The Gateway's `Dockerfile.dev` follows the same pattern, but it needs `gen/`, `pkg/auth/`, and `pkg/otel/` because the gateway imports from all three:
 
 ```dockerfile
-FROM golang:1.26-alpine
+FROM golang:1.22-alpine
 
 RUN go install github.com/air-verse/air@latest
 
 WORKDIR /app
+COPY gen/ ./gen/
+COPY pkg/auth/ ./pkg/auth/
+COPY pkg/otel/ ./pkg/otel/
 COPY services/gateway/ ./services/gateway/
 
 WORKDIR /app/services/gateway

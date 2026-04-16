@@ -6,17 +6,17 @@ Go's standard library ships with a testing package that is deliberately minimal.
 
 ## Table-Driven Tests
 
-The single most important pattern in Go testing is the table-driven test. Rather than writing a separate function for each input combination, you declare a slice of anonymous structs — one per scenario — and loop over them. The Go standard library itself uses this pattern extensively.
+The single most important pattern in Go testing is the table-driven test. Rather than writing a separate function for each input combination, you declare a slice of anonymous structs—one per scenario—and loop over them. The Go standard library itself uses this pattern extensively.
 
 ### Why a Slice of Anonymous Structs?
 
-Each element of the slice is a small, self-contained record describing one test case: its human-readable name, its inputs, and what the expected outcome looks like. The anonymous struct type is defined inline, so you avoid naming a type you will never use elsewhere. Adding a new case is a one-liner that does not require touching any control flow.
+Each element of the slice is a small, self-contained record describing one test case: its human-readable name, its inputs, and what the expected outcome looks like. The anonymous struct type is defined inline, so you avoid naming a type you will never use elsewhere. Adding a new case is a single line that does not require touching any control flow.
 
-Compare this to the C++ or Java approach of parameterized tests (GoogleTest's `INSTANTIATE_TEST_SUITE_P`, JUnit's `@ParameterizedTest`): the Go version has no framework machinery — it is just a slice and a loop.
+Compare this to the C++ or Java approach of parameterized tests (GoogleTest's `INSTANTIATE_TEST_SUITE_P`, JUnit's `@ParameterizedTest`): the Go version has no framework machinery—it is just a slice and a loop.
 
 ### Worked Example: `CreateBook` Validation
 
-The catalog service validates incoming books before persisting them. Let's test several invalid inputs and one valid input in a single function:
+The Catalog Service validates incoming books before persisting them. Let's test several invalid inputs and one valid input in a single function:
 
 ```go
 package service_test
@@ -77,7 +77,7 @@ Walk through the mechanics:
 - `tests` is a slice of an anonymous struct literal. The struct has three fields: the display name, the input, and the expected outcome expressed as a boolean rather than a concrete error value. Checking `wantErr` rather than a specific error message keeps the test resilient to phrasing changes in error strings.
 - The `for _, tt := range tests` loop gives you each case. The variable is conventionally named `tt` (short for "table test").
 - `t.Run(tt.name, func(t *testing.T) { ... })` registers each case as a named subtest. This is covered in detail in the next section.
-- Inside the subtest, `t.Errorf` (not `t.Fatalf`) is used so that all cases run even when one fails. If you used `t.Fatalf`, the first failure would abort the entire loop.
+- Inside the subtest, the test calls `t.Errorf` (not `t.Fatalf`) so that all cases run even when one fails. If you used `t.Fatalf`, the first failure would abort the entire loop.
 
 When a case fails, the output looks like:
 
@@ -241,7 +241,7 @@ func mustCreateBook(t *testing.T, svc *service.CatalogService, title string) *mo
 
 Calling `t.Helper()` at the top of the function tells the testing framework to skip this frame when reporting failure locations. The error is now attributed to the line in the test that called `mustCreateBook`, which is exactly where a human reader would look first.
 
-This is equivalent to what `__FILE__` and `__LINE__` macros give you in C/C++ when passing them through to assertion macros, except Go handles it automatically through the call stack.
+This is equivalent to what the `__FILE__` and `__LINE__` macros provide in C/C++ assertion wrappers, except that Go handles it automatically through the call stack.
 
 ### Convention for helper naming
 
@@ -297,7 +297,7 @@ External fixture files are most useful when:
 - The fixture is shared with other tools (e.g., a JSON schema also used in documentation or integration tests).
 - The data needs to be independently editable without touching Go source files (e.g., a product manager updates expected catalog records).
 
-For this project, book payloads are small (four to six fields), so inline struct literals are more readable than external files. If the catalog service later gains a bulk import feature that accepts multi-book JSON files, those test inputs belong in `testdata/`.
+For this project, book payloads are small (four to six fields), so inline struct literals are more readable than external files. If the Catalog Service later gains a bulk import feature that accepts multi-book JSON files, those test inputs belong in `testdata/`.
 
 ### Structure example
 
@@ -331,7 +331,7 @@ func TestBulkImport_Valid(t *testing.T) {
 }
 ```
 
-One subtlety: the `testdata/` directory is not special to the Go module system — it is just a naming convention that the toolchain respects. Do not put Go source files in `testdata/`; they will not be compiled, which can cause confusion.
+One subtlety: the `testdata/` directory is not special to the Go module system — it is just a naming convention that the toolchain respects. Do not place Go source files in `testdata/`; they are not compiled, which can cause confusion.
 
 ---
 

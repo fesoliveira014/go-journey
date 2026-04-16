@@ -1,6 +1,6 @@
 # 6.2 Admin Dashboard
 
-The admin can already manage books through the CRUD pages built in Chapter 5, but two questions remain unanswered: who are the users of the system, and what reservations exist? This section adds an admin dashboard with two new gRPC RPCs and three new gateway pages.
+The admin can already manage books through the CRUD pages built in Chapter 5, but two questions remain unanswered: Who are the registered users, and what reservations exist across the system? This section adds an admin dashboard with two new gRPC RPCs and three new gateway pages.
 
 ---
 
@@ -23,7 +23,7 @@ message ListUsersResponse {
 }
 ```
 
-The request is empty because there is no filtering or pagination. In a production system you would add `page_size`, `page_token`, and possibly filter fields. For a tutorial with a handful of users, returning them all is fine.
+The request is empty because this endpoint has no filtering or pagination. In a production system you would add `page_size`, `page_token`, and possibly filter fields. For a tutorial with a handful of users, returning them all is fine.
 
 After updating the proto, regenerate the Go code:
 
@@ -31,7 +31,7 @@ After updating the proto, regenerate the Go code:
 buf generate
 ```
 
-This updates the generated client and server interfaces in `gen/auth/v1/`. The auth service will not compile until you implement the new `ListUsers` method on the handler.
+This updates the generated client and server interfaces in `gen/auth/v1/`. The Auth Service will not compile until you implement the new `ListUsers` method on the handler.
 
 ---
 
@@ -66,7 +66,7 @@ func (s *AuthService) ListUsers(ctx context.Context) ([]*model.User, error) {
 }
 ```
 
-The service layer is a passthrough here. It exists to maintain the pattern — if you later need to add filtering, caching, or audit logging, you have a place to put it without touching the handler or repository.
+The service layer is a passthrough here. It exists to maintain the pattern—if you later need to add filtering, caching, or audit logging, you have a place to put it without touching the handler or repository.
 
 ### Handler: `ListUsers()` with `RequireRole`
 
@@ -140,7 +140,7 @@ message ReservationDetail {
 }
 ```
 
-Notice that `ReservationDetail` is a separate message from `Reservation`. The existing `Reservation` message stores raw IDs (`book_id`, `user_id`), which is correct for its use cases — the user already knows their own email, and the book title is shown on the page where they made the reservation. But the admin dashboard needs to display a table with human-readable columns: **who** reserved **what**. Embedding `book_title` and `user_email` directly in the response avoids forcing the gateway to make additional round trips.
+Notice that `ReservationDetail` is a separate message from `Reservation`. The existing `Reservation` message stores raw IDs (`book_id`, `user_id`), which is correct for its use cases—the user already knows their own email, and the book title is shown on the page where they made the reservation. But the admin dashboard needs to display a table with human-readable columns: **who** reserved **what**. Embedding `book_title` and `user_email` directly in the response avoids forcing the gateway to make additional round trips.
 
 ---
 
@@ -164,7 +164,7 @@ Embedding `model.Reservation` gives `ReservationDetail` all the fields of a rese
 
 ### New Auth Client Dependency
 
-To resolve `user_id` to an email address, the reservation service needs to call the auth service's `GetUser` RPC. This means a new dependency:
+To resolve `user_id` to an email address, the Reservation Service needs to call the Auth Service's `GetUser` RPC. This means a new dependency:
 
 ```go
 // services/reservation/internal/service/service.go
@@ -187,6 +187,8 @@ func NewReservationService(
 	// ...
 }
 ```
+
+The reservation service's `main.go` establishes this gRPC connection alongside the existing catalog connection. The Docker Compose networking (updated below) ensures the reservation container can reach `auth:50051`.
 
 Passing the address requires a matching update to `deploy/docker-compose.yml`:
 
@@ -230,7 +232,7 @@ func (s *ReservationService) ListAllReservations(ctx context.Context) ([]Reserva
 }
 ```
 
-This code iterates over every reservation and makes two gRPC calls per reservation: one to the catalog service for the book title, one to the auth service for the user email. This is an **N+1 problem** — if there are 100 reservations, this makes 200 gRPC calls.
+This code iterates over every reservation and makes two gRPC calls per reservation: one to the Catalog Service for the book title, one to the Auth Service for the user email. This is an **N+1 problem** — if there are 100 reservations, this makes 200 gRPC calls.
 
 **Why is this acceptable here?**
 
@@ -244,7 +246,7 @@ In a real system with thousands of reservations:
 
 - You would add **pagination** (`page_size` + `page_token`) to both the proto and the handler.
 - You would add **batch RPCs** (`GetUsers(ids)`, `GetBooks(ids)`) to reduce N+1 to 1+1 calls.
-- Or you would **denormalize** the book title and user email into the reservation database at write time (using Kafka events from the catalog and auth services to keep them in sync). Chapter 7 introduces exactly this kind of event-driven data flow.
+- Or you would **denormalize** the book title and user email into the reservation database at write time (using Kafka events from the Catalog and Auth services to keep them in sync). Chapter 7 introduces exactly this kind of event-driven data flow.
 
 ### Handler: `ListAllReservations()`
 

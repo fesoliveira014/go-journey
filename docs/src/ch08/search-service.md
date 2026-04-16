@@ -1,6 +1,6 @@
 # 8.2 Search Service
 
-The search service is a standalone microservice with a single responsibility: full-text search over the book catalog. It exposes two gRPC RPCs—`Search` and `Suggest`—and delegates all indexing work to an abstracted search engine interface. The service does not own any book data; it maintains a read-optimized projection of the catalog, kept in sync through Kafka events (section 8.1) and a bootstrap mechanism (section 8.3).
+The Search Service is a standalone microservice with a single responsibility: full-text search over the book catalog. It exposes two gRPC RPCs—`Search` and `Suggest`—and delegates all indexing work to an abstracted search engine interface. The service does not own any book data; it maintains a read-optimized projection of the catalog, kept in sync through Kafka events (section 8.1) and a bootstrap mechanism (section 8.3).
 
 If you are coming from Spring, think of this service as a `@Service` + `@RestController` pair, except the transport layer is gRPC instead of HTTP, and the data store is a search engine instead of a relational database. The layering is the same: handler (transport) -> service (business logic) -> repository (data access).
 
@@ -26,7 +26,7 @@ Each layer depends only on the one below it, and only through an interface. The 
 
 ## The BookDocument Model
 
-The search service defines its own document model, separate from the catalog's `model.Book`. This is intentional—the search index stores a denormalized, search-optimized view of the data:
+The Search Service defines its own document model, separate from the catalog's `model.Book`. This is intentional—the search index stores a denormalized, search-optimized view of the data:
 
 ```go
 // services/search/internal/model/model.go
@@ -391,4 +391,4 @@ The Kafka consumer runs in a goroutine—it blocks indefinitely, processing mess
 [^1]: [gRPC Go—Basics tutorial](https://grpc.io/docs/languages/go/basics/)—Official guide for implementing gRPC services in Go, including server setup and handler registration.
 [^2]: [Go Wiki—Interfaces](https://go.dev/wiki/CodeReviewComments#interfaces)—The Go team's recommendation on where to define interfaces: at the call site, not the implementation site.
 [^3]: [gRPC status codes](https://grpc.github.io/grpc/core/md_doc_statuscodes.html)—Reference for all gRPC status codes and when to use each one.
-[^4]: [Robert C. Martin—Interface Segregation Principle](https://web.archive.org/web/2020*/https://drive.google.com/file/d/0BwhCYaYDn8EgOTViYjJhYzMtMzYxMC00MzFjLWJjMzYtOGJiMDc5N2JkYmJi/view)—The original ISP paper, part of the SOLID principles.
+[^4]: Robert C. Martin, *Agile Software Development: Principles, Patterns, and Practices* (Prentice Hall, 2003)—Chapter 12 covers the Interface Segregation Principle as part of the SOLID principles.

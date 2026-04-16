@@ -57,7 +57,7 @@ The full file lives at `proto/catalog/v1/catalog.proto`. Let's go through it pie
 syntax = "proto3";
 ```
 
-This declares proto3 syntax. Proto3 is current; use it for new projects. The most notable change from proto2: all fields are optional by default and have zero-value defaults (empty string, 0, false). There's no `required` keyword.
+This declares proto3 syntax. Proto3 is the pragmatic default for new projects. Protobuf Editions, announced in 2023, is the long-term successor, but proto3 remains widely supported and is what most tooling expects. The most notable change from proto2: all fields are optional by default and have zero-value defaults (empty string, 0, false). There's no `required` keyword.
 
 ```protobuf
 package catalog.v1;

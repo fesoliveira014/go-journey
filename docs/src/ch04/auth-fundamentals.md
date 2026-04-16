@@ -1,6 +1,6 @@
 # 4.1 Authentication Fundamentals
 
-Before writing any authentication code, you need to understand two core building blocks: how to store passwords safely and how to issue tokens that prove a user's identity. This section covers both topics in depth. If you have worked with Spring Security, many of these concepts will feel familiar—the Go implementations are more explicit about what happens under the hood.
+Before writing any authentication code, you need to understand two core building blocks: how to store passwords safely and how to issue tokens that prove a user's identity. This section covers both topics in depth. If you have worked with Spring Security, many of these concepts will feel familiar—the Go implementations are more explicit about the underlying mechanics.
 
 ---
 
@@ -22,7 +22,7 @@ Critically, the salt is stored alongside the hash. It is not secret. Its purpose
 
 ### bcrypt: Purpose-Built for Passwords
 
-bcrypt solves both problems. It is intentionally slow (configurable via a cost factor), and it embeds a random salt automatically. The cost factor is an exponent: cost 10 means 2^10 = 1024 rounds of the internal cipher. Increasing the cost by 1 doubles the time per hash. As hardware gets faster, you increase the cost factor—this is what makes bcrypt "adaptive."
+bcrypt solves both problems. It is intentionally slow (configurable via a cost factor), and it embeds a random salt automatically. The cost factor is an exponent: cost 10 means 2^10 = 1,024 iterations of the key-expansion phase. Increasing the cost by 1 doubles the time per hash. As hardware gets faster, you increase the cost factor—this is what makes bcrypt "adaptive."
 
 A bcrypt hash looks like this:
 
@@ -54,7 +54,7 @@ err = bcrypt.CompareHashAndPassword(hash, []byte("plaintext"))
 // err == nil means match; err != nil means mismatch
 ```
 
-`bcrypt.DefaultCost` is 10. This takes roughly 100ms on modern hardware—fast enough that users don't notice, slow enough to make brute-force attacks impractical. Our auth service uses `DefaultCost` in the `Register` method:
+`bcrypt.DefaultCost` is 10. This takes roughly 100ms on modern hardware—fast enough that users don't notice, slow enough to make brute-force attacks impractical. Our Auth Service uses `DefaultCost` in the `Register` method:
 
 ```go
 hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -187,7 +187,7 @@ This is exactly our architecture. The Auth service issues tokens, and the Catalo
 
 ### The Revocation Problem
 
-JWTs have one significant weakness: you cannot revoke them before they expire. If a user's account is compromised, you cannot invalidate their token. Common mitigations include:
+JWTs have one significant weakness: You cannot revoke them before they expire. If a user's account is compromised, you cannot invalidate their token. Common mitigations include:
 
 - **Short expiration times** (our default is 24 hours—production systems often use 15 minutes with a separate refresh token)
 - **Token blocklists** (check a Redis set on each validation—but this reintroduces state)
@@ -197,7 +197,7 @@ For this project, we use short-lived tokens without a blocklist. This is a reaso
 
 ### When to Use Each
 
-- **JWT**: APIs, microservices, mobile apps, any system where clients are not browsers or where multiple services need to authenticate independently.
+- **JWT**: APIs, microservices, mobile apps, or any system where clients are not browsers or where multiple services need to authenticate independently.
 - **Sessions**: Traditional server-rendered web applications where the browser manages cookies and the application is a monolith.
 - **Hybrid**: Some systems use sessions for browser clients (with CSRF protection) and JWTs for API/service-to-service calls.
 

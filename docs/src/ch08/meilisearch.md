@@ -1,6 +1,6 @@
 # 8.3 Meilisearch Integration
 
-Meilisearch is a lightweight, open-source search engine written in Rust. It is designed for end-user-facing search: fast typo-tolerant queries, faceted filtering, and instant suggestions by default. It ships as a single binary, requires no JVM, and runs comfortably in a Docker container with 256MB of RAM.
+Meilisearch is a lightweight, open-source search engine written in Rust. It is designed for end-user-facing search: fast typo-tolerant queries, faceted filtering, and instant suggestions by default. It ships as a single binary, requires no JVM, and runs comfortably in a Docker container with 256 MB of RAM.
 
 **Why not Elasticsearch?** Elasticsearch is the industry standard, but it is also a complex distributed system. It needs a JVM, consumes significant resources at rest, and requires careful tuning for production use. For a learning project with a modest dataset, Meilisearch gives us the same search concepts (indexes, documents, filterable attributes, relevance ranking) by default. The Go client library (`meilisearch-go`) is well-maintained and straightforward.
 
@@ -231,7 +231,7 @@ This is one of Go's less elegant areas. JSON unmarshaling into `interface{}` pro
 
 ## Bootstrap: Initial Index Population
 
-When the search service starts for the first time, the Meilisearch index is empty. There are no Kafka events to replay (Kafka has a retention window, and events from before the search service existed are gone). We need to seed the index from the catalog.
+When the Search Service starts for the first time, the Meilisearch index is empty. There are no Kafka events to replay (Kafka has a retention window, and events from before the Search Service existed are gone). We need to seed the index from the catalog.
 
 The bootstrap package handles this:
 
@@ -307,7 +307,7 @@ Notice that bootstrap errors on individual books are logged but do not stop the 
 
 ### Testing Bootstrap
 
-The bootstrap tests use mocks for both the search service and the catalog gRPC client:
+The bootstrap tests use mocks for both the Search Service and the catalog gRPC client:
 
 ```go
 // services/search/internal/bootstrap/bootstrap_test.go
@@ -386,11 +386,11 @@ func Run(ctx context.Context, brokers []string, topic string, idx Indexer) error
 
 Several configuration choices are significant:
 
-- **Consumer group: `"search-indexer"`**—This is the Kafka consumer group ID. Kafka tracks which messages each group has consumed. If the search service restarts, it picks up where it left off. If you add a second consumer with a different group ID, both receive all messages independently.
+- **Consumer group: `"search-indexer"`**—This is the Kafka consumer group ID. Kafka tracks which messages each group has consumed. If the Search Service restarts, it picks up where it left off. If you add a second consumer with a different group ID, both receive all messages independently.
 
 - **`OffsetOldest`**—When the consumer group starts for the first time (no committed offsets), begin from the oldest available message. Combined with bootstrap, this is defense-in-depth: bootstrap loads the current state, and `OffsetOldest` catches any events published between bootstrap completion and consumer start.
 
-- **`NewBalanceStrategyRoundRobin()`**—If you scale the search service to multiple instances, this strategy distributes Kafka partitions evenly across them.
+- **`NewBalanceStrategyRoundRobin()`**—If you scale the Search Service to multiple instances, this strategy distributes Kafka partitions evenly across them.
 
 The `Consume` call blocks until the context is cancelled or an error occurs. The outer `for` loop retries after transient errors (broker rebalancing, temporary network issues). When the context is cancelled (shutdown signal), the function returns cleanly.
 
@@ -453,7 +453,7 @@ func handleEvent(ctx context.Context, idx Indexer, data []byte) error {
 
 Both `book.created` and `book.updated` map to `Upsert`—Meilisearch's `AddDocuments` method is an upsert (insert or replace) based on the primary key. There is no need to distinguish between creating a new document and updating an existing one.
 
-Unknown event types are logged and ignored. This is forward-compatible: if a future version of the catalog service publishes a new event type (say, `book.archived`), the current consumer will not crash.
+Unknown event types are logged and ignored. This is forward-compatible: if a future version of the Catalog Service publishes a new event type (say, `book.archived`), the current consumer will not crash.
 
 ### Testing the Consumer
 

@@ -6,9 +6,9 @@ Before configuring a single Earthly target or GitHub Actions workflow, we need a
 
 ## Continuous Integration
 
-**Continuous Integration (CI)** means merging your changes to the shared branch frequently — multiple times per day if possible — and running automated checks on every push. The goal is to catch integration problems early, when they are still cheap to fix.
+**Continuous Integration (CI)** means merging your changes to the shared branch frequently---multiple times per day if possible---and running automated checks on every push. The goal is to catch integration problems early, when they are still cheap to fix.
 
-The key word is *integration*. When two developers change the same codebase independently for a week and then try to merge, the resulting conflicts — in code, in behavior, in assumptions — are expensive. CI trades one large painful merge event for many small, low-cost merges. Each merge is automatically validated by the same test suite, so regressions surface within minutes rather than days.
+The key word is *integration*. When two developers change the same codebase independently for a week and then try to merge, the resulting conflicts—in code, in behavior, in assumptions—are expensive. CI trades one large painful merge event for many small, low-cost merges. Each merge is automatically validated by the same test suite, so regressions surface within minutes rather than days.
 
 If you have used Jenkins or TeamCity on a JVM project, you have used CI. The pipeline triggered on every push, ran `./gradlew test`, and failed the build if tests broke. That is the essential pattern. Everything else — parallelism, caching, reporting — is refinement.
 
@@ -18,7 +18,7 @@ The operational definition: **every push to the shared branch runs the full auto
 
 ## Continuous Delivery
 
-**Continuous Delivery (CD)** extends CI by ensuring that every green build produces a releasable artifact. In our case, that artifact is a Docker image. After the checks pass, the pipeline builds and publishes an image tagged with the commit SHA. The image could be deployed to production at any time — manually, with a click, or on a schedule.
+**Continuous Delivery (CD)** extends CI by ensuring that every green build produces a releasable artifact. In our case, that artifact is a Docker image. After the checks pass, the pipeline builds and publishes an image tagged with the commit SHA. The image could be deployed to production at any time---manually, with a click, or on a schedule.
 
 The key distinction:
 
@@ -86,7 +86,7 @@ The phrase "works on my machine" represents a specific failure: the build depend
 - A local Go module replace directive left in `go.mod`
 - macOS vs. Linux path or filesystem behavior
 
-Reproducibility means: **given the same inputs (source code, dependencies), the build produces the same outputs on any machine**. The mechanism is containers. If your build runs inside a Docker container with a pinned image, the environment is identical everywhere — your laptop, the CI server, your colleague's machine.
+Reproducibility means: **Given the same inputs (source code, dependencies), the build produces the same outputs on any machine**. The mechanism is containers. If your build runs inside a Docker container with a pinned image, the environment is identical everywhere — your laptop, the CI server, your colleague's machine.
 
 Earthly, which we cover in Section 10.2, enforces this by running every build target inside a container. You cannot accidentally depend on your local Go installation because the build uses the Go version declared in the Earthfile, not the one in your PATH.
 

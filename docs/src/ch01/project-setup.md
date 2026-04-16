@@ -6,18 +6,18 @@ Every Go project starts by answering one question: *how does the toolchain find,
 
 ## Go Modules
 
-If you come from the JVM world, a Go module resembles a Maven `pom.xml` or Gradle `build.gradle` file — it declares the name of the project, the minimum Go version required, and all external dependencies. Unlike Maven or Gradle, Go bakes module support directly into the toolchain (`go mod`) with no plugin layer.
+If you come from the JVM world, a Go module resembles a Maven `pom.xml` or Gradle `build.gradle` file. It declares the project name, the minimum Go version, and all external dependencies. Unlike Maven or Gradle, Go bakes module support directly into the toolchain (`go mod`) with no plugin layer.
 
 A module is a directory tree whose root contains a `go.mod` file. Every `.go` source file in that tree belongs to exactly one module.
 
 ### The `go.mod` File
 
-The gateway service's module file looks like this:
+The Gateway Service's module file looks like this:
 
 ```
 module github.com/fesoliveira014/library-system/services/gateway
 
-go 1.26.1
+go 1.22
 ```
 
 Three things worth unpacking:
@@ -28,7 +28,7 @@ Contrast this with Java packages, where the reverse-domain convention (`com.exam
 
 **`go` — the minimum language version.** This pins language semantics. The toolchain refuses to build if the installed Go version is older than what is declared here.
 
-**Dependencies** appear as `require` directives added automatically by `go get` or `go mod tidy`, following [Semantic Versioning](https://semver.org/). One Go-specific rule worth knowing early: if a module releases a v2 or higher, the major version must appear in the module path itself (`github.com/foo/bar/v2`). This lets two incompatible major versions coexist in a single binary without conflict — something that has historically been painful in Maven/Gradle projects.
+**Dependencies** appear as `require` directives added automatically by `go get` or `go mod tidy`, following [Semantic Versioning](https://semver.org/). One Go-specific rule worth knowing early: If a module releases a v2 or higher, the major version must appear in the module path itself (`github.com/foo/bar/v2`). This lets two incompatible major versions coexist in a single binary without conflict — something that has historically been painful in Maven/Gradle projects.
 
 ### Creating a Module
 
@@ -49,12 +49,12 @@ This project is a monorepo: multiple independently deployable services live insi
 The answer is `go.work`, introduced in Go 1.18. A workspace file at the repository root tells the toolchain to resolve specific module paths to local directories instead of fetching them from the network. It does not replace `go.mod` — each module retains its own dependency graph and builds independently. The workspace is a development-time overlay.
 
 ```
-go 1.26.1
+go 1.22
 
 use ./services/gateway
 ```
 
-The `use` directive registers a local module. When any code in the workspace imports a package whose path matches a registered module, the toolchain resolves it locally. This is analogous to Gradle's multi-project build, with one key advantage: each `go.mod` remains self-contained. Running `go build ./...` from inside `services/gateway` works exactly as if the workspace did not exist.
+The `use` directive registers a local module. When any code in the workspace imports a package whose path matches a registered module, the toolchain resolves it locally. This is analogous to Gradle's multi-project build, with one key advantage: Each `go.mod` remains self-contained. Running `go build ./...` from inside `services/gateway` works exactly as if the workspace did not exist.
 
 ### Workspace Commands
 
@@ -79,7 +79,7 @@ Go has no mandated project layout, but the community has converged on convention
 
 ### `cmd/`
 
-The `cmd/` directory holds executable entry points. Each subdirectory under `cmd/` corresponds to one binary. If a module produces a single binary, it is common to place `main.go` directly in `cmd/` without a further subdirectory. The gateway service does exactly this:
+The `cmd/` directory holds executable entry points. Each subdirectory under `cmd/` corresponds to one binary. If a module produces a single binary, it is common to place `main.go` directly in `cmd/` without a further subdirectory. The Gateway Service does exactly this:
 
 ```
 services/gateway/
@@ -110,21 +110,9 @@ services/gateway/
 
 ## Walkthrough: Recreating the Setup
 
-Here is the exact sequence of commands that produced the current project state.
+The modules and workspaces commands shown above produced the current project state. After running `go work init`, `go mod init`, and `go work use` as described, create the directory structure:
 
 ```bash
-# 1. Initialize the workspace at the repository root
-go work init
-
-# 2. Create and initialize the gateway module
-mkdir -p services/gateway
-cd services/gateway
-go mod init github.com/fesoliveira014/library-system/services/gateway
-
-# 3. Register the module with the workspace (run from the repo root)
-go work use ./services/gateway
-
-# 4. Create the directory structure
 mkdir -p services/gateway/cmd
 mkdir -p services/gateway/internal/handler
 ```

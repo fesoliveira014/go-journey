@@ -10,7 +10,7 @@ This section walks through the entire flow end-to-end: starting the stack, boots
 cd deploy && docker compose up --build
 ```
 
-Wait for all services to be healthy. You should see log output from `auth`, `catalog`, `reservation`, `gateway`, and the two Postgres instances. The gateway will be available at `http://localhost:8080`.
+Wait for all services to be healthy. You should see log output from `auth`, `catalog`, `reservation`, `gateway`, and the two PostgreSQL instances. The gateway will be available at `http://localhost:8080`.
 
 ---
 
@@ -44,7 +44,7 @@ go run ./services/catalog/cmd/seed \
   --password admin123
 ```
 
-You should see 16 books created. The seed CLI connects to `localhost:50051` (auth) and `localhost:50052` (catalog) by default, which match the ports exposed by Docker Compose.
+You should see sixteen books created. The seed CLI connects to `localhost:50051` (auth) and `localhost:50052` (catalog) by default, which match the ports exposed by Docker Compose.
 
 ---
 
@@ -104,14 +104,14 @@ Click **View Reservations**. The table should be empty — no one has reserved a
    - **Reserved:** today's date
    - **Returned:** a dash (not yet returned)
 
-This confirms the full flow: the reservation service resolves the book title from the catalog service and the user email from the auth service, embedding both in the `ReservationDetail` response.
+This confirms the full flow: the Reservation Service resolves the book title from the Catalog Service and the user email from the Auth Service, embedding both in the `ReservationDetail` response.
 
 ---
 
 ## What's Next
 
-At this point the library system is functional: users can register, browse, and reserve books; admins can manage the catalog and monitor activity. But the services are tightly coupled — the reservation service calls catalog and auth synchronously via gRPC, and the search service is not yet connected.
+At this point the library system is functional: users can register, browse, and reserve books; admins can manage the catalog and monitor activity. But the services are tightly coupled — the Reservation Service calls Catalog and Auth synchronously via gRPC, and the Search Service is not yet connected.
 
-In **Chapter 7**, we introduce **Kafka** and **event-driven architecture**. The catalog service will publish `book.created`, `book.updated`, and `book.deleted` events. The search service will consume these events to build and maintain a search index. The reservation service will publish `reservation.created` and `reservation.returned` events that the catalog service consumes to update available copy counts.
+In **Chapter 7**, we introduce **Kafka** and **event-driven architecture**. The Catalog Service will publish `book.created`, `book.updated`, and `book.deleted` events. The Search Service will consume these events to build and maintain a search index. The Reservation Service will publish `reservation.created` and `reservation.returned` events that the Catalog Service consumes to update available copy counts.
 
-This shift from synchronous RPC to asynchronous events is where the microservices architecture starts to pay for its complexity — services become more decoupled, more resilient, and more independently deployable.
+This shift from synchronous RPC to asynchronous events is where the microservices architecture starts to pay for its complexity—services become more decoupled, more resilient, and more independently deployable.

@@ -2,7 +2,7 @@
 
 The repository layer you built in the previous section knows exactly one thing: how to talk to a database. That's intentional — it has no opinion about whether a book title is required, whether you can delete a book that's currently checked out, or how to coordinate multiple repository calls into a single operation. That's the job of the **service layer**.
 
-The service layer is where business logic lives. It sits between the transport layer (gRPC handlers) and the persistence layer (repositories), and it does not depend on gRPC or GORM — it interacts with both only through interfaces it defines or receives. This section covers how Go interfaces enable that clean separation, how to express domain errors in a way callers can inspect, and how to test business logic in isolation using hand-written mocks.
+The service layer is where business logic lives. It sits between the transport layer (gRPC handlers) and the persistence layer (repositories), and it does not depend on gRPC or GORM — it interacts with the transport and persistence layers only through interfaces it defines or receives. This section covers how Go interfaces enable that clean separation, how to express domain errors in a way callers can inspect, and how to test business logic in isolation using hand-written mocks.
 
 ---
 
@@ -57,7 +57,7 @@ func NewCatalogService(repo BookRepository) *CatalogService {
 }
 ```
 
-> **Note:** In later chapters, we will extend this constructor to accept an `EventPublisher` for Kafka integration. The pattern stays the same — add a new interface dependency, pass it through the constructor.
+> **Note:** Later chapters extend this constructor to accept an `EventPublisher` for Kafka integration. The pattern stays the same — add a new interface dependency, pass it through the constructor.
 
 This is manual dependency injection — no framework, a constructor that takes what it needs. The service has no idea whether `repo` is backed by PostgreSQL, SQLite, or an in-memory map. That's the point.
 
@@ -83,7 +83,11 @@ func (s *CatalogService) CreateBook(ctx context.Context, book *model.Book) (*mod
 }
 ```
 
-Two things happen here that have nothing to do with SQL: the input is validated, and an invariant is enforced (`available_copies` must equal `total_copies` for a new book). The repository doesn't know about either rule — the repository doesn't validate either rule; the database CHECK constraints catch the most egregious violations, but defensive validation in the service layer produces better error messages and prevents an RPC round-trip. The service layer is the last line of defense before data reaches the database.
+Two things happen here that have nothing to do with SQL: the input is validated, and an invariant is enforced (`available_copies` must equal `total_copies` for a new book). The repository validates neither rule.
+
+> **Design note:** The database CHECK constraints catch the most egregious violations, but defensive validation in the service layer produces better error messages and prevents an RPC round-trip.
+
+The service layer is the last line of defense before data reaches the database.
 
 ---
 

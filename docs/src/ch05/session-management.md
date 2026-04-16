@@ -13,7 +13,7 @@ There are two common places to store a JWT in the browser:
 | **`localStorage`** | Vulnerable—any JavaScript can read it | Not vulnerable | No—you must add an `Authorization` header manually |
 | **HttpOnly cookie** | Protected—JavaScript cannot access the cookie | Needs `SameSite` attribute | Yes—the browser sends it on every request |
 
-We use HttpOnly cookies. `localStorage` is vulnerable to XSS (if an attacker injects JavaScript into your page, they can steal the token), while HttpOnly cookies are invisible to JavaScript entirely. The CSRF risk from cookies is mitigated by the `SameSite` attribute, which prevents the browser from sending the cookie on cross-origin requests.
+We use HttpOnly cookies. `localStorage` is vulnerable to XSS (if an attacker injects JavaScript into your page, they can steal the token), while HttpOnly cookies are entirely invisible to JavaScript. The CSRF risk from cookies is mitigated by the `SameSite` attribute, which prevents the browser from sending the cookie on cross-origin requests.
 
 If you have worked with Spring Security, this is the same trade-off between `JwtAuthenticationFilter` (reading from `Authorization` header, typically used by SPAs storing tokens in `localStorage`) and cookie-based session management.
 
@@ -185,13 +185,13 @@ func (s *Server) OAuth2Callback(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-`OAuth2Start` uses `302 Found` (not 303) because we want the browser to follow the redirect with the same method—standard for OAuth2 authorization redirects. `OAuth2Callback` uses `303 See Other` after setting the cookie, following the PRG pattern.
+`OAuth2Start` uses `302 Found`, the standard status code for OAuth2 authorization redirects. `OAuth2Callback` uses `303 See Other` after setting the cookie, following the PRG pattern.
 
 ---
 
 ## Flash Messages
 
-Flash messages are one-time notifications displayed after a redirect—"Book created", "Welcome back!", etc. In Spring, you would use `RedirectAttributes.addFlashAttribute()` backed by the session store. We use a simpler approach: a short-lived cookie, HMAC-signed so the client cannot tamper with it.
+Flash messages are one-time notifications displayed after a redirect—"Book created," "Welcome back!", etc. In Spring, you would use `RedirectAttributes.addFlashAttribute()` backed by the session store. We use a simpler approach: a short-lived cookie, HMAC-signed so the client cannot tamper with it.
 
 ```go
 // services/gateway/internal/handler/render.go
@@ -245,7 +245,7 @@ An early version of this handler wrote the message to the cookie as plaintext. N
 - An attacker who can set cookies on your domain (XSS elsewhere, a poisoned CDN, a sloppy third-party script) can silently hand-craft flash messages that look like they came from the server. Trust in UI messaging erodes.
 - The cookie is HTTP-visible in logs and proxies, so injecting hostile content there has downstream effects you do not control.
 
-Signing with [`gorilla/securecookie`][securecookie] closes all of that off with one line of server-side crypto. The server writes `HMAC(key, message) || message`, reads it back with the same key, and discards anything that does not verify. A tampered value decodes to an empty string; the user sees no flash, which is the correct failure mode.
+Signing with [`gorilla/securecookie`][securecookie] closes all of that off with one line of server-side crypto. The server writes `HMAC(key, message) || message` (where `||` denotes concatenation), reads it back with the same key, and discards anything that does not verify. A tampered value decodes to an empty string; the user sees no flash, which is the correct failure mode.
 
 The key must be at least 32 random bytes, read from the `FLASH_COOKIE_KEY` environment variable at startup (the gateway fails fast if it is unset—same 12-Factor philosophy as `JWT_SECRET`). Generate one with:
 
@@ -253,12 +253,14 @@ The key must be at least 32 random bytes, read from the `FLASH_COOKIE_KEY` envir
 openssl rand -hex 32
 ```
 
-The codec is wired into the `Server` via a functional option so tests can spin up a server with a random per-process key without touching more than 30 constructor call sites:
+The codec is wired into the `Server` via a functional option so tests can spin up a server with a random per-process key without touching more than thirty constructor call sites:
 
 ```go
 srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl,
     handler.WithFlashKey(flashKey))
 ```
+
+The `Server` constructor has grown since Section 5.1 — it now accepts the reservation and search clients introduced in Chapters 7 and 8, plus a functional option for flash message configuration.
 
 [securecookie]: https://pkg.go.dev/github.com/gorilla/securecookie
 
@@ -275,7 +277,7 @@ func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-The JWT itself is not invalidated—it is still valid until its `exp` claim. But without the cookie, the browser will not send it, and the user is effectively logged out. As discussed in section 4.1, true JWT revocation requires a blocklist or token versioning, which we intentionally omit for simplicity.
+The JWT itself is not invalidated—it is still valid until its `exp` claim. But without the cookie, the browser will not send it, and the user is effectively logged out. As discussed in Section 4.1, true JWT revocation requires a blocklist or token versioning, which we intentionally omit for simplicity.
 
 The logout route is `POST /logout`, not `GET /logout`. This is important: GET requests should not have side effects. A malicious page could embed `<img src="https://example.com/logout">` and log users out. Using POST with a form submission prevents this.
 

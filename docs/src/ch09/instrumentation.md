@@ -1,6 +1,6 @@
 # 9.2 Instrumenting Go Services
 
-With the theory from section 9.1 in hand, we now instrument three services: the gateway (HTTP), the catalog (gRPC + Kafka + PostgreSQL), and the reservation service (gRPC + Kafka + PostgreSQL). The pattern is the same each time. Initialize OTel once in `main()`, attach auto-instrumentation to transports, and add manual instrumentation where auto-instrumentation does not reach.
+With the theory from section 9.1 in hand, we now instrument three services: the gateway (HTTP), the catalog (gRPC + Kafka + PostgreSQL), and the Reservation Service (gRPC + Kafka + PostgreSQL). The pattern is the same for each service. Initialize OTel once in `main()`, attach auto-instrumentation to transports, and add manual instrumentation where auto-instrumentation does not reach.
 
 ---
 
@@ -100,7 +100,7 @@ Notice the import alias at the top of `otel.go`:
 otelgo "go.opentelemetry.io/otel"
 ```
 
-Our package is also named `otel` (it lives at `pkg/otel`). Without the alias, calling `otel.SetTracerProvider()` would refer to our own package, not the upstream OTel library. The alias `otelgo` resolves this. You will see this pattern in the service layer too—the catalog service uses the same alias for the same reason.
+Our package is also named `otel` (it lives at `pkg/otel`). Without the alias, calling `otel.SetTracerProvider()` would refer to our own package, not the upstream OTel library. The alias `otelgo` resolves this. You will see this pattern in the service layer too—the Catalog Service uses the same alias for the same reason.
 
 In Java, this would not happen because packages and imports use fully qualified names. In Go, import paths and package names are separate concepts, and collisions require aliases.
 
@@ -114,7 +114,7 @@ The shutdown function uses `sync.Once` to ensure the TracerProvider and MeterPro
 
 ## Auto-Instrumentation
 
-Auto-instrumentation means attaching OTel to existing transports (HTTP, gRPC, SQL) without touching business logic. You wrap your server or client with an OTel-aware middleware, and spans are created automatically.
+Auto-instrumentation attaches OTel to existing transports (HTTP, gRPC, SQL) without touching business logic. You wrap your server or client with an OTel-aware middleware, and spans are created automatically.
 
 ### HTTP: `otelhttp`
 
@@ -136,7 +136,7 @@ h = otelhttp.NewHandler(h, "gateway")
 3. Attaches standard attributes: `http.method`, `http.route`, `http.status_code`, `http.request_content_length`
 4. Records the `http_server_request_duration_seconds` histogram metric
 
-This is the equivalent of Spring's `WebMvcMetricsFilter` combined with Micrometer Tracing's `ServerHttpObservationFilter`. One line of code gives you both tracing and HTTP metrics.
+This is the equivalent of Spring Boot 3's `ServerHttpObservationFilter`, which handles both tracing and HTTP metrics in a single filter. One line of code gives you the same coverage.
 
 ### gRPC: `otelgrpc`
 
@@ -190,7 +190,7 @@ This is the equivalent of the Hibernate or JDBC auto-instrumentation you get wit
 
 ## Manual Instrumentation: Kafka
 
-HTTP and gRPC have mature contrib libraries that handle context propagation automatically. Kafka does not. The `otelsarama` contrib package exists but may not be compatible with every version of the `sarama` library. Our approach is manual: we implement the `propagation.TextMapCarrier` interface ourselves.
+HTTP and gRPC have mature contrib libraries that handle context propagation automatically. Kafka does not. The `otelsarama` contrib package exists — check compatibility with your Sarama version before adopting it. Our approach is manual: we implement the `propagation.TextMapCarrier` interface ourselves.
 
 ### The TextMapCarrier Adapter
 
@@ -228,7 +228,7 @@ func (c *headerCarrier) Keys() []string {
 }
 ```
 
-This is a small type, but it is the critical glue that makes cross-service tracing work across an asynchronous boundary. Without it, your trace would end at the Kafka publish and a new, disconnected trace would start at the consumer.
+This small type is the critical glue that makes cross-service tracing work across an asynchronous boundary. Without it, your trace would end at the Kafka publish and a new, disconnected trace would start at the consumer.
 
 ### Producer Side: Injecting Context
 
@@ -266,7 +266,7 @@ func (p *Publisher) Publish(ctx context.Context, event service.BookEvent) error 
 
 We then create a `catalog.publish` span to measure the Kafka send itself. This span becomes a child of the gRPC handler span.
 
-The reservation service has an identical pattern in `services/reservation/internal/kafka/publisher.go`—same `headerCarrier` adapter, same `Inject` + `Start` sequence.
+The Reservation Service has an identical pattern in `services/reservation/internal/kafka/publisher.go`—same `headerCarrier` adapter, same `Inject` + `Start` sequence.
 
 ### Consumer Side: Extracting Context
 
@@ -379,11 +379,11 @@ No test changes needed. This is the benefit of the API/SDK split: the API works 
 
 ## Exercises
 
-1. **Instrument the auth service.** Apply the same patterns to `services/auth/cmd/main.go`: call `pkgotel.Init()`, add `otelgrpc.NewServerHandler()` to the gRPC server, add the GORM tracing plugin. Verify that login traces now show the auth service as a span.
+1. **Instrument the Auth Service.** Apply the same patterns to `services/auth/cmd/main.go`: call `pkgotel.Init()`, add `otelgrpc.NewServerHandler()` to the gRPC server, add the GORM tracing plugin. Verify that login traces now show the Auth Service as a span.
 
-2. **Instrument the search service.** The search service uses Meilisearch, which has no OTel plugin. Create manual spans around Meilisearch client calls using `otel.Tracer("search").Start(ctx, "meilisearch.search")`. How would you record the query string as a span attribute?
+2. **Instrument the Search Service.** The Search Service uses Meilisearch, which has no OTel plugin. Create manual spans around Meilisearch client calls using `otel.Tracer("search").Start(ctx, "meilisearch.search")`. How would you record the query string as a span attribute?
 
-3. **Add a custom metric.** Add a `reservation.active.total` UpDownCounter to the reservation service that increments on `Reserve()` and decrements on `Return()`. Verify it appears in Prometheus after running the stack.
+3. **Add a custom metric.** Add a `reservation.active.total` UpDownCounter to the Reservation Service that increments on `Reserve()` and decrements on `Return()`. Verify it appears in Prometheus after running the stack.
 
 4. **Trace a full request.** With the stack running (`docker compose up`), create a book via the gateway, then reserve it. Open Tempo in Grafana and find the trace. You should see spans from gateway, catalog (gRPC + DB + Kafka publish), and the linked consumer trace. Count the total number of spans.
 

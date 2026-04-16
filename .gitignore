@@ -34,6 +34,9 @@ Thumbs.db
 .env
 .env.local
 
+# Editorial
+editorial/
+
 # mdBook output and generated assets
 /site/
 docs/mermaid-init.js

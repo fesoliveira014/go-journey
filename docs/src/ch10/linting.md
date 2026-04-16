@@ -21,13 +21,13 @@ These are real bugs. Running `go vet ./...` as part of your CI pipeline is non-n
 - Whether `if x == true` could be simplified to `if x`
 - Which variable is assigned a value that is immediately overwritten and never read
 
-For that, you need a broader set of static analysis tools. Running them separately is slow, because each one must parse and type-check the entire codebase independently. `golangci-lint` solves this.
+For that, you need a broader set of static analysis tools. Running them separately is slow because each must parse and type-check the entire codebase independently. `golangci-lint` solves this.
 
 ---
 
 ## What golangci-lint Is
 
-`golangci-lint` is a meta-linter[^1]. It wraps dozens of individual Go linters and runs them in parallel, sharing a single AST parse and type-check pass across all of them. This makes it significantly faster than running each linter in sequence — a codebase that would take 30 seconds to analyze five times takes roughly 5 seconds to analyze once.
+`golangci-lint` is a meta-linter[^1]. It wraps dozens of individual Go linters and runs them in parallel, sharing a single AST parse and type-check pass. This makes it significantly faster than running each linter in sequence — a codebase that would take 30 seconds to analyze five times takes roughly 5 seconds to analyze once.
 
 It is the de facto standard Go linting tool. Most open-source Go projects, cloud-native projects, and enterprise Go codebases use it. It produces consistent, structured output and integrates with editors, GitHub Actions, and pre-commit hooks.
 
@@ -85,16 +85,16 @@ The unflagged version will silently swallow any error that `Close` returns — a
 
 `staticcheck` is a broad static analysis suite maintained by Dominik Honnef[^2]. It is not a single check — it is a collection of hundreds of checks organized by category:
 
-- `SA` (static analysis) — bugs and correctness issues. `SA1006` catches `Printf` calls with no formatting verbs; `SA4003` catches comparing unsigned integers to negative numbers.
+- `SA` (static analysis) — bugs and correctness issues. `SA1006` catches `Printf` calls with a dynamic format string and no additional arguments; `SA4003` catches comparing unsigned integers to negative numbers.
 - `S` (simple) — code that can be rewritten more idiomatically. `S1000` flags `select` with a single case (just use the channel operation directly).
 - `ST` (style) — conventions. `ST1003` checks naming conventions (exported names should be MixedCaps, not snake_case).
 - `QF` (quickfix) — suggestions with known automated fixes.
 
-`staticcheck` overlaps with `govet` in some areas but goes considerably further. In the JVM world, it is closest to SpotBugs (the successor to FindBugs) — broad pattern-based analysis that finds real bugs without requiring annotations or custom rules.
+`staticcheck` overlaps with `govet` in some areas but goes further. In the JVM world, it is closest to SpotBugs (the successor to FindBugs) — broad pattern-based analysis that finds real bugs without requiring annotations or custom rules.
 
 ### `unused`
 
-Dead code detection. `unused` finds unexported identifiers — functions, types, variables, constants — that are defined but never referenced. This matters in a microservices project where services share packages: it is easy to add a helper function during development and then refactor away all its callers without noticing.
+Dead code detection. `unused` finds unexported identifiers — functions, types, variables, constants — that are defined but never referenced. This matters in a microservices project where services share packages: it is easy to add a helper function during development, then refactor away all its callers without noticing.
 
 Note that `unused` only checks unexported identifiers. Exported identifiers are assumed to be part of a public API and could be used by external code that the linter cannot see.
 

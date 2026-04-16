@@ -6,7 +6,7 @@ We have an Auth service that issues JWTs. Now we need to make other services *re
 
 ## gRPC Interceptors Explained
 
-If you come from the Java world, gRPC interceptors are the equivalent of **servlet filters**, Spring's `HandlerInterceptor`, or JAX-RS `ContainerRequestFilter`. They sit in front of your handlers and can inspect, modify, or reject requests before they reach your business logic.
+If you have worked with Java, gRPC interceptors are the equivalent of **servlet filters**, Spring's `HandlerInterceptor`, or JAX-RS `ContainerRequestFilter`. They sit in front of your handlers and can inspect, modify, or reject requests before they reach your business logic.
 
 gRPC defines two types:
 - **Unary interceptors**—for request/response RPCs (the kind we use)
@@ -35,7 +35,7 @@ Our auth interceptor does three of these: it rejects requests without valid toke
 
 ## The `pkg/auth/` Shared Library
 
-The `pkg/auth` directory is a **separate Go module** with its own `go.mod`. Services import it via `replace` directives in the workspace. Both the Auth and Catalog services depend on it. It contains three files:
+The `pkg/auth` directory is a **separate Go module** with its own `go.mod`. Services import it via `replace` directives in their `go.mod` files. Both the Auth and Catalog services depend on it. It contains three files:
 
 | File | Purpose |
 |---|---|
@@ -45,7 +45,7 @@ The `pkg/auth` directory is a **separate Go module** with its own `go.mod`. Serv
 
 Why put this in `pkg/` rather than inside the Auth service? Because multiple services need it. The Catalog service needs to validate tokens and check roles. If this code lived inside `services/auth/`, the Catalog service would need to import from the Auth service's internal packages—which violates Go's `internal` package convention and creates a tight coupling between services.
 
-The `pkg/` directory is a Go community convention (not a language requirement) for packages intended to be imported by other packages within the same module. In a monorepo like ours, it is the natural home for shared libraries.
+The `pkg/` directory is a common Go convention (not a language requirement) for packages intended to be imported by other packages within the same repository. In a monorepo like ours, it is the natural home for shared libraries.
 
 ---
 
@@ -170,7 +170,7 @@ func RequireRole(ctx context.Context, required string) error {
 }
 ```
 
-Note the distinction between `Unauthenticated` (no role in context = the interceptor didn't run or the user isn't logged in) and `PermissionDenied` (the user is authenticated but lacks the required role). This maps directly to HTTP 401 vs 403.
+Note the distinction between `Unauthenticated` (no role in context = the interceptor did not run or the user is not logged in) and `PermissionDenied` (the user is authenticated but lacks the required role). This maps directly to HTTP 401 vs 403.
 
 ---
 

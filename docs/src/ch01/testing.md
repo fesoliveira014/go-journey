@@ -1,6 +1,6 @@
 ## 1.4 Testing
 
-Go's testing story is opinionated and minimal. There is no JUnit, no TestNG, no pytest — just the standard library's `testing` package and a handful of conventions baked into the toolchain. If you are used to writing `@Test` annotations or `assert.assertEquals`, the first thing you will notice is the absence of assertions. Go's philosophy is that your test functions are ordinary code, and `if` is perfectly capable of expressing a failure condition.
+Go's testing story is opinionated and minimal. There is no JUnit, no TestNG, no pytest — just the standard library's `testing` package and a handful of conventions baked into the toolchain. If you are used to writing `@Test` annotations or `assert.assertEquals`, you will immediately notice the absence of assertions. Go's philosophy is that your test functions are ordinary code, and `if` is perfectly capable of expressing a failure condition.
 
 ---
 
@@ -22,7 +22,7 @@ The function must start with `Test`, the next character must be uppercase, and t
 | `t.Fatalf(...)` | Marks the test as failed, stops immediately | `fail(message)` — hard |
 | `t.Logf(...)` | Logs a message, only visible with `-v` | `System.out.println` |
 
-These three methods are the only assertion mechanism you get by default. It forces you to write precise, readable failure messages instead of relying on a framework to format them for you. Many Go projects add `github.com/stretchr/testify/assert` for convenience, but the standard library suffices and is what this project uses.[^1]
+These three methods are the only assertion mechanism you get by default. This constraint forces you to write precise, readable failure messages instead of relying on a framework to format them for you. Many Go projects add `github.com/stretchr/testify/assert` for convenience, but the standard library suffices and is what this project uses.[^1]
 
 #### Package Naming: `_test` Suffix
 
@@ -77,6 +77,7 @@ Here is the health handler rewritten as a table-driven test:
 package handler_test
 
 import (
+    "encoding/json"
     "net/http"
     "net/http/httptest"
     "testing"
@@ -206,7 +207,7 @@ Coverage is a proxy metric, not a goal. 100% coverage does not mean the code is 
 
 ### Testing with Earthly
 
-The gateway's `Earthfile` defines a `+test` target:
+The gateway's `Earthfile` includes a `+test` target that runs the full suite inside a reproducible container. Chapter 10 covers Earthly and CI/CD in depth; for now, here is the target for reference:
 
 ```earthly
 test:
@@ -214,17 +215,7 @@ test:
     RUN go test -v -race -cover ./...
 ```
 
-Running `earthly +test` from the gateway directory executes the full test suite inside a reproducible container — the same `golang:1.22-alpine` image used for CI. This eliminates "works on my machine" failures caused by different Go versions, OS-level race detector support, or missing environment variables.
-
-The root `Earthfile` composes this target into a `ci` pipeline alongside linting:
-
-```earthly
-ci:
-    BUILD ./services/gateway+lint
-    BUILD ./services/gateway+test
-```
-
-This is why reproducible environments matter: the same `earthly +ci` invocation runs identically on a developer laptop, in a GitHub Actions runner, or inside any other container runtime. No JVM toolchain to configure, no Gradle wrapper, no Maven `settings.xml` — just a container and the `earthly` binary.[^4]
+Running `earthly +test` executes the tests in the same `golang:1.22-alpine` image used for CI, eliminating "works on my machine" failures.[^4]
 
 ---
 

@@ -1,6 +1,6 @@
 # 5.2 Templates & HTMX
 
-Go's `html/template` package is a server-side template engine for HTML output. If you have used Thymeleaf with Spring, the concept is familiar: you write HTML files with special directives that the server evaluates before sending the response. The difference is that Go templates are not XML-attribute-based (like Thymeleaf's `th:text`)—they use a `{{...}}` syntax embedded in the HTML.
+Go's `html/template` package is a server-side template engine for HTML output. If you have used Thymeleaf with Spring, the concept is familiar. You write HTML files with special directives that the server evaluates before sending the response. The difference is that Go templates are not XML-attribute-based (like Thymeleaf's `th:text`)—they use a `{{...}}` syntax embedded in the HTML.
 
 This section covers the template system, explains a subtle gotcha, and introduces HTMX for progressive enhancement.
 
@@ -214,7 +214,7 @@ The key call is `tmpl.ExecuteTemplate(w, "base.html", pd)`—it starts rendering
 
 ## HTMX: Hypermedia-Driven Interactivity
 
-HTMX[^1] is a small JavaScript library (14 KB) that lets you add dynamic behavior to server-rendered HTML without writing JavaScript. Its philosophy is that the server should return **HTML fragments**, not JSON—the browser swaps fragments into the DOM. This is the hypermedia approach, and it is a natural fit for a Go BFF.
+HTMX[^1] is a small library (14 KB gzipped) that adds dynamic behavior to server-rendered HTML without requiring you to write client-side code. Its philosophy is that the server should return **HTML fragments**, not JSON—the browser swaps fragments into the DOM. This is the hypermedia approach, and it is a natural fit for a Go BFF.
 
 ### The Three Key Attributes
 
@@ -339,6 +339,8 @@ HTMX is *not* a good fit when:
 - You are building a complex, highly interactive UI (a spreadsheet, a drag-and-drop kanban board)
 - You need offline support
 - Your team already has deep React/Vue/Angular expertise and the application demands it
+
+HTMX can coexist with small islands of vanilla JavaScript for interactions that fall outside its model, such as confirmation dialogs.
 
 For our library system—catalog browsing with filters and admin CRUD forms—HTMX is the right tool. It adds interactivity with zero JavaScript in our codebase and keeps all rendering logic on the server.
 

@@ -1,6 +1,6 @@
 # Chapter 7: Event-Driven Architecture — Reservation Service & Kafka
 
-In this chapter we build the Reservation service and introduce Apache Kafka for asynchronous inter-service communication. Users can reserve and return books through the gateway, and the catalog's available copies update automatically via event-driven messaging.
+In this chapter, we build the Reservation service and introduce Apache Kafka for asynchronous inter-service communication. Users can reserve and return books through the gateway, and the catalog's available copies update automatically via event-driven messaging.
 
 > **Tip:** If you haven't already, create an admin account and seed the catalog using the CLI tools from Chapter 6. Sample books in the catalog make it easier to watch events flow through the system.
 
@@ -22,9 +22,9 @@ Browser → Gateway (HTTP) → Reservation Service (gRPC)
 Reservation Service → Kafka "reservations" topic → Catalog Consumer → updates available_copies
 ```
 
-**Reads are synchronous** — the reservation service calls the catalog via gRPC to check availability before creating a reservation.
+**Reads are synchronous** — the Reservation Service calls the Catalog via gRPC to check availability before creating a reservation.
 
-**Writes are asynchronous** — state changes (created, returned, expired) are published to Kafka as events. The catalog service runs a consumer goroutine that processes these events and updates book availability.
+**Writes are asynchronous** — state changes (created, returned, expired) are published to Kafka as events. The Catalog Service runs a consumer goroutine that processes these events and updates book availability.
 
 ## Sections
 

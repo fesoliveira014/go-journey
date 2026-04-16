@@ -1,6 +1,6 @@
 # Chapter 4: Authentication
 
-In this chapter, we build an authentication service from scratch. By the end, your library system will support user registration with bcrypt-hashed passwords, stateless JWT-based sessions, and OAuth2 login with Google. A shared interceptor will protect both the Auth and Catalog services.
+In this chapter, we build an authentication service from scratch. By the end, your library system will support user registration with bcrypt-hashed passwords, stateless JWT-based authentication, and OAuth2 login with Google. A shared interceptor will protect both the Auth and Catalog services.
 
 ## Architecture Overview
 
@@ -39,7 +39,7 @@ The `pkg/auth` module is the linchpin—it lives outside both services so any mi
 
 - Why bcrypt is the right choice for password hashing and how it works
 - How JWTs provide stateless authentication for microservices
-- Building a complete gRPC auth service with registration, login, and token validation
+- Building a complete gRPC Auth Service with registration, login, and token validation
 - Implementing OAuth2 authorization code flow with Google
 - Writing gRPC interceptors—the middleware pattern for gRPC
 - Role-based access control across multiple services

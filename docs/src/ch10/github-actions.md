@@ -1,6 +1,6 @@
 # 10.3 GitHub Actions Workflows
 
-GitHub Actions is the orchestration layer of our pipeline. It answers one question: *when* should something run, and with what environment? The build logic itself lives in the Earthfile (Section 10.2). GitHub Actions triggers that logic at the right moment, supplies secrets, and runs parallel jobs across services.
+GitHub Actions is the orchestration layer of our pipeline. It answers one question: *when* should something run, and with what environment? The build logic itself lives in the Earthfile (Section 10.2). GitHub Actions triggers that logic, supplies secrets, and runs parallel jobs across services.
 
 This section walks through the two workflow files in this project, explains every line, and shows what the equivalent pure-GHA approach would look like so you can understand the trade-off.
 
@@ -8,7 +8,7 @@ This section walks through the two workflow files in this project, explains ever
 
 ## GitHub Actions Concepts
 
-A **workflow** is a YAML file placed in `.github/workflows/`. GitHub detects these files automatically — no registration step, no webhook configuration. Any file in that directory matching the `on:` trigger criteria runs on GitHub's infrastructure.[^1]
+A **workflow** is a YAML file placed in `.github/workflows/`. GitHub detects these files automatically---no registration step, no webhook configuration. Any file in that directory matching the `on:` trigger criteria runs on GitHub's infrastructure.[^1]
 
 The key vocabulary:
 
@@ -16,7 +16,7 @@ The key vocabulary:
 |---|---|
 | **Workflow** | A YAML file defining one automated process (e.g., `pr.yml`, `main.yml`) |
 | **Trigger** (`on:`) | The event that starts the workflow: `push`, `pull_request`, `schedule`, `workflow_dispatch` |
-| **Job** | A group of steps that runs on a single runner VM. Jobs run in parallel by default |
+| **Job** | A group of steps that run on a single runner VM. Jobs run in parallel by default |
 | **Step** | A single shell command or Action within a job |
 | **Runner** | The VM that executes a job. `ubuntu-latest` is GitHub's managed Ubuntu image, reset to a clean state on every run |
 | **Action** | A reusable step published to the Actions Marketplace (e.g., `actions/checkout@v4`) |
@@ -103,7 +103,7 @@ If you did not use Earthly, the same CI job would look like this:
 >   - uses: actions/checkout@v4
 >   - uses: actions/setup-go@v5
 >     with:
->       go-version: '1.26'
+>       go-version: '1.22'
 >   - uses: golangci/golangci-lint-action@v6
 >   - run: go test ./...
 > ```
@@ -237,7 +237,7 @@ The split between `pr.yml` and `main.yml` encodes a policy decision in code:
 - **PRs validate.** Anyone can open a PR. You want fast feedback on whether the change is correct. You do not want to publish anything yet.
 - **Main publishes.** Only merged commits land on `main`. At that point, CI has already passed (on the PR), and you want a versioned artifact.
 
-If you used a single workflow triggered on both `push` and `pull_request`, you would need conditional logic (`if: github.event_name == 'push'`) to skip publishing on PR runs. Separate files are more readable and easier to audit.
+With a single workflow triggered on both `push` and `pull_request`, you would need conditional logic (`if: github.event_name == 'push'`) to skip publishing on PR runs. Separate files are more readable and easier to audit.
 
 There is also a security reason: the `packages: write` permission needed for GHCR is only declared in `main.yml`. The PR workflow never requests it. Since PRs can come from forks, limiting permissions on PR runs reduces the blast radius of a supply-chain attack embedded in a dependency or Action.[^2]
 

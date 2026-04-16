@@ -8,7 +8,7 @@ This section walks through the final steps: building images, loading them into t
 
 ## Build and Load Images
 
-The first step is getting fresh images into the kind node. As covered in section 12.1, kind nodes run their own `containerd` daemon and cannot see images in the host Docker daemon. You must build and then explicitly load.
+The first step is getting fresh images into the kind node. As discussed in section 12.1, kind nodes run their own `containerd` daemon and cannot see images in the host Docker daemon. You must build and then explicitly load.
 
 **Build all service images with Earthly:**
 
@@ -16,20 +16,20 @@ The first step is getting fresh images into the kind node. As covered in section
 earthly +docker
 ```
 
-This runs the `+docker` target defined in the root `Earthfile`, which builds each service image and tags them under `library-system/`. After it completes, verify they exist locally:
+This runs the `+docker` target defined in the root `Earthfile`, which builds each service image and tags them under `library/`. After it completes, verify they exist locally:
 
 ```bash
-docker images | grep library-system
+docker images | grep library/
 ```
 
 **Load each image into the kind node:**
 
 ```bash
-kind load docker-image library-system/gateway:latest     --name library
-kind load docker-image library-system/auth:latest        --name library
-kind load docker-image library-system/catalog:latest     --name library
-kind load docker-image library-system/reservation:latest --name library
-kind load docker-image library-system/search:latest      --name library
+kind load docker-image library/gateway:latest     --name library
+kind load docker-image library/auth:latest        --name library
+kind load docker-image library/catalog:latest     --name library
+kind load docker-image library/reservation:latest --name library
+kind load docker-image library/search:latest      --name library
 ```
 
 Each `kind load` command copies the image tarball from the host Docker daemon into the `containerd` image store inside the `library-control-plane` container. This is a local copy operation — no registry push, no internet access required.
@@ -91,7 +91,7 @@ service/gateway created
 ingress.networking.k8s.io/library-ingress created
 ```
 
-Kubernetes creates the namespaces first (ordering matters — resources that reference a namespace will fail if it does not exist yet), then the infrastructure workloads, then the application services. The apply is declarative: running the same command again is safe and idempotent.
+Kubernetes creates the namespaces first (ordering matters — resources that reference a namespace will fail if it does not exist yet), then the infrastructure workloads, then the application services. The apply operation is declarative: running the same command again is safe and idempotent.
 
 **Wait for infrastructure pods first:**
 
@@ -129,7 +129,7 @@ Work through these steps in order. Each one builds on the previous.
 kubectl get pods -A
 ```
 
-Expected state: every pod shows `Running` with restarts at 0 or 1 (one early restart for services that briefly beat the DB readiness probe is acceptable). Pods stuck in `Pending`, `CrashLoopBackOff`, or `ImagePullBackOff` need attention — see the troubleshooting table below.
+Expected state: every pod shows `Running` with restarts at 0 or 1 (one early restart for services that briefly beat the DB readiness probe is acceptable). Pods stuck in `Pending`, `CrashLoopBackOff`, or `ImagePullBackOff` need attention—see the troubleshooting table below.
 
 ### 2. Catalog logs clean
 

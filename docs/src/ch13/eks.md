@@ -1,6 +1,6 @@
 # 13.6 Kubernetes Cluster: EKS
 
-The Terraform foundation from the previous section gave you a VPC with public and private subnets, an Internet Gateway, a NAT Gateway, and route tables. That is the network. What runs on top of it is a Kubernetes cluster — and specifically, Amazon EKS.
+The Terraform foundation from the previous section gave you a VPC with public and private subnets, an Internet Gateway, a NAT Gateway, and route tables. That is the network. What runs on top of it is a Kubernetes cluster, specifically Amazon EKS.
 
 EKS is AWS's managed Kubernetes service. "Managed" means AWS owns and operates the control plane: the API server, etcd, the scheduler, and the controller manager. You do not provision those machines, you do not patch them, and you do not pay for them individually — the EKS cluster fee covers all of it. What you do provide are the **worker nodes** where your workloads run. You also configure how the cluster integrates with the rest of AWS: IAM roles for service accounts, VPC networking, add-ons for storage and DNS, and the load balancer controller that turns Kubernetes Ingress resources into real AWS Application Load Balancers.
 
@@ -51,7 +51,7 @@ The control plane sits entirely inside AWS infrastructure — you never SSH into
 
 ## The EKS module
 
-AWS maintains an official Terraform module for EKS. It handles the cluster resource, the managed node group, the OIDC provider, and several IAM policies that worker nodes need. Using it directly means you write configuration rather than boilerplate.
+The community maintains a widely adopted Terraform module for EKS. It handles the cluster resource, the managed node group, the OIDC provider, and several IAM policies that worker nodes need. Using it directly means you write configuration rather than boilerplate.
 
 Create `terraform/eks.tf`:
 
@@ -115,7 +115,6 @@ module "eks" {
 }
 ```
 
-A few decisions are worth explaining.
 
 **`cluster_version = "1.29"`** pins the Kubernetes version. EKS supports roughly four versions at any time, retiring the oldest when a new one reaches GA. Pinning prevents accidental upgrades during `terraform apply`. When you are ready to upgrade, change the version and apply; EKS performs a rolling control-plane upgrade followed by node group rotation.
 
@@ -384,7 +383,7 @@ At this point you have a running EKS cluster with:
 - The AWS Load Balancer Controller ready to provision ALBs when you create Ingress resources.
 - IRSA wiring so the CSI driver and the LB controller carry only the AWS permissions they need.
 
-The next section covers the ECR registries where your container images will live, and the CI pipeline that builds and pushes them on every merge.
+The next section configures the production Kustomize overlay that wires these services to the managed infrastructure.
 
 ---
 

@@ -1,8 +1,8 @@
 # Chapter 13: From Local to Cloud — Deploying to AWS
 
-Chapter 12 got every service running in a real Kubernetes cluster: probes passing, StatefulSets stable, Ingress routing requests from your laptop to the gateway. kind gave you a full control plane in Docker containers, which is the right tool for developing and validating manifests without spending a cent. But kind is a development tool. The cluster lives on your machine, behind your home router, inaccessible from the internet. There is no persistent storage that outlives a `kind delete cluster`. There are no managed databases with automatic backups, no Multi-AZ brokers, no autoscaling node pools. If your laptop goes to sleep, the cluster does too.
+Chapter 12 got every service running in a real Kubernetes cluster: probes passing, StatefulSets stable, Ingress routing requests from your laptop to the gateway. kind gave you a full control plane in Docker containers — the right tool for developing and validating manifests without spending a cent. But kind is a development tool. The cluster lives on your machine, behind your home router, inaccessible from the internet. There is no persistent storage that outlives a `kind delete cluster`. There are no managed databases with automatic backups, no Multi-AZ brokers, no autoscaling node pools. If your laptop goes to sleep, the cluster does too.
 
-This chapter takes the same application — the same manifests, the same container images, the same Kustomize base — and deploys it to AWS. The application services will run on Amazon EKS. PostgreSQL will move from a StatefulSet to Amazon RDS instances, one per service. Kafka will move from a StatefulSet to Amazon MSK. Images will be stored in Amazon ECR. Deployments will be triggered by GitHub Actions, not `kubectl apply` from a terminal. By the end, you will have a production-grade deployment pipeline that runs on every push to `main`.
+This chapter takes the same application — the same manifests, the same container images, the same Kustomize base — and deploys it to AWS. The application services run on Amazon EKS. PostgreSQL will move from a StatefulSet to Amazon RDS instances, one per service. Kafka will move from a StatefulSet to Amazon MSK. Images will be stored in Amazon ECR. Deployments will be triggered by GitHub Actions, not `kubectl apply` from a terminal. By the end, you will have a production-grade deployment pipeline that runs on every push to `main`.
 
 ---
 
@@ -43,7 +43,7 @@ graph TD
     GHA[GitHub Actions\nOIDC] -.->|kubectl apply| EKS
 ```
 
-Meilisearch remains a StatefulSet inside EKS — AWS has no managed full-text search offering that matches Meilisearch's API, and the data it holds is re-indexable from PostgreSQL, so the operational simplicity of keeping it in-cluster outweighs the risk. Everything else that held persistent state in Chapter 12 moves to managed services.
+Meilisearch remains a StatefulSet inside EKS — AWS has no managed full-text search offering that matches Meilisearch's API, and its data is re-indexable from PostgreSQL, so the operational simplicity of keeping it in-cluster outweighs the risk. Everything else that held persistent state in Chapter 12 moves to managed services.
 
 The load balancer is an AWS Application Load Balancer provisioned by the AWS Load Balancer Controller — an EKS add-on that watches Ingress resources and creates ALBs automatically. It replaces the NGINX Ingress Controller from Chapter 12. The routing rules in the Ingress manifest stay the same; only the controller annotation changes.
 
@@ -104,9 +104,9 @@ Running this infrastructure continuously is not free. Before you apply a single 
 | ALB | — | ~$16 |
 | **Total** | | **~$295/month** |
 
-These numbers are us-east-1 on-demand pricing as of early 2026 and will drift. The EKS control plane flat fee ($73/month, or about $0.10/hour) and the NAT Gateway are the costs that catch people off guard — they run whether or not any traffic flows.
+These numbers are us-east-1 on-demand pricing as of early 2026 and will drift. The EKS control plane flat fee ($73/month, or about $0.10 per hour) and the NAT Gateway are the costs that catch people off guard — they run whether or not any traffic flows.
 
-The single most important habit when working through this chapter: **run `terraform destroy` when you finish for the day.** Terraform will tear down every resource it created in a few minutes. Leaving the cluster running overnight costs roughly $10. Leaving it running for a week costs roughly $70. The Terraform state is stored remotely (once you enable remote state (see section 13.1)), so destroying and recreating the cluster is safe — your application state lives in RDS, and your configuration lives in git.
+The single most important habit when working through this chapter: **run `terraform destroy` when you finish for the day.** Terraform tears down every resource it created in a few minutes. Leaving the cluster running overnight costs roughly $10. Leaving it running for a week costs roughly $70. The Terraform state is stored remotely (once you enable remote state (see section 13.1)), so destroying and recreating the cluster is safe — your application state lives in RDS, and your configuration lives in git.
 
 A cost-saving shortcut: if you only need the cluster for a few hours, set the MSK broker count to 1 and skip multi-AZ for RDS. You will lose high availability, but the cluster will still function for learning purposes and the bill drops to roughly $160/month.
 
@@ -156,7 +156,7 @@ The remaining sections build the AWS deployment of the library system in layers,
 
 **13.4 — Amazon RDS** provisions three PostgreSQL instances — one per service that owns a database — with private subnets, automated backups, and parameter groups. You will run schema migrations as Kubernetes Jobs rather than embedding them in the application startup path.
 
-**13.5 — Amazon MSK** provisions a two-broker Kafka cluster in private subnets. You will configure the bootstrap server addresses as a ConfigMap consumed by the catalog, reservation, and search services.
+**13.5 — Amazon MSK** provisions a two-broker Kafka cluster in private subnets. You will configure the bootstrap server addresses as a ConfigMap consumed by the Catalog, Reservation, and Search services.
 
 **13.6 — EKS Cluster** provisions the EKS control plane and a managed node group. You will install the AWS Load Balancer Controller and configure OIDC federation so that pods can assume IAM roles without storing credentials.
 
@@ -172,7 +172,7 @@ The remaining sections build the AWS deployment of the library system in layers,
 
 By the end of this chapter, the library system will be running on durable infrastructure, deployed automatically on every push, and accessible over HTTPS from any network. The skills you have practiced — writing manifests, layering Kustomize overlays, thinking about probes and graceful shutdown — transfer directly. The cloud layer is new tooling around the same core mechanics.
 
-Before we write a line of Terraform, run `aws sts get-caller-identity` and confirm your credentials are working. Every section from here forward assumes that command succeeds.
+Before writing a line of Terraform, run `aws sts get-caller-identity` and confirm your credentials are working. Every section from here forward assumes that command succeeds.
 
 ---
 

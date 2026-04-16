@@ -1,6 +1,6 @@
 # 11.4 Kafka Testing
 
-The unit tests you wrote for the catalog consumer (`consumer_test.go`) are correct and fast. They call `handleEvent` directly with hand-crafted byte slices, check that the right `UpdateAvailability` delta is applied, and verify that unknown event types are silently ignored. They run in under a millisecond each.
+The unit tests for the catalog consumer (`consumer_test.go`) are correct and fast. They call `handleEvent` directly with hand-crafted byte slices, check that the right `UpdateAvailability` delta is applied, and verify that unknown event types are silently ignored. They run in under a millisecond each.
 
 But they leave four things completely untested:
 
@@ -12,7 +12,7 @@ But they leave four things completely untested:
 
 4. **Real Kafka interaction.** The serialization contract between producer and consumer is implicit: JSON with specific field names, a specific key encoding, a specific topic name. Both sides can change independently. A test that publishes through the actual `kafka.Publisher` and consumes through the actual `consumer.Run` detects any divergence immediately.
 
-If you are coming from Spring, this is analogous to the difference between testing a `@KafkaListener` method in isolation versus using Spring Kafka's `EmbeddedKafka` to run the full producer-to-consumer path. The unit test covers business logic; the integration test covers the wiring.
+In Spring terms, this is analogous to the difference between testing a `@KafkaListener` method in isolation and using Spring Kafka's `EmbeddedKafka` to run the full producer-to-consumer path. The unit test covers business logic; the integration test covers the wiring.
 
 ---
 
@@ -86,6 +86,8 @@ func TestMain(m *testing.M) {
 }
 ```
 
+> **Warning:** Constructing `&testing.T{}` manually is fragile — methods like `t.Fatalf` and `t.Cleanup` expect a `*testing.T` provided by the test framework. Calling `t.Fatalf` on this zero-value `*testing.T` triggers a panic rather than a graceful test failure. A more robust approach is to call `log.Fatal` on error and use `defer container.Terminate(ctx)` directly in `TestMain`.
+
 `TestMain` is called before any test function. `m.Run()` executes all tests in the package and returns an exit code. By assigning the broker list to a package-level variable, every test function in the suite can use it without paying the container startup cost more than once.
 
 One limitation: `t.Cleanup` registered in `setupKafka` is attached to the dummy `*testing.T`, not the real test harness. If you need guaranteed cleanup, call `container.Terminate` explicitly at the end of `TestMain` instead.
@@ -94,9 +96,9 @@ One limitation: `t.Cleanup` registered in `setupKafka` is attached to the dummy 
 
 ## Testing the reservation service producer
 
-The reservation service's `kafka.Publisher` wraps a `sarama.SyncProducer`. Its `Publish` method serializes a `ReservationEvent` to JSON, sets the message key to `event.BookID`, and injects the OTel trace context into message headers via `headerCarrier`. That is three things to verify.
+The Reservation Service's `kafka.Publisher` wraps a `sarama.SyncProducer`. Its `Publish` method serializes a `ReservationEvent` to JSON, sets the message key to `event.BookID`, and injects the OTel trace context into message headers via `headerCarrier`. That is three things to verify.
 
-The verification approach is asymmetric: produce through the real publisher, then read back using sarama's lower-level partition consumer API. A partition consumer is simpler than a consumer group for this purpose — it does not join a group, does not negotiate offsets with a coordinator, and does not require a group rebalance. It just reads raw messages from a topic partition. This is the Kafka equivalent of reading a single message off a queue for assertion purposes.
+The verification approach is asymmetric—produce through the real publisher, then read back using sarama's lower-level partition consumer API. A partition consumer is simpler than a consumer group for this purpose — it does not join a group, does not negotiate offsets with a coordinator, and does not require a group rebalance. It just reads raw messages from a topic partition. This is the Kafka equivalent of reading a single message off a queue for assertion purposes.
 
 ```go
 //go:build integration
@@ -189,8 +191,6 @@ func TestPublisher_RoundTrip(t *testing.T) {
 }
 ```
 
-A few points worth noting.
-
 `sarama.OffsetOldest` on the partition consumer means "start from offset 0". Without this, sarama defaults to `OffsetNewest` and the consumer would only see messages published after it connects — which, given our produce-then-consume ordering, would mean it sees nothing.
 
 The topic is not explicitly created. When the publisher sends the first message, sarama's producer creates the topic with default settings (one partition, replication factor 1). This is fine for tests. In production you would pre-create topics with explicit partition counts and retention policies.
@@ -264,7 +264,7 @@ func TestConsumer_ReservationCreated_DecreasesAvailability(t *testing.T) {
 
     // Insert a book with 5 available copies into the test database.
     repo := repository.NewBookRepository(sharedDB)
-    svc := service.NewCatalogService(repo)
+    svc := service.NewCatalogService(repo, nil) // nil publisher — the consumer path does not publish events
 
     book, err := repo.Create(context.Background(), &model.Book{
         ID:              bookID,
@@ -312,7 +312,7 @@ func TestConsumer_ReservationCreated_DecreasesAvailability(t *testing.T) {
 
 The polling loop deserves explanation. `time.After(10 * time.Second)` returns a channel that fires once after 10 seconds. `time.After(200 * time.Millisecond)` returns a new channel each iteration that fires after 200ms. The `select` blocks until one of them is ready. If 10 seconds pass without the condition being met, the test fails. If the condition is met in any 200ms window, the test cancels the consumer and returns. This is the standard Go pattern for asserting eventual consistency without busy-waiting.
 
-Do not use `time.Sleep` here. A fixed sleep that is long enough to be reliable is long enough to make your CI noticeably slower. The polling loop with a reasonable timeout gives the same guarantee with far lower average latency — in practice the consumer processes the message in under a second, and the loop will exit in 1–2 iterations.
+Do not use `time.Sleep` here. A fixed sleep that is long enough to be reliable is long enough to make your CI noticeably slower. The polling loop with a reasonable timeout gives the same guarantee with far lower average latency—in practice the consumer processes the message in under a second, and the loop exits in one or two iterations.
 
 Note that `consumer.Run` in the real code has a hardcoded group ID (`"catalog-availability-updater"`). For the consumer to be testable with per-test group IDs, you would need to refactor `Run` to accept the group ID as a parameter. The signature above reflects that refactored version:
 
@@ -466,7 +466,7 @@ func TestSearchConsumer_BookCreated_CallsUpsert(t *testing.T) {
 
 This test exercises the full Kafka path — group join, partition assignment, message deserialization, `ConsumeClaim` loop — without any dependency on Meilisearch. If you later add a `book.deleted` scenario, the same capturing indexer catches calls to `Delete`.
 
-The snapshot pattern (`append([]any(nil), idx.upserted...)`) copies the slice while holding the lock, then releases the lock before doing assertions. This is important: holding a mutex while calling `t.Errorf` is not inherently unsafe in Go, but it is poor practice because `t.Errorf` may trigger housekeeping that takes nontrivial time under the lock.
+The snapshot pattern (`append([]any(nil), idx.upserted...)`) copies the slice while holding the lock, then releases the lock before doing assertions. This is important: Holding a mutex while calling `t.Errorf` is not inherently unsafe in Go, but it is poor practice because `t.Errorf` may trigger housekeeping that takes nontrivial time under the lock.
 
 ---
 
@@ -527,7 +527,7 @@ The `defer cancel()` at the top of each test function is the defense. Even if th
 
 ## Summary
 
-The tests in this section cover the two integration surfaces that unit tests cannot reach: the serialization path between the reservation publisher and the catalog consumer, and the Kafka-to-database path within the catalog service. The search consumer test demonstrates that you do not always need the full dependency chain — a capturing mock combined with a real Kafka round-trip is often sufficient to test message routing and deserialization.
+The tests in this section cover the two integration surfaces that unit tests cannot reach: the serialization path between the reservation publisher and the catalog consumer, and the Kafka-to-database path within the Catalog Service. The search consumer test demonstrates that you do not always need the full dependency chain — a capturing mock combined with a real Kafka round-trip is often sufficient to test message routing and deserialization.
 
 The key patterns introduced here carry over to any Kafka integration test in Go:
 

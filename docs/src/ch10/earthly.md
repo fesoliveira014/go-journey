@@ -1,6 +1,6 @@
 # 10.2 The Earthly Build System
 
-Every team eventually ends up with a build script that works in CI but not locally — or vice versa. The culprit is almost always environmental drift: different Go versions, different lint tool versions, missing environment variables, undocumented system dependencies. Earthly solves this problem by running every build step inside a container. If it builds on your laptop, it builds in CI — and the outputs are bit-for-bit identical.
+Every team eventually ends up with a build script that works in CI but not locally---or vice versa. The culprit is almost always environmental drift: different Go versions, different lint tool versions, missing environment variables, undocumented system dependencies. Earthly solves this problem by running every build step inside a container. If it builds on your laptop, it builds in CI — and the outputs are bit-for-bit identical.
 
 This section covers Earthly in depth, because it is the primary build and CI tool for this project. By the end you will understand how to read and write Earthfiles, how the caching model works, and how the root Earthfile orchestrates builds across all five services.
 
@@ -11,7 +11,7 @@ This section covers Earthly in depth, because it is the primary build and CI too
 Earthly is a build tool that combines Dockerfile syntax with Makefile-style named targets. The mental model is:
 
 - Every target runs inside its own container, derived from a `FROM` base image.
-- Targets can depend on other targets. Earthly resolves the dependency graph and runs them in the right order.
+- Targets can depend on other targets; Earthly resolves the dependency graph and runs them in the correct order.
 - Outputs (files, Docker images) are explicitly declared with `SAVE ARTIFACT` and `SAVE IMAGE`. Nothing leaks out of a container unless you ask for it.
 
 If you have used Gradle, think of each Earthly target as a Gradle task, except the task runs in a reproducible container rather than on the host JVM. The dependency semantics are the same: `:docker` depends on `:build`, which depends on `:src`, which depends on `:deps`. Earthly evaluates that chain automatically.
@@ -39,14 +39,40 @@ Earthly is also distinct from Docker Compose. Compose is for running services. E
 
 ---
 
+## Local = Cloud
+
+The core value proposition of Earthly is that your local build and your CI build are the same command. From the repository root:
+
+```bash
+# Run the full CI pipeline locally
+earthly +ci
+
+# Build Docker images
+earthly +docker
+
+# Build and lint just one service
+earthly ./services/catalog+lint
+
+# Run tests for one service
+earthly ./services/gateway+test
+```
+
+In GitHub Actions, the CI job installs Earthly and then runs `earthly +ci` — the same command you run locally. There is no CI-specific build script to maintain. The category of "it worked locally but failed in CI" failures from environment drift disappears.
+
+If a lint failure appears in CI, you run `earthly ./services/catalog+lint` locally and see the exact same output. If a test fails in CI, you run `earthly ./services/catalog+test` and reproduce it immediately.
+
+This is a meaningful shift from the traditional model where developers run `go test ./...` locally (with whatever version of Go happens to be installed) and CI runs a slightly different set of steps in a managed environment. With Earthly, the container is the environment, and it is the same container everywhere.
+
+---
+
 ## The Catalog Earthfile: A Full Walkthrough
 
-The catalog service Earthfile is the canonical example. All five service Earthfiles follow the same pattern with minor variations. Here is the full file:
+The Catalog Service Earthfile is the canonical example. All five service Earthfiles follow the same pattern with minor variations. Here is the full file:
 
 ```earthfile
 VERSION 0.8
 
-FROM golang:1.26-alpine
+FROM golang:1.22-alpine
 
 WORKDIR /app
 
@@ -115,7 +141,7 @@ If you have ever written a Java Dockerfile, you have done the same thing: copy `
 
 The `COPY ../../+gen-mod/gen ../gen` syntax is a cross-Earthfile artifact reference. Instead of directly copying `../../gen/go.mod` — which would fail because Earthly scopes each service's build context to its own directory — the service Earthfile references an artifact target defined in the root Earthfile. The root `+gen-mod` target copies `gen/go.mod` and `gen/go.sum` into a `scratch` container and saves them as a named artifact. The service then pulls that artifact into its own container. This indirection is necessary in monorepos where local modules live outside the service's build context.
 
-The `go mod download` command is chained with subshell calls for each local module: `(cd ../gen && go mod download)`. Each replaced module has its own `go.mod` with its own dependencies, and Go does not transitively download them. Without these subshells, the build would fail later when the compiler tries to resolve imports from the local modules.
+The `go mod download` command is chained with subshell calls for each local module: `(cd ../gen && go mod download)`. Each local module has its own `go.mod` with its own dependencies, and Go does not download them transitively. Without these subshells, the build would fail later when the compiler tries to resolve imports from the local modules.
 
 The project uses Go workspaces for local development, but `GOWORK=off` disables that inside the container. Inside the container, the local modules (`gen`, `pkg/auth`, `pkg/otel`) are placed at paths that match the `replace` directives in `go.mod`, so Go resolves them locally without needing the workspace. This is a deliberate design: workspaces are a developer convenience, but the container build should be explicit about module resolution.
 
@@ -182,7 +208,7 @@ build:
     SAVE ARTIFACT /bin/catalog
 ```
 
-`CGO_ENABLED=0` produces a statically linked binary. This is important because the binary will run inside an `alpine` container that may not have glibc. A dynamically linked Go binary would fail to start with a "no such file or directory" error on the dynamic linker. Static binaries have no such dependency.
+`CGO_ENABLED=0` produces a statically linked binary. This is important because the binary will run inside an `alpine` container that may not have glibc. A dynamically linked Go binary would fail to start with a "no such file or directory" error because the dynamic linker is absent. Static binaries have no such dependency.
 
 `SAVE ARTIFACT /bin/catalog` makes the compiled binary available to other targets. Without this declaration, the binary exists only inside this container and disappears when the target finishes. With it, any target can reference it as `+build/catalog`.
 
@@ -197,7 +223,7 @@ docker:
     SAVE IMAGE catalog:latest
 ```
 
-This target starts fresh from `alpine:3.19` — not from `+src`. The Go toolchain, module cache, and source code are not needed at runtime. The final image contains only the Alpine base and the compiled binary. This keeps the image small (typically under 20MB for a static Go binary on Alpine) and reduces attack surface.
+This target starts fresh from `alpine:3.19` — not from `+src`. The Go toolchain, module cache, and source code are not needed at runtime. The final image contains only the Alpine base and the compiled binary. This keeps the image small (typically under 20 MB for a static Go binary on Alpine) and reduces the attack surface.
 
 `COPY +build/catalog /usr/local/bin/catalog` pulls the artifact saved by the `build` target into this container. This is Earthly's artifact reference syntax: `+targetname/path`.
 
@@ -211,7 +237,7 @@ All five Earthfiles share the same structure. The differences are small but wort
 
 ### Auth Service
 
-The auth Earthfile omits the `pkg/otel` dependency. The auth service uses structured logging and basic instrumentation but does not pull in the shared OpenTelemetry package directly. Both its `deps` and `src` targets copy only `gen` and `pkg/auth`, not `pkg/otel`.
+The auth Earthfile omits the `pkg/otel` dependency. The Auth Service uses structured logging and basic instrumentation but does not pull in the shared OpenTelemetry package directly. Both its `deps` and `src` targets copy only `gen` and `pkg/auth`, not `pkg/otel`.
 
 ```earthfile
 deps:
@@ -261,7 +287,7 @@ The gateway image exposes port 8080 instead of a gRPC port. It also sets `WORKDI
 
 ### Search Service
 
-The search service, like auth, omits `pkg/otel`. It is otherwise identical to catalog in structure. The `docker` target exposes port 50054.
+The Search Service, like auth, omits `pkg/otel`. It is otherwise identical to catalog in structure. The `docker` target exposes port 50054.
 
 ### Reservation Service
 
@@ -371,32 +397,6 @@ The `+ci` target runs lint and test across all five services. Earthly executes `
 `+docker` builds all five images. You run this before pushing to a registry or before starting the local Docker Compose stack.
 
 The cross-directory reference syntax `./services/catalog+lint` is how Earthly addresses targets in other Earthfiles. The path before the `+` is the directory containing the Earthfile; the part after `+` is the target name.
-
----
-
-## Local = Cloud
-
-The core value proposition of Earthly is that your local build and your CI build are the same command. From the repository root:
-
-```bash
-# Run the full CI pipeline locally
-earthly +ci
-
-# Build Docker images
-earthly +docker
-
-# Build and lint just one service
-earthly ./services/catalog+lint
-
-# Run tests for one service
-earthly ./services/gateway+test
-```
-
-In GitHub Actions, the CI job installs Earthly and then runs `earthly +ci` — the same command you run locally. There is no CI-specific build script to maintain. The category of "it worked locally but failed in CI" failures from environment drift disappears.
-
-If a lint failure appears in CI, you run `earthly ./services/catalog+lint` locally and see the exact same output. If a test fails in CI, you run `earthly ./services/catalog+test` and reproduce it immediately.
-
-This is a meaningful shift from the traditional model where developers run `go test ./...` locally (with whatever version of Go happens to be installed) and CI runs a slightly different set of steps in a managed environment. With Earthly, the container is the environment, and it is the same container everywhere.
 
 ---
 

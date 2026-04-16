@@ -90,7 +90,7 @@ Walk through each parameter:
 
 **`manage_master_user_password = true`** delegates password management to AWS Secrets Manager. This is covered in detail in the next section.
 
-**`backup_retention_period = 0`** disables automated backups. For this project that is acceptable; for any real production system, set this to at least 7 days.
+**`backup_retention_period = 0`** disables automated backups. For this project, that is acceptable; for any real production system, set this to at least 7 days.
 
 **`skip_final_snapshot = true`** allows `terraform destroy` to delete the instance without requiring a final snapshot. This is intentional for a learning project where you may tear down and rebuild frequently.
 
@@ -98,7 +98,7 @@ Walk through each parameter:
 
 **`db_subnet_group_name`** places the instances in the private subnets of the VPC created by the `vpc` module. RDS instances should never be in public subnets — they are only reachable from the EKS worker nodes in the same VPC.
 
-**`vpc_security_group_ids`** restricts inbound connections to port 5432. The `rds` security group (defined in `security-groups.tf`) allows inbound traffic on port 5432 from the EKS worker node security group and nothing else.
+**`vpc_security_group_ids`** restricts inbound connections to port 5432. The `rds` security group (defined in `vpc.tf`) allows inbound traffic on port 5432 from the EKS worker node security group and nothing else.
 
 ---
 
@@ -119,7 +119,7 @@ When `manage_master_user_password = true`, RDS does not accept a `password` argu
 
 Secrets Manager can automatically rotate this password on a schedule you define, regenerating it and updating the stored value without downtime. Rotation is handled by a Lambda function that RDS integrates with directly[^3].
 
-This is the modern approach to database credentials on AWS. The older pattern — writing a password into `terraform.tfvars` and passing it through `var.db_password` — embeds the credential in Terraform state, which is stored in S3. State is not encrypted by default, and it is accessible to anyone with S3 read permissions on the bucket. Secrets Manager keeps the credential out of state entirely.
+This is the modern approach to database credentials on AWS. The older pattern — writing a password into `terraform.tfvars` and passing it through `var.db_password` — embeds the credential in Terraform state, which is stored in S3. State is accessible to anyone with S3 read permissions on the bucket. Secrets Manager keeps the credential out of state entirely.
 
 **Retrieving the password manually** (for initial testing or debugging):
 
@@ -154,7 +154,7 @@ Two things must change for RDS:
 
 2. **`sslmode=disable` becomes `sslmode=require`.** RDS enforces TLS for all connections by default. Attempting to connect without TLS results in a connection error. The `sslmode=require` parameter instructs the PostgreSQL driver to use TLS but skip certificate verification — sufficient for RDS, which presents a valid certificate from an AWS CA.
 
-The production overlay in `deploy/k8s/overlays/production/` applies these changes using strategic merge patches on the relevant Deployments. A strategic merge patch for the catalog service looks like this:
+The production overlay in `deploy/k8s/overlays/production/` applies these changes using strategic merge patches on the relevant Deployments. A strategic merge patch for the Catalog Service looks like this:
 
 ```yaml
 # deploy/k8s/overlays/production/catalog-patch.yaml

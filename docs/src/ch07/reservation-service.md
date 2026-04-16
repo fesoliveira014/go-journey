@@ -1,8 +1,8 @@
 # 7.2 Reservation Service
 
-The reservation service is the second microservice we build from scratch. If you followed Chapter 2 (the catalog service), this one will feel familiar—same layered architecture, same patterns. That repetition is deliberate. The goal is to show that the patterns are general, not specific to any one domain. Once you internalize the model/repository/service/handler stack, you can stand up a new service quickly.
+The Reservation Service is the second microservice we build from scratch. If you followed Chapter 2 (the Catalog Service), this one will feel familiar—same layered architecture, same patterns. That repetition is deliberate. The goal is to show that the patterns are general, not specific to any one domain. Once you internalize the model/repository/service/handler stack, you can stand up a new service quickly.
 
-The interesting differences are in the domain logic: state machines, cross-service reads, event publishing, and a two-pronged expiration strategy — lazy expire-on-read for responsiveness plus a background reaper for timeliness.
+The interesting differences are in the domain logic: state machines, cross-service reads, event publishing, and a two-pronged expiration strategy—lazy expire-on-read for responsiveness plus a background reaper for timeliness.
 
 ---
 
@@ -48,7 +48,7 @@ var (
 )
 ```
 
-These are package-level variables (not types) used with `errors.Is()`. This is the same pattern we used in the catalog service. The handler layer maps these to gRPC status codes—the domain errors stay clean of transport concerns.
+These are package-level variables (not types) used with `errors.Is()`. This is the same pattern we used in the Catalog Service. The handler layer maps these to gRPC status codes—the domain errors stay clean of transport concerns.
 
 ---
 
@@ -136,7 +136,7 @@ Three things to call out:
 
 1. **`repo` is an interface**, not a concrete type. The service defines the interface it needs (`ReservationRepository`), and the repository satisfies it. This is Go's implicit interface satisfaction—the repository never declares `implements ReservationRepository`. If it has the right methods, it fits.
 
-2. **`catalog` is a gRPC client.** The reservation service calls the catalog service synchronously to check book availability before creating a reservation. This is a cross-service read—the reservation service does not own the book data, so it asks the service that does.
+2. **`catalog` is a gRPC client.** The Reservation Service calls the Catalog Service synchronously to check book availability before creating a reservation. This is a cross-service read—the Reservation Service does not own the book data, so it asks the service that does.
 
 3. **`publisher` is an interface.** The `EventPublisher` interface has one method: `Publish(ctx, event) error`. The Kafka publisher implements it, but in tests you can substitute a mock. This is the same dependency inversion pattern used throughout the codebase.
 
@@ -293,7 +293,7 @@ func (s *ReservationService) expireIfDue(ctx context.Context, r *model.Reservati
 
 This is **lazy evaluation**. It keeps what the user sees consistent with what the clock says: users never see their own overdue reservations still listed as active, because the act of reading fixes the row on the way out.
 
-**Path 2: the reaper.** The problem with _only_ doing expire-on-read is that if nobody reads a reservation — the user stopped logging in, the account was deleted, the request never happens — the row stays `active` forever. Worse, the catalog's `available_copies` never gets incremented back, so the book is permanently marked as held. To close this gap the reservation service runs a background goroutine that periodically finds and expires overdue rows:
+**Path 2: the reaper.** The problem with _only_ doing expire-on-read is that if nobody reads a reservation — the user stopped logging in, the account was deleted, the request never happens — the row stays `active` forever. Worse, the catalog's `available_copies` never gets incremented back, so the book is permanently marked as held. To close this gap the Reservation Service runs a background goroutine that periodically finds and expires overdue rows:
 
 ```go
 func (s *ReservationService) RunExpirationReaper(ctx context.Context, interval time.Duration) {
@@ -332,6 +332,8 @@ go reservationSvc.RunExpirationReaper(ctx, reaperInterval)
 `REAPER_INTERVAL` defaults to 5 minutes. That is a deliberate trade-off: the window during which a book can be stale on the catalog is roughly (`DueAt` to `DueAt + 5 minutes`), which is plenty for a library but would not suffice for, say, seat inventory on a flight. Tune it via the environment variable if you need tighter bounds — the cost is one full-table scan for active rows per tick.
 
 **Why both, not just the reaper?** The reaper fires on a timer, so between ticks a user could reload their reservations page and briefly see an overdue row still listed as active. That is a small but visible inconsistency that expire-on-read eliminates without needing a ≤ 1-second timer. The two mechanisms are complementary: read-triggered for user-facing freshness, time-triggered for catalog reconciliation and unread rows.
+
+In short, expire-on-read gives users immediate feedback when they view an expired reservation, while the reaper ensures the database stays correct even for reservations no one ever checks.
 
 Note the defensive programming in `expireReservation`: if the database update fails, the method reverts the in-memory status change so the caller does not see stale data. Because the reaper's background context has no user attached, the helper falls back to the reservation's own `UserID` when publishing the event.
 
@@ -411,7 +413,7 @@ func toGRPCError(err error) error {
 }
 ```
 
-This is a switch on sentinel errors using `errors.Is()`, which works correctly with wrapped errors (the `%w` verb in `fmt.Errorf`). The choice of gRPC codes matters for the gateway—it maps them to HTTP status codes for the user. `ResourceExhausted` becomes 429, `FailedPrecondition` becomes 412, `PermissionDenied` becomes 403.
+This is a switch on sentinel errors using `errors.Is()`, which works correctly with wrapped errors (the `%w` verb in `fmt.Errorf`). The choice of gRPC codes matters for the gateway—it maps them to HTTP status codes for the user. `ResourceExhausted` becomes 429, `FailedPrecondition` becomes 412 (a custom mapping—the gRPC default is 400, but 412 better communicates a precondition failure to HTTP clients), `PermissionDenied` becomes 403.
 
 The `default` case returns `codes.Internal` with a generic message. Never leak internal error details to clients—they are a security risk and useless to end users. Log the full error server-side.
 
@@ -431,7 +433,7 @@ reservationHandler := handler.NewReservationHandler(reservationSvc)
 
 Three lines to wire the domain stack: create the repository, create the service (injecting the repo, catalog client, event publisher, and config), create the handler (injecting the service). Every dependency is explicit. Compare this to Spring Boot, where the equivalent would be three `@Component` classes with `@Autowired` constructors, and the wiring would happen invisibly through component scanning.
 
-The service also creates a gRPC connection to the catalog service, since it needs to reserve copies through the catalog:
+The service also creates a gRPC connection to the Catalog Service, since it needs to reserve copies through the catalog:
 
 ```go
 catalogConn, err := grpc.NewClient(catalogAddr,
@@ -446,7 +448,7 @@ The `otelgrpc.NewClientHandler()` adds OpenTelemetry instrumentation to outgoing
 
 ## The Layered Pattern, Revisited
 
-If you compare the reservation service to the catalog service from Chapter 2, the structure is identical:
+If you compare the Reservation Service to the Catalog Service from Chapter 2, the structure is identical:
 
 | Layer | Catalog | Reservation |
 |-------|---------|-------------|
@@ -456,7 +458,7 @@ If you compare the reservation service to the catalog service from Chapter 2, th
 | Handler | `CatalogHandler` with proto mapping | `ReservationHandler` with proto mapping |
 | main.go | Wire everything, start gRPC server | Wire everything, start gRPC server |
 
-The reservation service adds two things the catalog service did not have: a gRPC client dependency (reserving copies against the catalog) and an event publisher (sending events to Kafka). But the layering is the same. Each layer depends only on the layer below it (via interfaces), and the handler never touches the database directly.
+The Reservation Service adds two things the Catalog Service did not have: a gRPC client dependency (reserving copies against the catalog) and an event publisher (sending events to Kafka). But the layering is the same. Each layer depends only on the layer below it (via interfaces), and the handler never touches the database directly.
 
 This consistency is the payoff of a well-chosen architecture. Once you understand one service, you understand them all. New team members can navigate unfamiliar services because the structure is predictable. This is not exciting—it is the point.
 

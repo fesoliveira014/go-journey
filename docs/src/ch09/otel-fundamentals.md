@@ -8,7 +8,7 @@ Before we instrument a single line of Go code, we need to understand what we are
 
 Observability rests on three signal types, each answering a different class of question:
 
-**Traces** answer "what happened during this request?" A trace follows a single operation across service boundaries—from the HTTP request entering the gateway, through a gRPC call to the catalog service, into a PostgreSQL query, out through a Kafka publish, and into a consumer on the other side. Each step in the trace is a **span**. Spans form a tree: the root span is the entry point, and child spans represent sub-operations.
+**Traces** answer "what happened during this request?" A trace follows a single operation across service boundaries—from the HTTP request entering the gateway, through a gRPC call to the Catalog Service, into a PostgreSQL query, out through a Kafka publish, and into a consumer on the other side. Each step in the trace is a **span**. Spans form a tree: the root span is the entry point, and child spans represent sub-operations.
 
 **Metrics** answer "how is the system performing right now?" Metrics are aggregated measurements: request count, error rate, latency percentiles, queue depth, memory usage. Unlike traces (which capture individual requests), metrics summarize behavior over time windows. They are cheap to collect, cheap to store, and the foundation of alerting.
 
@@ -64,9 +64,9 @@ A **trace** is the collection of all spans sharing the same trace ID. Visually, 
       [catalog] db SELECT books        ──────────── 12ms
 ```
 
-Each indentation level is a child span. The request took 45 ms total — 12 ms of which was the database query. Without tracing, you would know the request took 45ms (from your HTTP access log), but you would not know whether the time was spent in your code, in the database, or in network latency between services.
+Each indentation level is a child span. The request took 45 ms total — 12 ms of which was the database query. Without tracing, you would know the request took 45 ms (from your HTTP access log) but would not know whether the time was spent in your code, in the database, or in network latency between services.
 
-Spans also carry a **status**. If the catalog service returns a gRPC error, the span's status is set to `Error` with a description. Visualization tools (Grafana Tempo, Jaeger) highlight error spans in red, making it easy to spot failures in a trace waterfall.
+Spans also carry a **status**. If the Catalog Service returns a gRPC error, the span's status is set to `Error` with a description. Visualization tools (Grafana Tempo, Jaeger) highlight error spans in red, making it easy to spot failures in a trace waterfall.
 
 ### Context Propagation
 
@@ -96,25 +96,19 @@ OTel defines three fundamental metric instruments:
 | **Gauge** (UpDownCounter) | Value that can increase or decrease. | Current number of books in catalog |
 | **Histogram** | Distribution of values. Records individual measurements and buckets them. | Request latency in milliseconds |
 
-Counters and histograms are the most common. The `otelhttp` middleware automatically records `http_server_request_duration_seconds` as a histogram, giving you latency percentiles for free. We add a custom `Int64UpDownCounter` for tracking the total book count in the catalog.
+Counters and histograms are the most common. The `otelhttp` middleware automatically records `http_server_request_duration_seconds` as a histogram, giving you latency percentiles at no extra effort. We add a custom `Int64UpDownCounter` for tracking the total book count in the catalog.
 
-If you have used Micrometer in Spring, these map directly: `Counter` is `Counter`, `Gauge` is `Gauge`, and `DistributionSummary` / `Timer` is roughly `Histogram`. The naming conventions differ (OTel favors `snake_case` with units as suffixes, Micrometer uses `dot.separated`), but the semantics are identical.
+If you have used Micrometer in Spring, these map directly: `Counter` is `Counter`, `Gauge` is `Gauge`, and `DistributionSummary` / `Timer` is roughly `Histogram`. The naming conventions differ (OTel favors `snake_case` with units as suffixes; Micrometer uses `dot.separated`), but the semantics are identical.
 
 ### The OTel API/SDK Split
 
-The OTel API/SDK split is worth understanding. OTel separates the **API** (interfaces and no-op implementations) from the **SDK** (the real implementation). This is the same split as SLF4J (API) vs. Logback (SDK) in Java.
-
-When you write library code, you depend only on the API package (`go.opentelemetry.io/otel`). You call `otel.Tracer("mylib").Start(ctx, "span")` and it works—if no SDK is configured, the call returns a no-op span that does nothing. Your library compiles, runs, and imposes zero overhead.
-
-When you write application code (your `main.go`), you also depend on the SDK packages (`go.opentelemetry.io/otel/sdk/trace`, `go.opentelemetry.io/otel/exporters/...`). You configure a `TracerProvider` with real exporters and register it globally. From that point on, all API calls (including those from libraries) produce real spans.
-
-This split has a practical consequence for testing. Your unit tests never call `Init()`, so the global providers remain no-ops. OTel-instrumented code runs without side effects—no spans exported, no network calls, no test dependencies on a running Collector.
+The API/SDK split described above mirrors the SLF4J/Logback separation (API vs. implementation). The practical implication is that library code depends only on the API (`go.opentelemetry.io/otel`), while application code configures the SDK at startup. Your unit tests never call SDK `Init()`, so the global providers remain no-ops—OTel-instrumented code runs without side effects: no spans exported, no network calls, no test dependencies on a running Collector.
 
 ### Baggage and Context
 
 Beyond trace context, OTel supports **baggage**—arbitrary key-value pairs that propagate across service boundaries alongside the trace context. For example, you could set `baggage.Set("user.tier", "premium")` in the gateway, and every downstream service could read it.
 
-We do not use baggage in our system, but it is worth knowing about. It is the OTel equivalent of passing metadata through the entire call chain without adding parameters to every function signature. The W3C Baggage specification[^5] defines the header format (`baggage: user.tier=premium`), and OTel propagates it alongside `traceparent`.
+We do not use baggage in our system, but it is worth understanding. It is the OTel equivalent of passing metadata through the entire call chain without adding parameters to every function signature. The W3C Baggage specification[^5] defines the header format (`baggage: user.tier=premium`), and OTel propagates it alongside `traceparent`.
 
 ---
 
@@ -154,7 +148,7 @@ The Collector is the key architectural piece. Services do not need to know which
 
 ## How OTel Fits in the CNCF Landscape
 
-OpenTelemetry is the second most active CNCF project after Kubernetes[^2]. It has reached "Graduated" status for tracing and metrics, with logging in "Stable" as of late 2024. The ecosystem includes:
+OpenTelemetry is the second most active CNCF project after Kubernetes[^2]. OTel is a CNCF graduated project (March 2024). The tracing and metrics APIs/SDKs are stable; logging reached stable status in late 2024. The ecosystem includes:
 
 - **Jaeger** and **Zipkin**—trace backends (OTel can export to both)
 - **Prometheus**—the de facto standard for metrics in Kubernetes

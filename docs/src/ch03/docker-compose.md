@@ -37,7 +37,7 @@ docker run -d --name gateway \
   gateway:latest
 ```
 
-That's six error-prone commands with no startup ordering. With Compose:
+That is six error-prone commands with no startup ordering. With Compose:
 
 ```bash
 docker compose -f deploy/docker-compose.yml up --build
@@ -143,7 +143,7 @@ GATEWAY_PORT=8080
 CATALOG_GRPC_PORT=50052
 ```
 
-Compose automatically loads `.env` from the same directory as the Compose file. You never need to `source` it—Compose reads it directly. This separation keeps credentials out of `docker-compose.yml` (which is committed) and in `.env` (which is gitignored in production, though our learning project commits it for convenience).
+Compose automatically loads `.env` from the same directory as the Compose file. You never need to `source` it—Compose reads it directly. This separation keeps credentials out of `docker-compose.yml`, which is version-controlled. The `.env` file is typically gitignored in production, though our learning project commits it for convenience.
 
 ### Healthchecks and `depends_on`
 
@@ -214,7 +214,7 @@ ports:
   - "${POSTGRES_CATALOG_PORT:-5433}:5432"
 ```
 
-The format is `host_port:container_port`. PostgreSQL listens on 5432 inside the container (its default). We map it to 5433 on the host. Why not 5432? Because you might have a local PostgreSQL installation already using that port. Using 5433 avoids the conflict.
+The format is `host_port:container_port`. PostgreSQL listens on 5432 inside the container (its default). We use 5433 rather than 5432 to avoid conflicts with a local PostgreSQL installation.
 
 The Catalog service's `DATABASE_URL` uses `port=5432` (not 5433) because it connects to PostgreSQL over the bridge network, where the container's internal port applies. Port mapping only affects access from the host machine.
 

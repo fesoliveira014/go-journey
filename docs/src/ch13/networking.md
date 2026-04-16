@@ -1,6 +1,6 @@
 # 13.2 — VPC and Networking
 
-Every resource you deploy to AWS lives inside a **Virtual Private Cloud** (VPC). A VPC is an isolated, software-defined network that you own within the AWS region of your choosing. EKS worker nodes need IP addresses. RDS and MSK need subnets whose routing prevents direct reachability from the internet. The Application Load Balancer that fronts the cluster needs a public subnet so it can accept traffic from clients. None of that is possible without a well-designed VPC.
+Every resource you deploy to AWS lives inside a **Virtual Private Cloud** (VPC). A VPC is an isolated, software-defined network that you own within the AWS region of your choosing. EKS worker nodes need IP addresses. RDS and MSK need subnets whose routing prevents direct access from the internet. The Application Load Balancer that fronts the cluster needs a public subnet so it can accept traffic from clients. None of that is possible without a well-designed VPC.
 
 This section designs the VPC for the library system, explains the reasoning behind each decision, and writes the Terraform that provisions it.
 
@@ -56,7 +56,7 @@ graph TD
     NAT --> IGW
 ```
 
-The NAT Gateway is deployed into a single public subnet — `10.0.101.0/24` in AZ 1 — and shared by both private subnets. This is the `single_nat_gateway = true` configuration. A fully redundant deployment would place one NAT Gateway in each AZ, so that a failure in AZ 1's public subnet does not cut off outbound access for nodes in AZ 2. For a learning project, the cost of two NAT Gateways (~$65/month each, plus data transfer) is not justified. In production, revisit this.
+The NAT Gateway is deployed into a single public subnet — `10.0.101.0/24` in AZ 1 — and shared by both private subnets. This is the `single_nat_gateway = true` configuration. A fully redundant deployment would place one NAT Gateway in each AZ, so that a failure in AZ 1's public subnet does not cut off outbound access for nodes in AZ 2. For a learning project, the cost of two NAT Gateways (roughly $33 per month each, plus data transfer) is not justified. In production, revisit this.
 
 The CIDR block `10.0.0.0/16` gives you 65,536 IP addresses to distribute across subnets. The private subnets use `10.0.1.0/24` and `10.0.2.0/24` (256 addresses each). The public subnets use `10.0.101.0/24` and `10.0.102.0/24`. The gap between the low numbers (1, 2) and the high numbers (101, 102) is intentional — it leaves room to add subnets for future purposes (database-only subnets, intra-service tiers) without renumbering anything.
 
@@ -127,7 +127,7 @@ Walk through each block.
 "kubernetes.io/role/internal-elb"   = 1   # private subnets
 ```
 
-are read by the AWS Load Balancer Controller — the Kubernetes operator that provisions ALBs and NLBs in response to Ingress and Service resources. When you create an Ingress, the controller looks for subnets tagged `kubernetes.io/role/elb` to place the ALB in. Without these tags, the controller cannot find the right subnets and the ALB provisioning fails. The tag value `1` is a convention; the controller only checks for the key's presence.
+are read by the AWS Load Balancer Controller — the Kubernetes operator that provisions ALBs and NLBs in response to Ingress and Service resources. When you create an Ingress, the controller looks for subnets tagged `kubernetes.io/role/elb` to place the ALB in. Without these tags, the controller cannot find the right subnets and the ALB provisioning fails. The tag value `1` is a convention; the controller checks only for the key's presence.
 
 ```
 "kubernetes.io/cluster/${var.cluster_name}" = "shared"
@@ -172,6 +172,8 @@ resource "aws_security_group" "rds" {
   }
 }
 
+> **Note:** This security group references the EKS module defined in section 13.6. Terraform resolves the dependency graph at plan time, but you must add `eks.tf` before running `terraform apply`.
+
 # MSK security group — allows Kafka plaintext access from EKS nodes
 # Note: Chapter 14 adds TLS on port 9094
 resource "aws_security_group" "msk" {
@@ -202,7 +204,7 @@ resource "aws_security_group" "msk" {
 }
 ```
 
-Both security groups follow the same pattern: they reference `module.vpc.vpc_id` to place themselves inside the VPC, and they reference `module.eks.node_security_group_id` as the inbound source. Using a security group reference rather than a CIDR range (`10.0.1.0/24`) is important — it means the rule automatically tracks all nodes in the EKS node group, regardless of their individual IP addresses. Nodes come and go as the group scales; a CIDR-based rule would require manual updates or overly broad IP ranges.
+Both security groups follow the same pattern: they reference `module.vpc.vpc_id` to place themselves inside the VPC, and they reference `module.eks.node_security_group_id` as the inbound source. Using a security group reference rather than a CIDR range is important — it means the rule automatically tracks all nodes in the EKS node group, regardless of their individual IP addresses. Nodes come and go as the group scales; a CIDR-based rule would require manual updates or overly broad IP ranges.
 
 The `egress` block with `protocol = "-1"` allows all outbound traffic. This is the AWS default for security groups and is appropriate for application-layer resources: you want them to be able to reach S3, the AWS API, and other services without enumerating every destination.
 
@@ -224,7 +226,7 @@ Running `terraform apply` with these two files will produce:
 Before applying, initialize the module:
 
 ```
-cd infra/terraform
+cd terraform
 terraform init
 terraform plan
 ```

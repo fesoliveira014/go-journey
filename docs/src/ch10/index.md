@@ -1,6 +1,6 @@
 # Chapter 10: CI/CD with GitHub Actions & Earthly
 
-In this chapter, we build a production-grade CI/CD pipeline for the library system. Rather than scripting builds directly in YAML, we put all build logic in Earthly targets — portable and cacheable — and use GitHub Actions purely as trigger and orchestration. The result is a pipeline that runs identically on your laptop and in CI.
+In this chapter, we build a production-grade CI/CD pipeline for the library system. Rather than scripting builds directly in YAML, we put all build logic in Earthly targets---portable and cacheable---and use GitHub Actions purely for triggering and orchestration. The result is a pipeline that runs identically on your laptop and in CI.
 
 ## What You'll Learn
 

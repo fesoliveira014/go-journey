@@ -1,6 +1,6 @@
 # 4.3 OAuth2 with Google
 
-The Auth service supports email/password registration, but modern applications also offer "Sign in with Google" (or GitHub, or Apple). This section explains the OAuth2 authorization code flow, how we implement it with two gRPC RPCs, and the security considerations around state parameters. If you have worked with SAML in the Java enterprise world, OAuth2 is conceptually similar—a trusted third party asserts the user's identity—but the protocol is simpler and HTTP-based rather than XML-based.
+The Auth service supports email/password registration, but modern applications also offer "Sign in with Google" (or GitHub, or Apple). This section explains the OAuth2 authorization code flow, how we implement it with two gRPC RPCs, and the security considerations around state parameters. If you have worked with SAML in Java enterprise applications, OAuth2 is conceptually similar—a trusted third party asserts the user's identity—but the protocol is simpler and HTTP-based rather than XML-based.
 
 ---
 
@@ -65,7 +65,7 @@ GOOGLE_CLIENT_SECRET=your-secret
 GOOGLE_REDIRECT_URL=http://localhost:8080/auth/callback
 ```
 
-**You can skip this step.** The Auth service gracefully handles missing credentials—if `GOOGLE_CLIENT_ID` is empty, the OAuth2 config is not initialized, and the `InitOAuth2` and `CompleteOAuth2` RPCs return `Unavailable: OAuth2 not configured`. The rest of the service (registration, login, token validation) works normally.
+**You can skip this step.** The Auth service gracefully handles missing credentials. If `GOOGLE_CLIENT_ID` is empty, the OAuth2 config is not initialized, and the `InitOAuth2` and `CompleteOAuth2` RPCs return `Unavailable: OAuth2 not configured`. The rest of the service (registration, login, token validation) works normally.
 
 ```go
 func NewAuthHandlerWithOAuth(svc *service.AuthService, clientID, clientSecret, redirectURL string) *AuthHandler {
@@ -83,7 +83,7 @@ func NewAuthHandlerWithOAuth(svc *service.AuthService, clientID, clientSecret, r
 }
 ```
 
-The `oauth2.Config` struct is from `golang.org/x/oauth2`, and `google.Endpoint` provides Google's authorization and token URLs. The scopes request the user's OpenID identity, email address, and profile name.
+The `oauth2.Config` struct is from `golang.org/x/oauth2`, and `google.Endpoint` (from `golang.org/x/oauth2/google`) provides Google's authorization and token URLs. The import block for this file includes both packages — the listing above omits it for brevity. The scopes request the user's OpenID identity, email address, and profile name.
 
 ---
 
@@ -131,7 +131,7 @@ func (h *AuthHandler) InitOAuth2(ctx context.Context, req *authv1.InitOAuth2Requ
 }
 ```
 
-The `sync.Mutex` protects the `states` map because gRPC handlers run concurrently—multiple users could call `InitOAuth2` at the same time. The cleanup loop on each call is an ad hoc garbage-collection strategy: every time someone initiates a flow, we purge expired states. This prevents the map from growing unboundedly if users start flows but never complete them.
+The `sync.Mutex` protects the `states` map because gRPC handlers run concurrently—multiple users could call `InitOAuth2` at the same time. The cleanup loop on each call is an ad hoc garbage-collection strategy: every time someone initiates a flow, we purge expired states. This prevents the map from growing without bound if users start flows but never complete them.
 
 ---
 
@@ -171,6 +171,8 @@ func (h *AuthHandler) CompleteOAuth2(ctx context.Context, req *authv1.CompleteOA
 ```
 
 The state is consumed on use (`delete(h.states, ...)`), so each state value can only be used once. This prevents replay attacks.
+
+> Google's documentation now favors the OpenID Connect endpoint (`https://openidconnect.googleapis.com/v1/userinfo`), but the v2 endpoint used here remains functional.
 
 ### Google's Userinfo Response
 

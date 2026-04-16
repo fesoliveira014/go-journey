@@ -21,7 +21,7 @@ This is fast and useful for testing business logic in isolation, but it bypasses
 
 When you call `h.CreateBook(ctx, req)` directly, none of steps 1–4 execute. The interceptor is never invoked, so a test that sends no token will still succeed. The gRPC status codes your handler produces are not tested as they appear over the wire. Metadata is whatever you manually put into the context, not what the gRPC runtime would propagate.
 
-For a system where authentication, authorization, and correct error codes are security properties, that gap matters. The `bufconn` package closes it without requiring any external process or open network port.
+For a system where authentication, authorization, and correct error codes are security properties, this gap matters. The `bufconn` package closes it without requiring any external process or open network port.
 
 ---
 
@@ -102,7 +102,7 @@ func startCatalogServer(t *testing.T, svc *service.CatalogService, jwtSecret str
 
 Walk through each part:
 
-**`bufconn.Listen(bufSize)`** — creates the in-memory listener. The buffer size (1 MiB here) is the maximum amount of data that can be in flight between client and server at one time. For tests this value is rarely a bottleneck; 1 MiB is a safe default.
+**`bufconn.Listen(bufSize)`** — creates the in-memory listener. The buffer size (1 MiB here) is the maximum amount of data that can be in flight between client and server at any one time. For tests this value is rarely a bottleneck; 1 MiB is a safe default.
 
 **`grpc.NewServer(grpc.UnaryInterceptor(...))`** — creates a real gRPC server with the same interceptor chain that runs in production. Passing `pkgauth.UnaryAuthInterceptor(jwtSecret, nil)` means every unary RPC goes through JWT validation before reaching the handler. This is the critical difference from calling the handler directly.
 
@@ -110,7 +110,7 @@ Walk through each part:
 
 **`go func() { srv.Serve(lis) }()`** — starts the server in a goroutine. `Serve` blocks until the server stops, so it must not run on the test goroutine.
 
-**`t.Cleanup(func() { srv.GracefulStop() })`** — registers a cleanup function that runs when the test (or subtest) completes. `GracefulStop` finishes in-flight RPCs before shutting down. Using `t.Cleanup` instead of `defer` is idiomatic for test helpers because `defer` in a helper function runs when the helper returns, not when the test finishes.
+**`t.Cleanup(func() { srv.GracefulStop() })`** — registers a cleanup function that runs when the test (or subtest) completes. `GracefulStop` finishes in-flight RPCs before shutting down. Using `t.Cleanup` rather than `defer` is idiomatic for test helpers because `defer` in a helper runs when the helper returns, not when the test finishes.
 
 **`grpc.NewClient("passthrough:///bufconn", ...)`** — creates the client connection. The scheme `passthrough:///` tells gRPC's name resolver to use the address string as-is and not attempt DNS lookup. The actual address (`"bufconn"`) is irrelevant because the custom dialer ignores it.
 
@@ -268,7 +268,7 @@ The trade-off is speed. Starting a container takes a few seconds. Keep these tes
 
 ## Auth service bufconn tests
 
-The pattern is identical for the auth service, but the interceptor configuration differs. The auth service has endpoints that must be reachable without a valid JWT — you cannot authenticate if you need a token to call `Register` or `Login`. The `skipMethods` parameter of `UnaryAuthInterceptor` lists the fully-qualified method names that bypass the check:
+The pattern is identical for the Auth Service, but the interceptor configuration differs. The Auth Service has endpoints that must be reachable without a valid JWT — you cannot authenticate if you need a token to call `Register` or `Login`. The `skipMethods` parameter of `UnaryAuthInterceptor` lists the fully-qualified method names that bypass the check:
 
 ```go
 func startAuthServer(t *testing.T, svc *authservice.AuthService, jwtSecret string) authv1.AuthServiceClient {
@@ -349,9 +349,9 @@ func TestAuthFlow(t *testing.T) {
 }
 ```
 
-Three assertions in one test are acceptable here because the steps are sequential and dependent: you cannot log in without registering, and you cannot validate a token without logging in. Splitting them into separate tests would require repeated setup. If any step fails, `t.Fatalf` halts the test immediately, so a failure message pinpoints exactly which step broke.
+Three assertions in one test are acceptable here because the steps are sequential and dependent—you cannot log in without registering, and you cannot validate a token without logging in. Splitting them into separate tests would require repeated setup. If any step fails, `t.Fatalf` halts the test immediately, so a failure message pinpoints exactly which step broke.
 
-The `ValidateToken` call also verifies that the token the auth service issues is accepted by the same interceptor it uses for protected endpoints — a circular check that confirms the signing key is consistent throughout the service.
+The `ValidateToken` call also verifies that the token the Auth Service issues is accepted by the same interceptor it uses for protected endpoints — a circular check that confirms the signing key is consistent throughout the service.
 
 ---
 

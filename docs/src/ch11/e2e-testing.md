@@ -1,6 +1,6 @@
 # 11.5 Service-Level End-to-End Tests
 
-Sections 11.1 through 11.4 each tested one layer of the stack in isolation. Unit tests verified service logic with mocked dependencies. Testcontainers-backed integration tests verified that the SQL was correct. bufconn tests verified that the gRPC wiring — interceptors, metadata, codec — was correct. Kafka tests verified that the serialization round-trip between producer and consumer was correct.
+Sections 11.1 through 11.4 each tested one layer of the stack in isolation. Unit tests verified service logic with mocked dependencies. Testcontainers-backed integration tests verified that the SQL was correct. bufconn tests verified that the gRPC wiring—interceptors, metadata, codec—was correct. Kafka tests verified that the serialization round-trip between producer and consumer was correct.
 
 Each of those tests answers a narrow question. None of them answers the question a system operator actually cares about: "if a client sends a valid gRPC request, does the right thing happen all the way down to the database and the message broker?"
 
@@ -14,9 +14,9 @@ The phrase "end-to-end test" is overloaded. In most contexts it implies a full s
 
 What we are building is narrower in scope but higher in fidelity than anything in 11.2 through 11.4. The term used in this project is **service-level end-to-end test**, and it has a precise meaning:
 
-> A test that exercises one service — in isolation from other services — from its public API boundary through every real dependency: gRPC transport, interceptor chain, business-logic handler, service layer, repository, and PostgreSQL. Kafka side effects are verified using a real broker. No mocks replace infrastructure components.
+> A test that exercises one service—in isolation from other services—from its public API boundary through every real dependency: gRPC transport, interceptor chain, business-logic handler, service layer, repository, and PostgreSQL. Kafka side effects are verified using a real broker. No mocks replace infrastructure components.
 
-The diagram below shows what "end-to-end" means at the service level for the catalog service:
+The diagram below shows what "end-to-end" means at the service level for the Catalog Service:
 
 ```
 Test client (bufconn)
@@ -40,11 +40,11 @@ Test client (bufconn)
  [Kafka container]        <- real broker, real topic
 ```
 
-Compare this to the bufconn test from section 11.3. That test also ran through the interceptor and gRPC server. The difference is in the repository layer. section 11.3's bufconn test could use either a real or a mocked repository — the test goal was to verify the gRPC wiring, so a mock was sufficient. Here the repository is always real. The test goal is to verify that the full vertical slice works end-to-end within a single service.
+Compare this to the bufconn test from section 11.3. That test also ran through the interceptor and gRPC server. The difference is in the repository layer. section 11.3's bufconn test could use either a real or a mocked repository—the test goal was to verify the gRPC wiring, so a mock was sufficient. Here the repository is always real. The test goal is to verify that the full vertical slice works end-to-end within a single service.
 
 This is the Go equivalent of a Spring Boot `@SpringBootTest` with `DEFINED_PORT` and a Testcontainers datasource — the full application context, real database, real request/response cycle.
 
-Critically, this is **not** a multi-service test. The reservation service does not know about the catalog service's database, and the catalog service does not call the reservation service. Each service is tested in its own test binary, in its own directory, with its own containers. Cross-service flows — a reservation triggering a catalog stock update — are discussed at the end of this section under "what we are not testing."
+Critically, this is **not** a multi-service test. The Reservation Service does not know about the Catalog Service's database, and the Catalog Service does not call the Reservation Service. Each service is tested in its own test binary, in its own directory, with its own containers. Cross-service flows — a reservation triggering a catalog stock update — are discussed at the end of this section under "what we are not testing."
 
 ---
 
@@ -95,8 +95,8 @@ import (
     gormpostgres "gorm.io/driver/postgres"
     "gorm.io/gorm"
 
-    "github.com/yourorg/library/services/catalog/internal/repository"
-    "github.com/yourorg/library/services/catalog/migrations"
+    "github.com/fesoliveira014/library-system/services/catalog/internal/repository"
+    "github.com/fesoliveira014/library-system/services/catalog/migrations"
 )
 
 func setupPostgres(t *testing.T) *gorm.DB {
@@ -158,7 +158,7 @@ func setupPostgres(t *testing.T) *gorm.DB {
 }
 ```
 
-Two things to note here. First, `setupPostgres` uses the Testcontainers Postgres module (`testcontainers-go/modules/postgres`) rather than the lower-level `GenericContainer`. The module provides typed helpers like `WithDatabase` and `ConnectionString` that eliminate manual host/port assembly. Second, migrations run through `golang-migrate` using the same embedded SQL files that production uses (`migrations.FS`). This guarantees the test schema matches production exactly — if you drift from that, you risk passing e2e tests against a schema that does not match what runs in deployment.
+Two things to note here. First, `setupPostgres` uses the Testcontainers Postgres module (`testcontainers-go/modules/postgres`) rather than the lower-level `GenericContainer`. The module provides typed helpers like `WithDatabase` and `ConnectionString` that eliminate manual host/port assembly. Second, migrations run through `golang-migrate` using the same embedded SQL files that production uses (`migrations.FS`). This guarantees the test schema matches production exactly. If you drift from that, you risk passing e2e tests against a schema that does not match what runs in deployment.
 
 ### setupKafka
 
@@ -215,9 +215,8 @@ func startCatalogServer(t *testing.T, svc catalogpb.CatalogServiceServer, jwtSec
     }()
     t.Cleanup(srv.GracefulStop)
 
-    conn, err := grpc.DialContext(
-        context.Background(),
-        "bufnet",
+    conn, err := grpc.NewClient(
+        "passthrough:///bufconn",
         grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
             return lis.DialContext(ctx)
         }),
@@ -253,11 +252,11 @@ import (
     "google.golang.org/grpc/metadata"
     "google.golang.org/grpc/status"
 
-    pkgauth "github.com/yourorg/library/pkg/auth"
-    kafkapkg "github.com/yourorg/library/pkg/kafka"
-    catalogpb "github.com/yourorg/library/proto/gen/catalog/v1"
-    "github.com/yourorg/library/services/catalog/internal/repository"
-    "github.com/yourorg/library/services/catalog/internal/service"
+    pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
+    kafkapkg "github.com/fesoliveira014/library-system/pkg/kafka"
+    catalogpb "github.com/fesoliveira014/library-system/proto/gen/catalog/v1"
+    "github.com/fesoliveira014/library-system/services/catalog/internal/repository"
+    "github.com/fesoliveira014/library-system/services/catalog/internal/service"
 )
 
 func TestCatalog_E2E(t *testing.T) {
@@ -385,13 +384,13 @@ Walk through what each step is actually testing:
 
 **Steps 5 and 6 — Delete and NotFound:** Verifies that the soft-delete or hard-delete mechanism in the repository actually makes the row invisible to subsequent reads. Soft-delete bugs — where a `deleted_at` timestamp is set but the `FindByID` query does not filter on it — are caught here but invisible to unit tests.
 
-**Step 7 — Unauthenticated rejection:** Verifies that the auth interceptor is actually wired into the server. A server started with `grpc.NewServer()` and no interceptors would pass steps 1 through 6 just as well. This step is the proof that the interceptor is present and active. It costs one extra test call and catches the most expensive category of wiring mistake.
+**Step 7 — Unauthenticated rejection:** Verifies that the auth interceptor is actually wired into the server. A server started with `grpc.NewServer()` and no interceptors would pass steps 1 through 6 just as well. This step is the proof that the interceptor is present and active. It costs one additional RPC call and catches the most expensive category of wiring mistake.
 
 ---
 
 ## Reservation e2e test
 
-The reservation service is structurally similar to catalog, with two differences. First, it has a dependency on the catalog service's gRPC API — it needs to look up book details when creating a reservation. For a service-level test we mock that outbound gRPC client: we are not testing the catalog service here. Second, the business logic includes a max-active-reservations rule that should return `codes.ResourceExhausted`. That rule cannot be tested by a unit test in isolation — it queries the reservation count from the real database.
+The Reservation Service is structurally similar to catalog, with two differences. First, it has a dependency on the Catalog Service's gRPC API — it needs to look up book details when creating a reservation. For a service-level test we mock that outbound gRPC client: we are not testing the Catalog Service here. Second, the business logic includes a max-active-reservations rule that should return `codes.ResourceExhausted`. That rule cannot be tested by a unit test in isolation — it queries the reservation count from the real database.
 
 ```go
 //go:build integration
@@ -404,23 +403,24 @@ import (
     "time"
 
     "github.com/google/uuid"
+    "google.golang.org/grpc"
     "google.golang.org/grpc/codes"
     "google.golang.org/grpc/metadata"
     "google.golang.org/grpc/status"
 
-    pkgauth "github.com/yourorg/library/pkg/auth"
-    kafkapkg "github.com/yourorg/library/pkg/kafka"
-    catalogpb "github.com/yourorg/library/proto/gen/catalog/v1"
-    reservationpb "github.com/yourorg/library/proto/gen/reservation/v1"
-    "github.com/yourorg/library/services/reservation/internal/repository"
-    "github.com/yourorg/library/services/reservation/internal/service"
+    pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
+    kafkapkg "github.com/fesoliveira014/library-system/pkg/kafka"
+    catalogpb "github.com/fesoliveira014/library-system/proto/gen/catalog/v1"
+    reservationpb "github.com/fesoliveira014/library-system/proto/gen/reservation/v1"
+    "github.com/fesoliveira014/library-system/services/reservation/internal/repository"
+    "github.com/fesoliveira014/library-system/services/reservation/internal/service"
 )
 
 // mockCatalogClient satisfies the catalogpb.CatalogServiceClient interface
-// but delegates only the methods the reservation service actually calls.
-type mockCatalogClient struct {
-    catalogpb.UnimplementedCatalogServiceServer
-}
+// by implementing only the methods the reservation service actually calls.
+// No embedding is needed — the compiler will catch any missing methods at
+// the call site where *mockCatalogClient is passed as CatalogServiceClient.
+type mockCatalogClient struct{}
 
 func (m *mockCatalogClient) GetBook(_ context.Context, req *catalogpb.GetBookRequest, _ ...grpc.CallOption) (*catalogpb.GetBookResponse, error) {
     return &catalogpb.GetBookResponse{
@@ -517,7 +517,7 @@ func TestReservation_E2E(t *testing.T) {
     // The service enforces a maximum of `maxActive` concurrent reservations
     // per user. Create that many reservations for a fresh user, then attempt
     // one more and expect ResourceExhausted.
-    const maxActive = 3
+    const maxActive = 5
     limitedUserID := uuid.New()
     limitedToken, err := pkgauth.GenerateToken(limitedUserID, "user", "test-secret", time.Hour)
     if err != nil {
@@ -548,15 +548,15 @@ func TestReservation_E2E(t *testing.T) {
 }
 ```
 
-Step 3 uses a helper `consumeOneEvent` that creates a short-lived Sarama consumer, subscribes to the topic with a fresh consumer group ID, reads one message, and returns it deserialized. This is the same consumer-side path the reservation service uses internally. You are verifying not just that a message was sent, but that it can be received and deserialized by the exact code path a downstream consumer would use.
+Step 3 uses a helper `consumeOneEvent` that creates a short-lived Sarama consumer, subscribes to the topic with a fresh consumer group ID, reads one message, and returns it deserialized. This is the same consumer-side path the Reservation Service uses internally. You are verifying not just that a message was sent, but that it can be received and deserialized by the exact code path a downstream consumer would use.
 
-Step 6 exercises the most important business rule in the reservation service, and it is a rule that requires the database to count active reservations. A unit test with a mocked repository can test this rule only by making the mock lie about the count. This e2e test counts real rows in a real table, so the rule is tested against the actual query.
+Step 6 exercises the most important business rule in the Reservation Service, and it is a rule that requires the database to count active reservations. A unit test with a mocked repository can test this rule only by making the mock lie about the count. This e2e test counts real rows in a real table, so the rule is tested against the actual query.
 
 ---
 
 ## Auth e2e test
 
-The auth service has no Kafka dependency. It receives registration and login requests, stores hashed credentials in PostgreSQL, and returns JWTs. The e2e test is the simplest of the three: Postgres plus bufconn.
+The Auth Service has no Kafka dependency. It receives registration and login requests, stores hashed credentials in PostgreSQL, and returns JWTs. The e2e test is the simplest of the three: Postgres plus bufconn.
 
 ```go
 //go:build integration
@@ -568,12 +568,14 @@ import (
     "testing"
     "time"
 
+    "github.com/google/uuid"
     "google.golang.org/grpc/codes"
     "google.golang.org/grpc/status"
 
-    authpb "github.com/yourorg/library/proto/gen/auth/v1"
-    "github.com/yourorg/library/services/auth/internal/repository"
-    "github.com/yourorg/library/services/auth/internal/service"
+    pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
+    authpb "github.com/fesoliveira014/library-system/proto/gen/auth/v1"
+    "github.com/fesoliveira014/library-system/services/auth/internal/repository"
+    "github.com/fesoliveira014/library-system/services/auth/internal/service"
 )
 
 func TestAuth_E2E(t *testing.T) {
@@ -656,11 +658,14 @@ func TestAuth_E2E(t *testing.T) {
     if err != nil {
         t.Fatalf("failed to generate expired token: %v", err)
     }
+    // The negative duration produces a token that is already expired — useful for testing rejection of expired tokens.
     validateExpiredResp, err := client.ValidateToken(ctx, &authpb.ValidateTokenRequest{
         Token: expiredToken,
     })
     // Depending on your API design, ValidateToken may return a response with
     // Expired: true rather than an error. Assert the design you chose.
+    // This project returns Unauthenticated for expired tokens; the else
+    // branch is shown only to illustrate the alternative.
     if err != nil {
         if status.Code(err) != codes.Unauthenticated {
             t.Errorf("ValidateToken expired: expected Unauthenticated, got %v", status.Code(err))
@@ -673,9 +678,9 @@ func TestAuth_E2E(t *testing.T) {
 }
 ```
 
-The auth test deliberately avoids Kafka because the auth service does not publish events. Adding a Kafka container to this test would be dishonest — it would imply a dependency that does not exist and would slow down the suite for no benefit. Keep the infrastructure footprint of each e2e test matched to the actual dependencies of the service under test.
+The auth test deliberately avoids Kafka because the Auth Service does not publish events. Adding a Kafka container to this test would be dishonest — it would imply a dependency that does not exist and would slow down the suite for no benefit. Match the infrastructure footprint of each e2e test to the actual dependencies of the service under test.
 
-Step 6 tests an edge case that only exists at the level of a full integration: the token is generated outside the auth service (simulating a token that was valid at login but has since expired), passed to `ValidateToken`, and rejected. The expiry check runs against the real system clock in the real JWT library — no mocked time, no stubbed clock interface.
+Step 6 tests an edge case that only exists at the level of a full integration: the token is generated outside the Auth Service (simulating a token that was valid at login but has since expired), passed to `ValidateToken`, and rejected. The expiry check runs against the real system clock in the real JWT library — no mocked time, no stubbed clock interface.
 
 ---
 
@@ -798,11 +803,11 @@ integration-test:
     - uses: actions/checkout@v4
     - uses: earthly/actions-setup@v1
       with:
-        version: latest
+        version: v0.8.15
     - run: earthly +integration-test
 ```
 
-The `needs: [test]` dependency means integration tests only run when the fast tests are green. This is the same principle as the test pyramid: do not spend 90 seconds starting containers if a 3-second unit test already failed.
+The `needs: [test]` dependency ensures integration tests run only when unit tests pass. This is the same principle as the test pyramid: do not spend 90 seconds starting containers if a 3-second unit test already failed.
 
 ---
 
@@ -810,19 +815,19 @@ The `needs: [test]` dependency means integration tests only run when the fast te
 
 These tests deliberately stop short of multi-service flows. The test suite as built tells you:
 
-- The catalog service correctly persists a book, publishes an event, and serves the data back through its gRPC API.
-- The reservation service correctly enforces business rules, persists reservations, and publishes events.
-- The auth service correctly hashes passwords, issues JWTs, and rejects bad credentials.
+- The Catalog Service correctly persists a book, publishes an event, and serves the data back through its gRPC API.
+- The Reservation Service correctly enforces business rules, persists reservations, and publishes events.
+- The Auth Service correctly hashes passwords, issues JWTs, and rejects bad credentials.
 
 What it does not tell you:
 
-- Whether the `BookCreated` event published by the catalog service can be correctly consumed by the reservation service. The event schema was verified in section 11.4, but a field rename in the proto definition would be caught by that Kafka round-trip test, not by this one.
+- Whether the `BookCreated` event published by the Catalog Service can be correctly consumed by the Reservation Service. The event schema was verified in section 11.4, but a field rename in the proto definition would be caught by that Kafka round-trip test, not by this one.
 - Whether the gateway correctly routes HTTP requests to the right gRPC service and translates responses.
 - Whether the OAuth2 login flow with Gmail works end-to-end, including the redirect and token exchange.
 
 These gaps are addressable in several ways:
 
-**Contract testing with Pact**[^1] defines a consumer-driven contract: the reservation service declares what it expects from the catalog service's Kafka events, and the catalog service verifies its output against those expectations. Neither service needs to run at the same time. This is the recommended approach for verifying the serialization contract between independently-deployed services.
+**Contract testing with Pact**[^1] defines a consumer-driven contract: the Reservation Service declares what it expects from the Catalog Service's Kafka events, and the Catalog Service verifies its output against those expectations. Neither service needs to run at the same time. This is the recommended approach for verifying the serialization contract between independently-deployed services.
 
 **Gateway-level HTTP e2e tests** start all services and the gateway in containers and exercise user-facing scenarios through HTTP. These tests are expensive — 60 to 120 seconds to start — and are appropriate for a small set of critical user paths: login, reserve a book, return a book.
 

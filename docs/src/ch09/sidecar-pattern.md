@@ -176,7 +176,7 @@ The service exports to `$(status.hostIP):4317`, which reaches the DaemonSet Coll
 | **Network hops** | Cross-container | localhost | Same node |
 | **Best for** | Dev, small teams | Multi-team, strict isolation | Production Kubernetes |
 
-The DaemonSet model dominates production Kubernetes deployments. It balances resource efficiency with locality. The sidecar model is used when teams need complete independence (different sampling, different backends). The shared model suits development and small production systems.
+The DaemonSet model is the most common choice for production Kubernetes deployments. It balances resource efficiency with locality. The sidecar model is used when teams need complete independence (different sampling, different backends). The shared model suits development and small production systems.
 
 ---
 
@@ -184,7 +184,7 @@ The DaemonSet model dominates production Kubernetes deployments. It balances res
 
 ### Sampling Strategies
 
-In development, we keep 100% of traces. In production, this is expensive. Common strategies:
+In development, we keep 100% of traces. In production, that volume is expensive. Common strategies:
 
 **Head-based sampling**—Decide at trace creation time whether to sample. The SDK's `ParentBasedSampler` with `TraceIDRatioBased(0.1)` keeps 10% of traces. Simple and efficient, but you might miss the one trace that matters.
 
@@ -206,7 +206,7 @@ processors:
     spike_limit_mib: 128
 ```
 
-If the Collector hits the limit, it drops data. This is intentional—it is better to lose telemetry than to crash the Collector (and lose all telemetry).
+If the Collector hits the limit, it drops data. This is intentional—it is better to lose some telemetry than to crash the Collector and lose all of it.
 
 ### High Availability
 

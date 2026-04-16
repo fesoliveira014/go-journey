@@ -10,7 +10,7 @@ This chapter covers the failures unit tests miss, why they miss them, and what t
 
 ## What unit tests cannot see
 
-Consider the catalog service's `BookRepository`. In chapter 2 you defined an interface:
+Consider the Catalog Service's `BookRepository`. In chapter 2 you defined an interface:
 
 ```go
 type BookRepository interface {
@@ -24,7 +24,7 @@ Your unit tests inject a hand-written mock that satisfies the interface, thoroug
 
 Now consider the gRPC layer: the `CatalogServer` is tested by calling its methods as plain Go functions. That is fast and convenient. But it means no gRPC frame ever travels over the wire, no interceptor chain runs, and no metadata is parsed. If the auth interceptor from chapter 4 is accidentally omitted from the server's option list, every unit test still passes. A test that dials a real (in-process) gRPC listener will fail immediately when it receives `codes.Unauthenticated`.
 
-Finally, consider the Kafka consumer in the reservation service. You mocked `sarama.ConsumerGroup` and drove the `ConsumeClaim` loop directly. The message bytes were whatever your test constructed. If the catalog service's producer serializes events as Protobuf but the consumer's `Unmarshal` call expects JSON, the mismatch is invisible to both sides in isolation. Only a test that publishes a real message to a real Kafka broker — with the same serialization path the production code uses — can detect it.
+Finally, consider the Kafka consumer in the Reservation Service. You mocked `sarama.ConsumerGroup` and drove the `ConsumeClaim` loop directly. The message bytes were whatever your test constructed. If the Catalog Service's producer serializes events as Protobuf but the consumer's `Unmarshal` call expects JSON, the mismatch is invisible to both sides in isolation. Only a test that publishes a real message to a real Kafka broker — with the same serialization path the production code uses — can detect it.
 
 These are not hypothetical edge cases. They are the three most common categories of integration failure in a Go microservices system:
 
@@ -51,13 +51,13 @@ The testing pyramid[^1] describes a recommended distribution of tests across thr
 ------------------
 ```
 
-**Unit tests** sit at the base. They are the most numerous because they are cheapest to write and run in milliseconds. Each test is narrow: one function, one method, one decision branch. They are the right tool for business logic — fee calculation, validation rules, state-machine transitions.
+**Unit tests** sit at the base. They are the most numerous because they are cheapest to write and run in milliseconds. Each test is narrow: one function, one method, one decision branch. They are the right tool for business logic: fee calculation, validation rules, state-machine transitions.
 
-**Integration tests** occupy the middle. They are slower because they require real infrastructure: a PostgreSQL container, a Kafka broker, a running gRPC server. You write fewer of them, and you focus them on the seams between your code and external systems. They answer the question "does this SQL actually work?" and "does this consumer actually parse what the producer sends?"
+**Integration tests** occupy the middle. They are slower because they require real infrastructure: a PostgreSQL container, a Kafka broker, a running gRPC server. You write fewer of them and focus them on the seams between your code and external systems. They answer the question "does this SQL actually work?" and "does this consumer actually parse what the producer sends?"
 
 **End-to-end (E2E) tests** sit at the top. In a microservices system, a full end-to-end test might start all five services and exercise a user-facing scenario through the gateway's HTTP API. They give the highest confidence but cost the most: tens of seconds to start containers, complex setup and teardown, and fragile dependencies on network timing. You keep them few and focused on critical user paths.
 
-If you are coming from a Java/Spring background, think of unit tests as JUnit tests with Mockito, integration tests as `@SpringBootTest` with an in-memory or Testcontainers-backed datasource, and e2e tests as RestAssured or Playwright suites that drive a fully-deployed application. The taxonomy is identical; Go's tooling just looks different.
+If you are coming from a Java/Spring background, think of unit tests as JUnit tests with Mockito, integration tests as `@SpringBootTest` with an in-memory or Testcontainers-backed data source, and e2e tests as RestAssured or Playwright suites that drive a fully deployed application. The taxonomy is identical; Go's tooling just looks different.
 
 ---
 
@@ -135,13 +135,13 @@ The remaining sections build the testing strategy layer by layer:
 
 **11.1 — Unit Testing Patterns** revisits the mock-based approach from previous chapters with a critical eye. You will see when hand-written mocks are the right tool, when `gomock` or `testify/mock` is preferable, and how to structure table-driven tests for complex input spaces. This section also covers `t.Cleanup`, `t.Parallel`, and subtests — Go idioms that have no direct Kotlin/Java equivalent but pay dividends in test suite organization.
 
-**11.2 — Integration Testing with Testcontainers** applies testcontainers-go to the catalog and reservation service repositories. You will write a `TestMain` function that starts a PostgreSQL container, runs migrations using the same `golang-migrate` code the production service uses, and tears everything down after the suite. Every repository method gets a test against real SQL.
+**11.2 — Integration Testing with Testcontainers** applies testcontainers-go to the Catalog and Reservation Service repositories. You will write a `TestMain` function that starts a PostgreSQL container, runs migrations using the same `golang-migrate` code the production service uses, and tears everything down after the suite. Every repository method gets a test against real SQL.
 
 **11.3 — gRPC Testing with bufconn** wires up a full gRPC server — with the auth interceptor, the real service implementation, and the real repository (backed by the Testcontainers PostgreSQL from 11.2) — and dials it through a bufconn listener. You will test that unauthenticated calls are rejected, that valid JWTs are accepted, and that the server returns correct responses for normal operations.
 
-**11.4 — Kafka Testing** covers the serialization seam between the catalog service's event producer and the reservation and search service consumers. You will start a Kafka broker via Testcontainers, publish events through the production publisher code, consume them through the production consumer code, and assert that the full round-trip preserves all fields correctly.
+**11.4 — Kafka Testing** covers the serialization seam between the Catalog Service's event producer and the Reservation and Search Service consumers. You will start a Kafka broker via Testcontainers, publish events through the production publisher code, consume them through the production consumer code, and assert that the full round-trip preserves all fields correctly.
 
-**11.5 — Service-Level End-to-End Tests** composes the previous layers into a scenario-level test: a user reserves a book, the catalog service publishes a `BookReserved` event, the reservation service consumes it and updates its own database, and the search index is invalidated. The test starts all necessary containers, wires the services together, and drives the scenario through the gateway's HTTP API.
+**11.5 — Service-Level End-to-End Tests** composes the previous layers into a scenario-level test: a user reserves a book, the Catalog Service publishes a `BookReserved` event, the Reservation Service consumes it and updates its own database, and the search index is invalidated. The test starts all necessary containers, wires the services together, and drives the scenario through the gateway's HTTP API.
 
 ---
 

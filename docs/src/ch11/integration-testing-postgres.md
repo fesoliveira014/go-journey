@@ -1,12 +1,12 @@
 # 11.2 Integration Testing with Testcontainers
 
-Unit tests with mocks are fast, isolated, and deterministic. But they can only verify logic that your mock correctly models. As soon as the real behavior of a dependency — a database constraint, a transaction rollback, an index scan — differs from your mock's assumptions, the discrepancy is invisible. This section closes that gap by showing how to run repository tests against a real PostgreSQL instance that is spun up on demand, requires no external setup, and is torn down automatically after the test run.
+Unit tests with mocks are fast, isolated, and deterministic. But they can only verify logic that your mock correctly models. As soon as a dependency's real behavior—a database constraint, a transaction rollback, an index scan—differs from your mock's assumptions, the discrepancy is invisible. This section closes that gap by showing how to run repository tests against a real PostgreSQL instance that is spun up on demand, requires no external setup, and is torn down automatically after the test run.
 
 ---
 
 ## The Problem with `t.Skip`
 
-Open the catalog service's existing repository test helper:
+Open the Catalog Service's existing repository test helper:
 
 ```go
 // services/catalog/internal/repository/book_test.go
@@ -29,7 +29,7 @@ func testDB(t *testing.T) *gorm.DB {
 
 The `t.Skipf` call on a connection failure is pragmatic for local development but dangerous in CI. When `go test` skips a test, the output line reads `--- SKIP` and the overall run still exits with code zero. Your CI pipeline sees green. Nobody notices that the repository tests never ran.
 
-The reservation service test helper is more explicit about its intent but has the same flaw:
+The Reservation Service test helper is more explicit about its intent but has the same flaw:
 
 ```go
 // services/reservation/internal/repository/repository_test.go
@@ -49,7 +49,7 @@ func setupTestDB(t *testing.T) *gorm.DB {
 
 It skips on `testing.Short()` and again if `TEST_DATABASE_URL` is absent. Both skips are silent. In a fresh CI environment with no pre-configured Postgres, all repository tests are skipped and the suite still passes.
 
-There is also a subtler issue in the reservation test: it calls `db.AutoMigrate(&model.Reservation{})` rather than running the embedded migration files. `AutoMigrate` only adds columns — it never creates `CHECK` constraints or the `UNIQUE` indexes that the real SQL migrations define. A test relying on `AutoMigrate` can miss an entire class of database-enforced invariants.
+A subtler issue exists in the reservation test: it calls `db.AutoMigrate(&model.Reservation{})` rather than running the embedded migration files. `AutoMigrate` only adds columns — it never creates `CHECK` constraints or the `UNIQUE` indexes that the real SQL migrations define. A test relying on `AutoMigrate` can miss an entire class of database-enforced invariants.
 
 The fix for both problems is the same: use Testcontainers to spin up a real Postgres instance that the test controls, so there is never an external dependency to skip over.
 
@@ -65,7 +65,7 @@ Testcontainers is a library (available for Go, Java, Python, .NET, and others) t
 4. Returns a handle from which you retrieve the container's mapped host port and connection string.
 5. Registers a cleanup hook that terminates and removes the container when the test finishes.
 
-The container runs on the same Docker daemon you use for development. No separate service, no CI environment variable, no `docker compose up` step. The only prerequisite is that the Docker daemon is reachable when the test runs.
+The container runs on the same Docker daemon you use for development. No separate service, CI environment variable, or `docker compose up` step is required. The only prerequisite is that the Docker daemon is reachable when the test runs.
 
 If you have used Spring Boot's `@Testcontainers` + `@Container` annotations, the Go approach is equivalent but explicit: there is no annotation magic. You call functions, receive values, and register cleanup with `t.Cleanup`. This is a good fit for Go's philosophy of making control flow visible.
 
@@ -73,7 +73,7 @@ If you have used Spring Boot's `@Testcontainers` + `@Container` annotations, the
 
 ## Adding the Dependency
 
-From inside the catalog service directory:
+From inside the Catalog Service directory:
 
 ```
 go get github.com/testcontainers/testcontainers-go
@@ -142,10 +142,22 @@ func setupPostgres(t *testing.T) *gorm.DB {
     }
 
     // Run real migrations
-    sqlDB, _ := db.DB()
-    driver, _ := pgmigrate.WithInstance(sqlDB, &pgmigrate.Config{})
-    source, _ := iofs.New(migrations.FS, ".")
-    m, _ := migrate.NewWithInstance("iofs", source, "postgres", driver)
+    sqlDB, err := db.DB()
+    if err != nil {
+        t.Fatalf("get underlying sql.DB: %v", err)
+    }
+    driver, err := pgmigrate.WithInstance(sqlDB, &pgmigrate.Config{})
+    if err != nil {
+        t.Fatalf("create migration driver: %v", err)
+    }
+    source, err := iofs.New(migrations.FS, ".")
+    if err != nil {
+        t.Fatalf("create migration source: %v", err)
+    }
+    m, err := migrate.NewWithInstance("iofs", source, "postgres", driver)
+    if err != nil {
+        t.Fatalf("create migrator: %v", err)
+    }
     if err := m.Up(); err != nil && err != migrate.ErrNoChange {
         t.Fatalf("run migrations: %v", err)
     }
@@ -186,7 +198,7 @@ The import alias `gormpostgres` is used because the `modules/postgres` import an
 
 The helper calls `m.Up()` using the same embedded `migrations.FS` that the production binary uses. This means the test database has exactly the schema that production has: `UNIQUE` indexes, `CHECK` constraints, foreign key relationships. This is the critical difference from `db.AutoMigrate`. GORM's `AutoMigrate` looks at your model structs and creates or alters tables to match — but it has no knowledge of raw SQL constraints that live only in migration files.
 
-The idiomatic production-grade approach is: embed migration SQL files with `//go:embed`, run them in tests. Never derive schema from struct tags in an integration test context.
+The idiomatic production-grade approach is to embed migration SQL files with `//go:embed` and run them in tests. Never derive schema from struct tags in an integration test context.
 
 ---
 
@@ -359,7 +371,7 @@ Earthly will run all five in parallel where dependencies allow, so the total wal
 
 Testcontainers shifts the prerequisite from "a Postgres instance somewhere on the network" to "Docker is running". In a local dev environment and on every major CI provider, Docker is already available. You gain full confidence in your database layer without managing test databases or writing fragile skip conditions.
 
-The trade-off is startup time. A Postgres container takes two to four seconds to become ready. For a test suite with ten repository tests, that cost is paid once per package (if you use `TestMain` for shared setup) or once per test (if each test starts its own container). Budget accordingly and reach for per-test containers first — they are simpler and the isolation benefit is real.
+The trade-off is startup time. A Postgres container takes two to four seconds to become ready. For a test suite with ten repository tests, that cost is paid once per package (if you use `TestMain` for shared setup) or once per test (if each test starts its own container). Budget accordingly and reach for per-test containers first—they are simpler, and the isolation benefit is real.
 
 ---
 

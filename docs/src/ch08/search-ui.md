@@ -8,7 +8,7 @@ If you are coming from Spring MVC + Thymeleaf, the architecture is familiar: the
 
 ## Gateway Search Routes
 
-The gateway's `Server` struct holds a gRPC client for the search service, alongside the existing catalog and auth clients:
+The gateway's `Server` struct holds a gRPC client for the Search Service, alongside the existing catalog and auth clients:
 
 ```go
 // services/gateway/internal/handler/server.go
@@ -23,7 +23,7 @@ type Server struct {
 }
 ```
 
-The search page handler reads query parameters, calls the search service via gRPC, and renders the results:
+The search page handler reads query parameters, calls the Search Service via gRPC, and renders the results:
 
 ```go
 // services/gateway/internal/handler/search.go
@@ -224,7 +224,7 @@ Two things to note:
 
 1. **Short-circuit for short prefixes.** If the prefix is less than 2 characters, the handler returns an empty response with the correct content type. This renders as empty HTML in the suggestions div, effectively clearing any previous suggestions. The HTMX trigger already filters these out, but the server-side check is defense in depth.
 
-2. **Error handling returns empty HTML.** If the search service is down, the user sees no suggestions—not an error message. This is appropriate for autocomplete: it is a progressive enhancement, not a critical feature. The user can still type their query and press Enter to use the full search page.
+2. **Error handling returns empty HTML.** If the Search Service is down, the user sees no suggestions—not an error message. This is appropriate for autocomplete: It is a progressive enhancement, not a critical feature. The user can still type their query and press Enter to use the full search page.
 
 The `renderPartial` method renders a named template without the full page layout (no `<html>`, no nav, no footer). The suggestions template is a list of links:
 
@@ -261,7 +261,7 @@ Here is the complete path of a search query, from keypress to rendered suggestio
 10. User sees a dropdown with clickable book links
 ```
 
-The entire round trip—gateway to search service to Meilisearch and back—typically completes in under 50ms. The 300ms debounce is the dominant latency from the user's perspective.
+The entire round trip—gateway to Search Service to Meilisearch and back—typically completes in under 50 ms. The 300 ms debounce is the dominant latency from the user's perspective.
 
 ---
 
@@ -274,9 +274,9 @@ There is an important user experience consideration: the search index is eventua
 3. Search consumer receives the event and upserts into Meilisearch (milliseconds to seconds).
 4. Meilisearch processes the task and makes the document searchable (milliseconds).
 
-In total, there is a window of roughly 1-5 seconds where the book exists in the catalog but is not yet searchable. This is rarely noticeable in practice, but it can be confusing during development when you create a book and immediately search for it.
+In total, there is a window of roughly one to five seconds where the book exists in the catalog but is not yet searchable. This is rarely noticeable in practice, but it can be confusing during development when you create a book and immediately search for it.
 
-The gateway handles this gracefully: the catalog browse page (`/books`) always reads from PostgreSQL through the catalog service, so new books appear there immediately. The search page reads from Meilisearch, so it reflects the slightly-delayed index. Both views are correct for their data source.
+The gateway handles this gracefully: the catalog browse page (`/books`) always reads from PostgreSQL through the Catalog Service, so new books appear there immediately. The search page reads from Meilisearch, so it reflects the slightly-delayed index. Both views are correct for their data source.
 
 ---
 

@@ -27,7 +27,7 @@ Consider two log lines from a book creation failure:
 }
 ```
 
-The unstructured line is readable by a human scanning a terminal. The structured line is queryable by a machine. With structured logs flowing into Loki, you can write queries like:
+The unstructured line is readable by a human scanning a terminal, but it is not queryable. The structured line is queryable by a machine. With structured logs flowing into Loki, you can write queries like:
 
 - `{container_name="catalog"} | json | level="ERROR"`—all errors from the catalog
 - `{container_name=~".+"} | json | trace_id="4bf92f35..."`—every log line from every service involved in a single request
@@ -35,7 +35,7 @@ The unstructured line is readable by a human scanning a terminal. The structured
 
 The `trace_id` field is the bridge between logging and tracing. When you see a slow trace in Tempo, you click it, and Grafana queries Loki for all log lines with that `trace_id`. This is trace-to-log correlation, and it only works if your logs are structured and carry the trace ID.
 
-In the Java world, SLF4J with Logback does this via MDC (Mapped Diagnostic Context). Spring Cloud Sleuth automatically puts `traceId` and `spanId` into the MDC, and your `logback.xml` pattern includes `%X{traceId}`. The Go equivalent is passing `context.Context` through the call chain and extracting span information from it at log time.
+In Java, SLF4J with Logback does this via MDC (Mapped Diagnostic Context). Spring Cloud Sleuth automatically puts `traceId` and `spanId` into the MDC, and your `logback.xml` pattern includes `%X{traceId}`. The Go equivalent is passing `context.Context` through the call chain and extracting span information from it at log time.
 
 ---
 
@@ -156,7 +156,7 @@ In Spring with Sleuth/Micrometer Tracing, the pattern is:
 2. The Logback pattern includes `%X{traceId} %X{spanId}`
 3. Every log call on that thread automatically includes the fields
 
-Go does not have thread-locals (goroutines are not threads, and context is explicit). Instead:
+Go does not have thread-locals---goroutines are not threads, and context is explicit. Instead:
 
 1. The `otelhttp`/`otelgrpc` middleware stores the span in `context.Context`
 2. The context is passed explicitly through the call chain: `handler(ctx) → service(ctx) → repo(ctx)`

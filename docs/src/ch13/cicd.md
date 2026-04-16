@@ -154,14 +154,14 @@ output "github_actions_role_arn" {
 }
 ```
 
-A few design decisions worth calling out. The `ECRPush` statement uses `Resource = "*"` because `ecr:GetAuthorizationToken` is an account-level call — it cannot be scoped to a specific repository. The other ECR actions can be scoped, but since all repositories in this account belong to this project, the broad scope is acceptable. In a shared account, replace `"*"` with specific repository ARNs.
+The `ECRPush` statement uses `Resource = "*"` because `ecr:GetAuthorizationToken` is an account-level action — it cannot be scoped to a specific repository. The other ECR actions can be scoped, but since all repositories in this account belong to this project, the broad scope is acceptable. In a shared account, replace `"*"` with specific repository ARNs.
 
 The `aws_eks_access_entry` approach is the modern replacement for editing the `aws-auth` ConfigMap manually. The ConfigMap approach required the cluster creator to have a special bootstrap IAM identity, had no Terraform resource prior to 2023, and was a frequent source of hard-to-debug lockouts. Access entries manage Kubernetes RBAC through the AWS API and are fully idempotent.
 
 After applying this Terraform:
 
 ```
-cd infrastructure
+cd terraform
 terraform apply -target=aws_iam_openid_connect_provider.github_actions \
                 -target=aws_iam_role.github_actions_deploy \
                 -target=aws_eks_access_entry.github_actions \
@@ -322,7 +322,7 @@ jobs:
           echo "All services rolled out successfully."
 ```
 
-The `environment: production` declaration integrates with GitHub's Environments feature. If you configure the `production` environment to require a manual approval, every push to `main` will pause at the deploy step until a designated reviewer approves it. This is useful for projects where you want automated builds but gated deployments. If you want fully automated deploys, remove the line.
+The `environment: production` declaration integrates with GitHub's Environments feature. If you configure the `production` environment to require a manual approval, every push to `main` pauses at the deploy step until a designated reviewer approves it. This is useful for projects where you want automated builds but gated deployments. If you want fully automated deploys, remove the line.
 
 The `role-session-name` field in the OIDC step is optional but recommended. Including the `run_id` makes it trivial to correlate a set of AWS API calls — visible in CloudTrail — with the specific workflow run that made them.
 
@@ -366,11 +366,11 @@ A common extension is running `terraform plan` on pull requests so reviewers can
 #           terraform_version: "1.5.x"
 #
 #       - name: Terraform init
-#         working-directory: infrastructure
+#         working-directory: terraform
 #         run: terraform init
 #
 #       - name: Terraform plan
-#         working-directory: infrastructure
+#         working-directory: terraform
 #         run: terraform plan -no-color -out=tfplan 2>&1 | tee plan.txt
 #
 #       - name: Post plan to PR

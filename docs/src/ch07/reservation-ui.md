@@ -1,6 +1,6 @@
 # 7.4 Reservation UI
 
-The reservation UI extends the gateway (our Backend for Frontend (BFF) from Chapter 5) with three new capabilities: reserving a book, listing a user's reservations, and returning a book. No new architectural concepts — we apply the patterns we already know to a new feature.
+The reservation UI extends the gateway (our Backend for Frontend (BFF) from Chapter 5) with three new capabilities: reserving a book, listing a user's reservations, and returning a book. No new architectural concepts—we apply the patterns we already know to a new feature.
 
 ---
 
@@ -18,7 +18,7 @@ mux.HandleFunc("POST /reservations/{id}/return", srv.ReturnBook)
 
 All three require authentication. There are no `GET` endpoints for reserve or return—these are actions triggered by buttons, not pages with their own URLs. The `POST` handlers do their work and redirect.
 
-The gateway also needs a new gRPC client. In `main.go`, the reservation service connection is set up alongside the catalog and auth connections:
+The gateway also needs a new gRPC client. In `main.go`, the Reservation Service connection is set up alongside the catalog and auth connections:
 
 ```go
 reservationConn, err := grpc.NewClient(reservationAddr,
@@ -90,7 +90,7 @@ func (s *Server) ReserveBook(w http.ResponseWriter, r *http.Request) {
 
 The pattern is: authenticate, extract path parameters, call gRPC, handle errors, set a flash message, redirect. This is the same pattern as every other mutation in the gateway.
 
-`r.PathValue("id")` extracts the `{id}` segment from the URL (Go 1.22+). The value is passed directly to the gRPC request as a string—UUID validation happens in the reservation service's handler layer, not in the gateway. The gateway's job is to relay, not to validate business data.
+`r.PathValue("id")` extracts the `{id}` segment from the URL (Go 1.22+). The value is passed directly to the gRPC request as a string—UUID validation happens in the Reservation Service's handler layer, not in the gateway. The gateway's job is to relay, not to validate business data.
 
 `http.StatusSeeOther` (303) is the correct status code for a POST-redirect-GET flow. It tells the browser to follow the redirect with a GET request, preventing the "resubmit form?" dialog if the user refreshes.
 
@@ -139,7 +139,7 @@ func (s *Server) MyReservations(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-The handler calls the reservation service, gets back a list of protobuf `Reservation` messages, and passes them to the template. Note that the template receives protobuf types directly—there is no conversion to a gateway-specific view model. This is a simplification. In a larger system, you might define gateway-specific structs to decouple the template from the protobuf schema.
+The handler calls the Reservation Service, gets back a list of protobuf `Reservation` messages, and passes them to the template. Note that the template receives protobuf types directly—there is no conversion to a gateway-specific view model. This is a simplification. In a larger system, you might define gateway-specific structs to decouple the template from the protobuf schema.
 
 The template renders the list as an HTML table:
 
@@ -220,7 +220,7 @@ func (s *Server) ReturnBook(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-Authenticate, extract path parameter, call gRPC, handle errors, flash, redirect. The reservation service handles all validation (ownership, status checks). The gateway relays.
+Authenticate, extract path parameter, call gRPC, handle errors, flash, redirect. The Reservation Service handles all validation (ownership, status checks). The gateway relays.
 
 ---
 
@@ -250,7 +250,7 @@ func (s *Server) handleGRPCError(w http.ResponseWriter, r *http.Request, err err
 }
 ```
 
-This is the translation layer between the backend's error domain (gRPC status codes) and the frontend's error domain (HTTP status codes with human-readable messages). The reservation service returns `codes.ResourceExhausted` when the user has too many active reservations—the gateway turns that into a 429 with a friendly message. The reservation service returns `codes.FailedPrecondition` when the book has no available copies or the reservation is already returned—the gateway passes through the service's message.
+This is the translation layer between the backend's error domain (gRPC status codes) and the frontend's error domain (HTTP status codes with human-readable messages). The Reservation Service returns `codes.ResourceExhausted` when the user has too many active reservations—the gateway turns that into a 429 with a friendly message. The Reservation Service returns `codes.FailedPrecondition` when the book has no available copies or the reservation is already returned—the gateway passes through the service's message.
 
 This mapping exists in one place and is shared across all handlers. If you add a new error case in a backend service, you add one line here.
 
@@ -272,7 +272,7 @@ This is eventual consistency at work. The data will converge—usually within mi
 There are several ways to handle this in the UI, if needed:
 
 - **Optimistic updates.** The gateway could subtract 1 from the displayed count after a successful reservation, without waiting for the event to process.
-- **Cache invalidation.** The reservation service could notify the gateway to invalidate its cache for that book (if the gateway had a cache).
+- **Cache invalidation.** The Reservation Service could notify the gateway to invalidate its cache for that book (if the gateway had a cache).
 - **Polling.** The book detail page could poll for updated availability.
 
 We do none of these — the simplest approach is often the right one: accept the brief inconsistency and let the system converge.
@@ -281,7 +281,7 @@ We do none of these — the simplest approach is often the right one: accept the
 
 ## Testing the Full Flow
 
-To test the complete reserve-and-return flow locally, you need all the infrastructure running: PostgreSQL (for both services), Kafka, the catalog service, the reservation service, and the gateway. Docker Compose handles this.
+To test the complete reserve-and-return flow locally, you need all the infrastructure running: PostgreSQL (for both services), Kafka, the Catalog Service, the Reservation Service, and the gateway. Docker Compose handles this.
 
 A manual test sequence:
 
@@ -293,7 +293,7 @@ A manual test sequence:
 6. On the reservations page, click "Return."
 7. Navigate to the book detail page and verify the count increased.
 
-If step 5 still shows the old count, wait a second and refresh. The Kafka consumer may not have processed the event yet. If it *never* updates, check the catalog service logs for consumer errors.
+If step 5 still shows the old count, wait a second and refresh. The Kafka consumer may not have processed the event yet. If it *never* updates, check the Catalog Service logs for consumer errors.
 
 ---
 
@@ -303,7 +303,7 @@ If step 5 still shows the old count, wait a second and refresh. The Kafka consum
 
 2. **Display book title in reservations.** The reservations table shows the book UUID, which is not user-friendly. Modify `MyReservations` to fetch book details for each reservation and pass the titles to the template. Consider the performance implications (N+1 gRPC calls). How would you batch this?
 
-3. **Extend reservation from the UI.** Add a POST route `POST /reservations/{id}/extend` and an "Extend" button on the reservations page (only for active reservations). This requires the `ExtendReservation` RPC to exist in the reservation service (see exercise 1 in section 7.2).
+3. **Extend reservation from the UI.** Add a POST route `POST /reservations/{id}/extend` and an "Extend" button on the reservations page (only for active reservations). This requires the `ExtendReservation` RPC to exist in the Reservation Service (see exercise 1 in section 7.2).
 
 4. **Error message UX.** Try to reserve a book when you already have the maximum number of active reservations. What error page do you see? Modify the flow so that instead of showing an error page, the user is redirected back to the book detail page with a flash message explaining the problem.
 
