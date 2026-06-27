@@ -1,5 +1,11 @@
 # Chapter 9: Observability with OpenTelemetry
 
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-09-start`
+> End state: `git checkout chapter-09-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
 In this chapter, we add end-to-end observability to the library system with OpenTelemetry and the Grafana stack.
 
 ## What You'll Learn

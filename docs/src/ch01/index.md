@@ -1,5 +1,11 @@
 # Chapter 1: Go Foundations
 
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-01-start`
+> End state: `git checkout chapter-01-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
 This chapter sets up the project, covers the Go essentials you'll need throughout the tutorial, builds a basic HTTP server, and introduces Go's testing conventions.
 
 By the end of this chapter, you will have:
@@ -14,7 +20,7 @@ By the end of this chapter, you will have:
 
 Before starting, install:
 
-- **Go 1.22+**—[go.dev/dl](https://go.dev/dl/)
+- **Go 1.26+**—[go.dev/dl](https://go.dev/dl/)
 - **Earthly**—[earthly.dev/get-earthly](https://earthly.dev/get-earthly)
 - **Git**—[git-scm.com](https://git-scm.com/)
 - A code editor—VS Code with the official Go extension is recommended.
@@ -22,7 +28,7 @@ Before starting, install:
 Verify your installations:
 
 ```bash
-go version    # go1.22.x or later
+go version    # go1.26.x or later
 earthly --version
 git --version
 ```

@@ -1,5 +1,11 @@
 # Chapter 2: First Microservice—Catalog Service
 
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-02-start`
+> End state: `git checkout chapter-02-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
 In this chapter, we build the first standalone microservice: the **Catalog service**. It manages the book registry with full CRUD operations and exposes a gRPC API. Data is stored in PostgreSQL via GORM, and the schema is managed with versioned SQL migrations.
 
 ## What You'll Learn

@@ -1,5 +1,11 @@
 # Chapter 3: Containerization
 
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-03-start`
+> End state: `git checkout chapter-03-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
 In this chapter, we package the services from Chapters 1 and 2 into Docker containers and orchestrate them with Docker Compose. By the end, you will have a single command that brings up PostgreSQL, the Catalog service, and the API Gateway—plus a development mode with hot-reload.
 
 ## What You'll Learn

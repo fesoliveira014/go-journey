@@ -1,5 +1,11 @@
 # Chapter 4: Authentication
 
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-04-start`
+> End state: `git checkout chapter-04-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
 In this chapter, we build an authentication service from scratch. By the end, your library system will support user registration with bcrypt-hashed passwords, stateless JWT-based authentication, and OAuth2 login with Google. A shared interceptor will protect both the Auth and Catalog services.
 
 ## Architecture Overview
@@ -53,7 +59,7 @@ The `pkg/auth` module is the linchpin—it lives outside both services so any mi
 ## What You'll Build
 
 1. **A shared `pkg/auth` library** with JWT generation/validation, context helpers, and a reusable auth interceptor
-2. **An Auth service** with six gRPC RPCs: Register, Login, ValidateToken, GetUser, InitOAuth2, CompleteOAuth2
+2. **An Auth service** that starts with six gRPC RPCs: Register, Login, ValidateToken, GetUser, InitOAuth2, CompleteOAuth2. Chapter 6 adds `ListUsers` for the admin dashboard.
 3. **OAuth2 integration with Google** using the authorization code flow
 4. **Protected Catalog endpoints** where only admins can create, update, or delete books
 

@@ -1,5 +1,11 @@
 # Chapter 8: Full-Text Search—Meilisearch & Event-Driven Indexing
 
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-08-start`
+> End state: `git checkout chapter-08-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
 In this chapter we add full-text search to the library system. The Catalog service publishes `catalog.books.changed` events to Kafka whenever books are created, updated, or deleted. A new Search service consumes those events, maintains a Meilisearch index, and exposes Search and Suggest gRPC RPCs. The gateway gets a search page with HTMX-powered autocomplete.
 
 ## What You'll Learn

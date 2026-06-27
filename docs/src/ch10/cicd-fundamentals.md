@@ -100,7 +100,7 @@ This chapter uses two tools that serve different roles:
 
 **Earthly** is a build tool. It defines *what* to build and *how*: fetch dependencies, run linters, run tests, build Docker images. An Earthfile is like a Makefile crossed with a Dockerfile: each target runs in a container, caches layers intelligently, and can be invoked with `earthly +target` from your terminal. If you come from Gradle, think of Earthly as Gradle with first-class Docker layer caching and a containerized execution model.
 
-**GitHub Actions** is an orchestration platform. It defines *when* to run things: on push, on pull request, on a schedule, on a tag. It handles secrets (registry credentials, API keys), matrix builds (test on Go 1.22 and 1.23), and cloud integration (deploy to EKS, notify Slack). If you come from Jenkins or TeamCity, GitHub Actions is the same category of tool—a pipeline runner triggered by repository events.
+**GitHub Actions** is an orchestration platform. It defines *when* to run things: on push, on pull request, on a schedule, on a tag. It handles secrets (registry credentials, API keys), matrix builds (test on Go 1.26 and future supported versions), and cloud integration (deploy to EKS, notify Slack). If you come from Jenkins or TeamCity, GitHub Actions is the same category of tool—a pipeline runner triggered by repository events.
 
 Why use both?
 

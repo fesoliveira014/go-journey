@@ -4,7 +4,7 @@ A 14-chapter tutorial that teaches microservices architecture, containerization,
 
 ## The Book
 
-The tutorial is written as an [mdBook](https://rust-lang.github.io/mdBook/). Each chapter builds on the previous one.
+The tutorial is written as an [mdBook](https://rust-lang.github.io/mdBook/). Each chapter builds on the previous one. The repository is named `go-journey` because it is the book project; the Go module and example system use `github.com/fesoliveira014/library-system` because the application you build is a library management system.
 
 | # | Chapter | Topics |
 |---|---------|--------|
@@ -24,6 +24,35 @@ The tutorial is written as an [mdBook](https://rust-lang.github.io/mdBook/). Eac
 | 14 | [Production Hardening](docs/src/ch14/index.md) | DNS, TLS, secrets management, Kafka encryption |
 
 Full table of contents: [docs/src/SUMMARY.md](docs/src/SUMMARY.md)
+
+### Chapter Checkpoints
+
+The default branch shows the latest final state. Chapter snippets are point-in-time snapshots, so each chapter has start and end tags:
+
+| Chapter | Start | End |
+|---|---|---|
+| 1 | `chapter-01-start` | `chapter-01-end` |
+| 2 | `chapter-02-start` | `chapter-02-end` |
+| 3 | `chapter-03-start` | `chapter-03-end` |
+| 4 | `chapter-04-start` | `chapter-04-end` |
+| 5 | `chapter-05-start` | `chapter-05-end` |
+| 6 | `chapter-06-start` | `chapter-06-end` |
+| 7 | `chapter-07-start` | `chapter-07-end` |
+| 8 | `chapter-08-start` | `chapter-08-end` |
+| 9 | `chapter-09-start` | `chapter-09-end` |
+| 10 | `chapter-10-start` | `chapter-10-end` |
+| 11 | `chapter-11-start` | `chapter-11-end` |
+| 12 | `chapter-12-start` | `chapter-12-end` |
+| 13 | `chapter-13-start` | `chapter-13-end` |
+| 14 | `chapter-14-start` | `chapter-14-end` |
+
+Example:
+
+```bash
+git checkout chapter-07-start
+# work through Chapter 7
+git checkout chapter-07-end
+```
 
 ### Building the Book
 
