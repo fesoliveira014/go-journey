@@ -41,7 +41,7 @@ build:
 
 docker:
     FROM alpine:3.19
-    RUN addgroup -S app && adduser -S app -G app
+    RUN apk add --no-cache ca-certificates && addgroup -S app && adduser -S app -G app
     WORKDIR /app
     COPY +build/gateway /usr/local/bin/gateway
     COPY +src/templates /app/templates

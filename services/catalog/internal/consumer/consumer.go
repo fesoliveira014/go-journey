@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	otelgo "go.opentelemetry.io/otel"
 	otelcodes "go.opentelemetry.io/otel/codes"
+
+	kafkautil "github.com/fesoliveira014/library-system/pkg/kafka"
 )
 
 type reservationEvent struct {
@@ -20,8 +22,8 @@ type reservationEvent struct {
 // Run starts a Kafka consumer group that observes reservation events.
 // It blocks until ctx is cancelled. groupID is optional; tests can pass a
 // unique value to avoid offset collisions.
-func Run(ctx context.Context, brokers []string, topic string, groupID ...string) error {
-	config := sarama.NewConfig()
+func Run(ctx context.Context, brokers []string, topic string, tlsEnabled bool, groupID ...string) error {
+	config := kafkautil.NewSaramaConfig(tlsEnabled)
 	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRoundRobin()}
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 

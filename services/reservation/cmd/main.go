@@ -30,6 +30,7 @@ import (
 	reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	pkgdb "github.com/fesoliveira014/library-system/pkg/db"
+	kafkautil "github.com/fesoliveira014/library-system/pkg/kafka"
 	pkgotel "github.com/fesoliveira014/library-system/pkg/otel"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/handler"
 	"github.com/fesoliveira014/library-system/services/reservation/internal/kafka"
@@ -68,6 +69,11 @@ func main() {
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	if kafkaBrokers == "" {
 		kafkaBrokers = "localhost:9092"
+	}
+	kafkaTLS, err := kafkautil.ParseTLSEnabled(os.Getenv("KAFKA_TLS"))
+	if err != nil {
+		slog.Error("invalid KAFKA_TLS value", "error", err)
+		os.Exit(1)
 	}
 	catalogAddr := os.Getenv("CATALOG_GRPC_ADDR")
 	if catalogAddr == "" {
@@ -135,12 +141,13 @@ func main() {
 	authClient := authv1.NewAuthServiceClient(authConn)
 
 	brokers := strings.Split(kafkaBrokers, ",")
-	publisher, err := kafka.NewPublisher(brokers, "reservations")
+	publisher, err := kafka.NewPublisher(brokers, "reservations", kafkaTLS)
 	if err != nil {
 		slog.Error("create kafka publisher", "error", err)
 		os.Exit(1)
 	}
 	defer publisher.Close()
+	slog.Info("kafka publisher initialized", "topic", "reservations", "tls", kafkaTLS)
 
 	repo := repository.NewReservationRepository(db)
 	reservationSvc := service.NewReservationService(repo, catalogClient, authClient, publisher, maxActive)

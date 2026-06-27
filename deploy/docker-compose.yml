@@ -108,6 +108,7 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set in .env}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      KAFKA_TLS: ${KAFKA_TLS:-false}
       OTEL_COLLECTOR_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT:-otel-collector:4317}
     ports:
       - "${CATALOG_GRPC_PORT:-50052}:50052"
@@ -130,7 +131,9 @@ services:
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set in .env}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      KAFKA_TLS: ${KAFKA_TLS:-false}
       CATALOG_GRPC_ADDR: ${CATALOG_GRPC_ADDR:-catalog:50052}
+      SEARCH_BOOTSTRAP_MODE: ${SEARCH_BOOTSTRAP_MODE:-if_empty}
       AUTH_GRPC_ADDR: ${AUTH_GRPC_ADDR:-auth:50051}
       MAX_ACTIVE_RESERVATIONS: ${MAX_ACTIVE_RESERVATIONS:-5}
       OTEL_COLLECTOR_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT:-otel-collector:4317}
@@ -172,6 +175,7 @@ services:
       MEILI_URL: ${MEILI_URL:-http://meilisearch:7700}
       MEILI_MASTER_KEY: ${MEILI_MASTER_KEY:-dev-master-key-change-in-production}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
+      KAFKA_TLS: ${KAFKA_TLS:-false}
       CATALOG_GRPC_ADDR: ${CATALOG_GRPC_ADDR:-catalog:50052}
     ports:
       - "${SEARCH_GRPC_PORT:-50054}:50054"

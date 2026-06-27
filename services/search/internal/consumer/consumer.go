@@ -8,6 +8,7 @@ import (
 
 	"github.com/IBM/sarama"
 
+	kafkautil "github.com/fesoliveira014/library-system/pkg/kafka"
 	"github.com/fesoliveira014/library-system/services/search/internal/model"
 )
 
@@ -32,8 +33,8 @@ type bookEvent struct {
 
 // Run starts a Kafka consumer group that processes catalog book change events.
 // It blocks until ctx is cancelled.
-func Run(ctx context.Context, brokers []string, topic string, idx Indexer) error {
-	config := sarama.NewConfig()
+func Run(ctx context.Context, brokers []string, topic string, idx Indexer, tlsEnabled bool) error {
+	config := kafkautil.NewSaramaConfig(tlsEnabled)
 	config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{sarama.NewBalanceStrategyRoundRobin()}
 	config.Consumer.Offsets.Initial = sarama.OffsetOldest
 

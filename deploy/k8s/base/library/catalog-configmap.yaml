@@ -6,4 +6,5 @@ metadata:
 data:
   GRPC_PORT: "50052"
   KAFKA_BROKERS: "kafka-0.kafka.messaging.svc.cluster.local:9092"
+  KAFKA_TLS: "false"
   OTEL_COLLECTOR_ENDPOINT: ""

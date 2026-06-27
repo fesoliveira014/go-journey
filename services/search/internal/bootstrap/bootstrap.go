@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
@@ -13,26 +14,62 @@ import (
 // IndexBootstrapper is the subset of SearchService that bootstrap needs.
 type IndexBootstrapper interface {
 	EnsureIndex(ctx context.Context) error
+	ResetIndex(ctx context.Context) error
 	Count(ctx context.Context) (int64, error)
 	Upsert(ctx context.Context, doc model.BookDocument) error
 }
 
-// Run syncs the Meilisearch index from the Catalog service if the index is empty.
-func Run(ctx context.Context, catalog catalogv1.CatalogServiceClient, svc IndexBootstrapper) error {
+type Mode string
+
+const (
+	ModeIfEmpty  Mode = "if_empty"
+	ModeAlways   Mode = "always"
+	ModeDisabled Mode = "disabled"
+)
+
+func ParseMode(value string) (Mode, error) {
+	switch Mode(strings.TrimSpace(value)) {
+	case "":
+		return ModeIfEmpty, nil
+	case ModeIfEmpty:
+		return ModeIfEmpty, nil
+	case ModeAlways:
+		return ModeAlways, nil
+	case ModeDisabled:
+		return ModeDisabled, nil
+	default:
+		return "", fmt.Errorf("unknown search bootstrap mode %q", value)
+	}
+}
+
+// Run syncs the Meilisearch index from the Catalog service according to mode.
+func Run(ctx context.Context, catalog catalogv1.CatalogServiceClient, svc IndexBootstrapper, mode Mode) error {
+	if mode == ModeAlways {
+		log.Println("resetting search index before bootstrap...")
+		if err := svc.ResetIndex(ctx); err != nil {
+			return err
+		}
+	}
+
 	if err := svc.EnsureIndex(ctx); err != nil {
 		return err
+	}
+
+	if mode == ModeDisabled {
+		log.Println("search bootstrap disabled; ensured index only")
+		return nil
 	}
 
 	count, err := svc.Count(ctx)
 	if err != nil {
 		return err
 	}
-	if count > 0 {
+	if mode == ModeIfEmpty && count > 0 {
 		log.Printf("search index already has %d documents, skipping bootstrap", count)
 		return nil
 	}
 
-	log.Println("search index is empty, bootstrapping from catalog...")
+	log.Println("bootstrapping search index from catalog...")
 
 	// Retry the first ListBooks call — catalog may still be starting.
 	var firstResp *catalogv1.ListBooksResponse

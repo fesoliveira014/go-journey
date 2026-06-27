@@ -25,6 +25,7 @@ import (
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
 	pkgdb "github.com/fesoliveira014/library-system/pkg/db"
+	kafkautil "github.com/fesoliveira014/library-system/pkg/kafka"
 	pkgotel "github.com/fesoliveira014/library-system/pkg/otel"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/consumer"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/handler"
@@ -67,6 +68,11 @@ func main() {
 		os.Exit(1)
 	}
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	kafkaTLS, err := kafkautil.ParseTLSEnabled(os.Getenv("KAFKA_TLS"))
+	if err != nil {
+		slog.Error("invalid KAFKA_TLS value", "error", err)
+		os.Exit(1)
+	}
 
 	db, err := pkgdb.Open(dbDSN, pkgdb.Config{})
 	if err != nil {
@@ -91,14 +97,14 @@ func main() {
 	var brokers []string
 	if kafkaBrokers != "" {
 		brokers = strings.Split(kafkaBrokers, ",")
-		pub, err := catalogkafka.NewPublisher(brokers, "catalog.books.changed")
+		pub, err := catalogkafka.NewPublisher(brokers, "catalog.books.changed", kafkaTLS)
 		if err != nil {
 			slog.Error("failed to create kafka publisher", "error", err)
 			os.Exit(1)
 		}
 		defer pub.Close()
 		publisher = pub
-		slog.Info("kafka publisher initialized", "topic", "catalog.books.changed")
+		slog.Info("kafka publisher initialized", "topic", "catalog.books.changed", "tls", kafkaTLS)
 	}
 
 	catalogSvc := service.NewCatalogService(bookRepo, publisher)
@@ -109,8 +115,8 @@ func main() {
 
 	if len(brokers) > 0 {
 		go func() {
-			slog.Info("starting kafka consumer", "topic", "reservations")
-			if err := consumer.Run(ctx, brokers, "reservations"); err != nil {
+			slog.Info("starting kafka consumer", "topic", "reservations", "tls", kafkaTLS)
+			if err := consumer.Run(ctx, brokers, "reservations", kafkaTLS); err != nil {
 				slog.Error("kafka consumer error", "error", err)
 			}
 		}()

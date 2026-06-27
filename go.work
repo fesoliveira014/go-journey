@@ -4,6 +4,7 @@ use (
 	./gen
 	./pkg/auth
 	./pkg/db
+	./pkg/kafka
 	./pkg/otel
 	./services/auth
 	./services/catalog

@@ -71,6 +71,10 @@ func (s *SearchService) EnsureIndex(ctx context.Context) error {
 	return s.index.EnsureIndex(ctx)
 }
 
+func (s *SearchService) ResetIndex(ctx context.Context) error {
+	return s.index.ResetIndex(ctx)
+}
+
 func (s *SearchService) Count(ctx context.Context) (int64, error) {
 	return s.index.Count(ctx)
 }

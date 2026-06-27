@@ -14,7 +14,7 @@ The phrase "end-to-end test" is overloaded. In most contexts it implies a full s
 
 What we are building is narrower in scope but higher in fidelity than anything in 11.2 through 11.4. The term used in this project is **service-level end-to-end test**, and it has a precise meaning:
 
-> A test that exercises one service—in isolation from other services—from its public API boundary through every real dependency: gRPC transport, interceptor chain, business-logic handler, service layer, repository, and PostgreSQL. Kafka side effects are verified using a real broker. No mocks replace infrastructure components.
+> A test that exercises one service—in isolation from other services—from its public API boundary through its owned runtime path: gRPC transport, interceptor chain, business-logic handler, service layer, repository, and PostgreSQL. External boundaries such as Kafka publishers and outbound gRPC clients use small test doubles so the test stays focused on one service.
 
 The diagram below shows what "end-to-end" means at the service level for the Catalog Service:
 
@@ -33,11 +33,7 @@ Test client (bufconn)
      |
  [PostgreSQL container]   <- real database, real schema
 
-     ... also:
-
- [KafkaPublisher]         <- real sarama producer
-     |
- [Kafka container]        <- real broker, real topic
+ [noopPublisher]          <- event boundary is present, but Kafka is tested separately
 ```
 
 Compare this to the bufconn test from section 11.3. That test also ran through the interceptor and gRPC server. The difference is in the repository layer. section 11.3's bufconn test could use either a real or a mocked repository—the test goal was to verify the gRPC wiring, so a mock was sufficient. Here the repository is always real. The test goal is to verify that the full vertical slice works end-to-end within a single service.
@@ -71,7 +67,7 @@ services/
         helpers_test.go
 ```
 
-The helpers file in each service is responsible for the three setup functions that every e2e test will call: `setupPostgres`, `setupKafka`, and `startCatalogServer` (or the service-appropriate variant). These are not test cases—they are test infrastructure, so they live in a separate file but in the same `e2e_test` package.
+The helpers in each service handle the owned infrastructure and the in-process gRPC server: `setupPostgres` and `startCatalogServer` (or the service-appropriate variant). Kafka serialization and consumer behavior were covered in section 11.4. Here, event publishers are represented by no-op test doubles because the goal is to verify the service's vertical slice, not to retest Kafka.
 
 ### setupPostgres
 
@@ -160,53 +156,31 @@ func setupPostgres(t *testing.T) *gorm.DB {
 
 Two things to note here. First, `setupPostgres` uses the Testcontainers Postgres module (`testcontainers-go/modules/postgres`) rather than the lower-level `GenericContainer`. The module provides typed helpers like `WithDatabase` and `ConnectionString` that eliminate manual host/port assembly. Second, migrations run through `golang-migrate` using the same embedded SQL files that production uses (`migrations.FS`). This guarantees the test schema matches production exactly. If you drift from that, you risk passing e2e tests against a schema that does not match what runs in deployment.
 
-### setupKafka
+### Event boundary
 
 ```go
-func setupKafka(t *testing.T) []string {
-    t.Helper()
-    ctx := context.Background()
+type noopPublisher struct{}
 
-    kafkaContainer, err := kafkatc.Run(ctx,
-        "confluentinc/confluent-local:7.6.0",
-    )
-    if err != nil {
-        t.Fatalf("failed to start kafka container: %v", err)
-    }
-    t.Cleanup(func() {
-        if err := kafkaContainer.Terminate(ctx); err != nil {
-            t.Logf("failed to terminate kafka container: %v", err)
-        }
-    })
-
-    brokers, err := kafkaContainer.Brokers(ctx)
-    if err != nil {
-        t.Fatalf("failed to get kafka brokers: %v", err)
-    }
-    return brokers
-}
+func (p *noopPublisher) Publish(_ context.Context, _ service.BookEvent) error { return nil }
 ```
 
-Like PostgreSQL, Kafka uses a dedicated Testcontainers module (`testcontainers-go/modules/kafka`). The module handles all the KRaft-mode configuration internally—node IDs, controller quorum voters, listener protocols—so you don't have to set any Kafka environment variables yourself. The `confluent-local` image is purpose-built for single-node testing: it starts in KRaft mode (no ZooKeeper) and auto-creates topics by default.
-
-The return value is a `[]string` of broker addresses—the same type that `sarama.NewSyncProducer` and `sarama.NewConsumerGroup` both accept. Keeping the signature consistent with what your application packages expect means you can pass the slice directly without any adaptation.
+The Catalog Service publishes events through an interface. In this service-level E2E test we use `noopPublisher` so the service layer still executes the publish call, but no Kafka broker is required. Section 11.4 already tests the Kafka producer and consumer serialization paths with a real broker.
 
 ### startCatalogServer
 
-The server setup function wires the real dependency graph and starts a bufconn gRPC server, identical to the approach in section 11.3 except it uses a real repository and a real publisher rather than mocks.
+The server setup function wires the real dependency graph and starts a bufconn gRPC server, identical to the approach in section 11.3 except it uses a real repository rather than a mocked repository.
 
 ```go
-func startCatalogServer(t *testing.T, svc catalogv1.CatalogServiceServer, jwtSecret string) catalogv1.CatalogServiceClient {
+func startCatalogServer(t *testing.T, svc *service.CatalogService, jwtSecret string) catalogv1.CatalogServiceClient {
     t.Helper()
 
     lis := bufconn.Listen(1024 * 1024)
     t.Cleanup(func() { _ = lis.Close() })
 
-    authInterceptor := interceptor.NewAuthInterceptor(jwtSecret)
     srv := grpc.NewServer(
-        grpc.UnaryInterceptor(authInterceptor.Unary()),
+        grpc.UnaryInterceptor(pkgauth.UnaryAuthInterceptor(jwtSecret, nil)),
     )
-    catalogv1.RegisterCatalogServiceServer(srv, svc)
+    catalogv1.RegisterCatalogServiceServer(srv, handler.NewCatalogHandler(svc))
 
     go func() {
         if err := srv.Serve(lis); err != nil && !errors.Is(err, grpc.ErrServerStopped) {
@@ -235,7 +209,7 @@ func startCatalogServer(t *testing.T, svc catalogv1.CatalogServiceServer, jwtSec
 
 ## Catalog e2e test
 
-With the helpers in place, the test itself reads as a straightforward scenario:
+With the helpers in place, the test itself reads as a straightforward scenario. This is abridged from `services/catalog/internal/e2e/catalog_e2e_test.go`:
 
 ```go
 //go:build integration
@@ -253,29 +227,22 @@ import (
     "google.golang.org/grpc/status"
 
     pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
-    kafkapkg "github.com/fesoliveira014/library-system/pkg/kafka"
     catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
     "github.com/fesoliveira014/library-system/services/catalog/internal/repository"
     "github.com/fesoliveira014/library-system/services/catalog/internal/service"
 )
 
 func TestCatalog_E2E(t *testing.T) {
+    const secret = "e2e-secret"
+
     db := setupPostgres(t)
-    brokers := setupKafka(t)
-
     repo := repository.NewBookRepository(db)
-    pub, err := kafkapkg.NewPublisher(brokers, "books")
-    if err != nil {
-        t.Fatalf("failed to create kafka publisher: %v", err)
-    }
-    t.Cleanup(func() { _ = pub.Close() })
-
-    svc := service.NewCatalogService(repo, pub)
-    client := startCatalogServer(t, svc, "test-secret")
+    svc := service.NewCatalogService(repo, &noopPublisher{})
+    client := startCatalogServer(t, svc, secret)
 
     // Build an authenticated context using a token signed with the same
     // secret the server's interceptor will verify.
-    token, err := pkgauth.GenerateToken(uuid.New(), "admin", "test-secret", time.Hour)
+    token, err := pkgauth.GenerateToken(uuid.New(), "admin", secret, time.Hour)
     if err != nil {
         t.Fatalf("failed to generate token: %v", err)
     }
@@ -283,56 +250,57 @@ func TestCatalog_E2E(t *testing.T) {
         metadata.Pairs("authorization", "Bearer "+token))
 
     // --- Step 1: Create a book ---
-    createResp, err := client.CreateBook(ctx, &catalogv1.CreateBookRequest{
-        Title:  "The Go Programming Language",
-        Author: "Donovan & Kernighan",
-        Isbn:   "978-0134190440",
+    created, err := client.CreateBook(ctx, &catalogv1.CreateBookRequest{
+        Title:         "The Go Programming Language",
+        Author:        "Alan Donovan",
+        Isbn:          "978-0-13-468599-1",
+        Genre:         "Technology",
+        Description:   "A definitive reference for Go programmers.",
+        PublishedYear: 2015,
+        TotalCopies:   3,
     })
     if err != nil {
         t.Fatalf("CreateBook failed: %v", err)
     }
-    if createResp.Book.Id == "" {
+    if created.GetId() == "" {
         t.Fatal("CreateBook: expected non-empty book ID")
     }
-    bookID := createResp.Book.Id
+    bookID := created.GetId()
 
     // --- Step 2: Get the book back ---
-    getResp, err := client.GetBook(ctx, &catalogv1.GetBookRequest{Id: bookID})
+    fetched, err := client.GetBook(ctx, &catalogv1.GetBookRequest{Id: bookID})
     if err != nil {
         t.Fatalf("GetBook failed: %v", err)
     }
-    if getResp.Book.Title != "The Go Programming Language" {
-        t.Errorf("GetBook: expected title %q, got %q", "The Go Programming Language", getResp.Book.Title)
+    if fetched.GetTitle() != created.GetTitle() {
+        t.Errorf("GetBook: expected title %q, got %q", created.GetTitle(), fetched.GetTitle())
     }
-    if getResp.Book.Isbn != "978-0134190440" {
-        t.Errorf("GetBook: expected ISBN %q, got %q", "978-0134190440", getResp.Book.Isbn)
+    if fetched.GetTotalCopies() != created.GetTotalCopies() {
+        t.Errorf("GetBook: expected total copies %d, got %d", created.GetTotalCopies(), fetched.GetTotalCopies())
     }
 
-    // --- Step 3: List books — should contain our new entry ---
-    listResp, err := client.ListBooks(ctx, &catalogv1.ListBooksRequest{PageSize: 10})
+    // --- Step 3: List books — should contain exactly our new entry ---
+    listResp, err := client.ListBooks(ctx, &catalogv1.ListBooksRequest{Page: 1, PageSize: 10})
     if err != nil {
         t.Fatalf("ListBooks failed: %v", err)
     }
-    if len(listResp.Books) < 1 {
-        t.Fatalf("ListBooks: expected at least 1 book, got %d", len(listResp.Books))
+    if listResp.GetTotalCount() != 1 {
+        t.Errorf("ListBooks: expected total_count 1, got %d", listResp.GetTotalCount())
     }
-    found := false
-    for _, b := range listResp.Books {
-        if b.Id == bookID {
-            found = true
-            break
-        }
-    }
-    if !found {
-        t.Error("created book should appear in list response")
+    if len(listResp.GetBooks()) != 1 {
+        t.Errorf("ListBooks: expected 1 book in slice, got %d", len(listResp.GetBooks()))
     }
 
     // --- Step 4: Update the book ---
     _, err = client.UpdateBook(ctx, &catalogv1.UpdateBookRequest{
-        Id:     bookID,
-        Title:  "The Go Programming Language (2nd Ed.)",
-        Author: "Donovan & Kernighan",
-        Isbn:   "978-0134190440",
+        Id:            bookID,
+        Title:         "The Go Programming Language (2nd Ed.)",
+        Author:        created.GetAuthor(),
+        Isbn:          created.GetIsbn(),
+        Genre:         created.GetGenre(),
+        Description:   created.GetDescription(),
+        PublishedYear: created.GetPublishedYear(),
+        TotalCopies:   created.GetTotalCopies(),
     })
     if err != nil {
         t.Fatalf("UpdateBook failed: %v", err)
@@ -343,8 +311,8 @@ func TestCatalog_E2E(t *testing.T) {
     if err != nil {
         t.Fatalf("GetBook after update failed: %v", err)
     }
-    if updatedResp.Book.Title != "The Go Programming Language (2nd Ed.)" {
-        t.Errorf("GetBook: expected updated title %q, got %q", "The Go Programming Language (2nd Ed.)", updatedResp.Book.Title)
+    if updatedResp.GetTitle() != "The Go Programming Language (2nd Ed.)" {
+        t.Errorf("GetBook: expected updated title %q, got %q", "The Go Programming Language (2nd Ed.)", updatedResp.GetTitle())
     }
 
     // --- Step 5: Delete the book ---
@@ -376,7 +344,7 @@ func TestCatalog_E2E(t *testing.T) {
 
 Walk through what each step is actually testing:
 
-**Step 1—Create:** The gRPC request traverses the auth interceptor, which validates the JWT and extracts the caller's identity. It then reaches the handler, is validated by the service layer, and is persisted by the GORM repository via a real `INSERT`. The Kafka publisher also fires a `BookCreated` event to the real broker. The returned `bookID` came from PostgreSQL's auto-generated UUID—if there were a schema mismatch in the primary-key column, this step fails.
+**Step 1—Create:** The gRPC request traverses the auth interceptor, which validates the JWT and extracts the caller's identity. It then reaches the handler, is validated by the service layer, and is persisted by the GORM repository via a real `INSERT`. The `noopPublisher` proves the event boundary is wired without requiring Kafka in this vertical-slice test. The returned `bookID` came from PostgreSQL's auto-generated UUID—if there were a schema mismatch in the primary-key column, this step fails.
 
 **Steps 2 and 3—Get and List:** These verify that the `SELECT` queries work correctly and that the schema matches what the struct tags declare. A column-name mismatch that the mock would never surface will cause step 2 to return an empty struct or an ORM error here.
 
@@ -390,7 +358,7 @@ Walk through what each step is actually testing:
 
 ## Reservation e2e test
 
-The Reservation Service is structurally similar to catalog, with two differences. First, it has a dependency on the Catalog Service's gRPC API—it needs to look up book details when creating a reservation. For a service-level test we mock that outbound gRPC client: we are not testing the Catalog Service here. Second, the business logic includes a max-active-reservations rule that should return `codes.ResourceExhausted`. That rule cannot be tested by a unit test in isolation—it queries the reservation count from the real database.
+The Reservation Service is structurally similar to catalog, with two differences. First, it has dependencies on the Catalog and Auth gRPC APIs. For a service-level test we mock those outbound clients: we are not testing Catalog or Auth here. Second, the business logic includes a max-active-reservations rule that should return `codes.ResourceExhausted`. That rule cannot be tested by a unit test in isolation—it queries the reservation count from the real database.
 
 ```go
 //go:build integration
@@ -408,50 +376,61 @@ import (
     "google.golang.org/grpc/metadata"
     "google.golang.org/grpc/status"
 
-    pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
-    kafkapkg "github.com/fesoliveira014/library-system/pkg/kafka"
+    authv1 "github.com/fesoliveira014/library-system/gen/auth/v1"
     catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
     reservationv1 "github.com/fesoliveira014/library-system/gen/reservation/v1"
+    pkgauth "github.com/fesoliveira014/library-system/pkg/auth"
     "github.com/fesoliveira014/library-system/services/reservation/internal/repository"
-    "github.com/fesoliveira014/library-system/services/reservation/internal/service"
+    rsvc "github.com/fesoliveira014/library-system/services/reservation/internal/service"
 )
 
 // mockCatalogClient satisfies the catalogv1.CatalogServiceClient interface
 // by embedding it. The embedded interface value is nil, so any method that
 // the reservation service does not call will panic with a nil-interface
 // dereference if it is ever invoked — which is exactly the behaviour we
-// want in a test: unexpected calls fail loudly. Only GetBook is overridden
-// because that is the sole method the reservation service depends on.
+// want in a test: unexpected calls fail loudly. Only the methods the
+// reservation service calls are overridden.
 type mockCatalogClient struct {
     catalogv1.CatalogServiceClient
 }
 
-func (m *mockCatalogClient) GetBook(_ context.Context, req *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.GetBookResponse, error) {
-    return &catalogv1.GetBookResponse{
-        Book: &catalogv1.Book{
-            Id:    req.Id,
-            Title: "Test Book",
-        },
-    }, nil
+func (m *mockCatalogClient) GetBook(_ context.Context, req *catalogv1.GetBookRequest, _ ...grpc.CallOption) (*catalogv1.Book, error) {
+    return &catalogv1.Book{Id: req.GetId(), AvailableCopies: 10}, nil
 }
 
+func (m *mockCatalogClient) UpdateAvailability(_ context.Context, req *catalogv1.UpdateAvailabilityRequest, _ ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+    return &catalogv1.UpdateAvailabilityResponse{AvailableCopies: 10 + req.GetDelta()}, nil
+}
+
+type mockAuthClient struct {
+    authv1.AuthServiceClient
+}
+
+func (m *mockAuthClient) GetUser(_ context.Context, req *authv1.GetUserRequest, _ ...grpc.CallOption) (*authv1.User, error) {
+    return &authv1.User{Id: req.GetId(), Email: "test@example.com"}, nil
+}
+
+type noopPublisher struct{}
+
+func (n *noopPublisher) Publish(_ context.Context, _ rsvc.ReservationEvent) error { return nil }
+
 func TestReservation_E2E(t *testing.T) {
+    const (
+        jwtSecret = "e2e-test-secret"
+        maxActive = 3
+    )
+
     db := setupPostgres(t)
-    brokers := setupKafka(t)
 
     repo := repository.NewReservationRepository(db)
-    pub, err := kafkapkg.NewPublisher(brokers, "reservations")
-    if err != nil {
-        t.Fatalf("failed to create kafka publisher: %v", err)
-    }
-    t.Cleanup(func() { _ = pub.Close() })
-
     catalogClient := &mockCatalogClient{}
-    svc := service.NewReservationService(repo, pub, catalogClient)
-    client := startReservationServer(t, svc, "test-secret")
+    authClient := &mockAuthClient{}
+    publisher := &noopPublisher{}
+    svc := rsvc.NewReservationService(repo, catalogClient, authClient, publisher, maxActive)
+    client := startReservationServer(t, svc, jwtSecret)
 
     userID := uuid.New()
-    token, err := pkgauth.GenerateToken(userID, "user", "test-secret", time.Hour)
+    token, err := pkgauth.GenerateToken(userID, "user", jwtSecret, time.Hour)
     if err != nil {
         t.Fatalf("failed to generate token: %v", err)
     }
@@ -471,59 +450,38 @@ func TestReservation_E2E(t *testing.T) {
         t.Fatal("CreateReservation: expected non-empty reservation ID")
     }
     reservationID := createResp.Reservation.Id
-    if createResp.Reservation.Status != reservationv1.ReservationStatus_ACTIVE {
-        t.Errorf("CreateReservation: expected status ACTIVE, got %v", createResp.Reservation.Status)
+    if createResp.Reservation.Status != "active" {
+        t.Errorf("CreateReservation: expected status active, got %v", createResp.Reservation.Status)
     }
 
-    // --- Step 2: Verify persistence in DB ---
-    // Read directly from the database to confirm the row was written with
-    // the correct status, user ID, and book ID — not just that the response
-    // said so.
-    var count int64
-    db.Model(&repository.ReservationRow{}).
-        Where("id = ? AND user_id = ? AND status = 'active'", reservationID, userID.String()).
-        Count(&count)
-    if count != 1 {
-        t.Errorf("reservation should be persisted as active: expected count 1, got %d", count)
-    }
-
-    // --- Step 3: Verify Kafka event was published ---
-    // Consume from the reservations topic and assert that the event matches
-    // the reservation we just created.
-    event := consumeOneEvent(t, brokers, "reservations")
-    if event.Type != "ReservationCreated" {
-        t.Errorf("expected event type %q, got %q", "ReservationCreated", event.Type)
-    }
-    if event.ReservationID != reservationID {
-        t.Errorf("expected event reservation ID %q, got %q", reservationID, event.ReservationID)
-    }
-
-    // --- Step 4: Return the book ---
-    _, err = client.ReturnReservation(ctx, &reservationv1.ReturnReservationRequest{
-        ReservationId: reservationID,
-    })
-    if err != nil {
-        t.Fatalf("ReturnReservation failed: %v", err)
-    }
-
-    // --- Step 5: Verify status changed to returned ---
+    // --- Step 2: Get the reservation back ---
     getResp, err := client.GetReservation(ctx, &reservationv1.GetReservationRequest{
         ReservationId: reservationID,
     })
     if err != nil {
         t.Fatalf("GetReservation failed: %v", err)
     }
-    if getResp.Reservation.Status != reservationv1.ReservationStatus_RETURNED {
-        t.Errorf("expected status RETURNED, got %v", getResp.Reservation.Status)
+    if getResp.GetStatus() != "active" {
+        t.Errorf("expected active, got %q", getResp.GetStatus())
     }
 
-    // --- Step 6: Max-reservations rule ---
+    // --- Step 3: Return the book ---
+    returnResp, err := client.ReturnBook(ctx, &reservationv1.ReturnBookRequest{
+        ReservationId: reservationID,
+    })
+    if err != nil {
+        t.Fatalf("ReturnBook failed: %v", err)
+    }
+    if returnResp.GetReservation().GetStatus() != "returned" {
+        t.Errorf("expected returned, got %q", returnResp.GetReservation().GetStatus())
+    }
+
+    // --- Step 4: Max-reservations rule ---
     // The service enforces a maximum of `maxActive` concurrent reservations
     // per user. Create that many reservations for a fresh user, then attempt
     // one more and expect ResourceExhausted.
-    const maxActive = 5
     limitedUserID := uuid.New()
-    limitedToken, err := pkgauth.GenerateToken(limitedUserID, "user", "test-secret", time.Hour)
+    limitedToken, err := pkgauth.GenerateToken(limitedUserID, "user", jwtSecret, time.Hour)
     if err != nil {
         t.Fatalf("failed to generate limited user token: %v", err)
     }
@@ -552,9 +510,9 @@ func TestReservation_E2E(t *testing.T) {
 }
 ```
 
-Step 3 uses a helper `consumeOneEvent` that creates a short-lived Sarama consumer, subscribes to the topic with a fresh consumer group ID, reads one message, and returns it deserialized. This is the same consumer-side path the Reservation Service uses internally. You are verifying not just that a message was sent, but that it can be received and deserialized by the exact code path a downstream consumer would use.
+The outbound Catalog client and publisher are test doubles, but they sit at service boundaries. The test still verifies the real request path, auth interceptor, handler, reservation service logic, repository, migrations, and PostgreSQL writes. Kafka message production remains covered by the Kafka integration tests from section 11.4.
 
-Step 6 exercises the most important business rule in the Reservation Service, and it is a rule that requires the database to count active reservations. A unit test with a mocked repository can test this rule only by making the mock lie about the count. This e2e test counts real rows in a real table, so the rule is tested against the actual query.
+Step 4 exercises the most important business rule in the Reservation Service, and it is a rule that requires the database to count active reservations. A unit test with a mocked repository can test this rule only by making the mock lie about the count. This e2e test counts real rows in a real table, so the rule is tested against the actual query.
 
 ---
 

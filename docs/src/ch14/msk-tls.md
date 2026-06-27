@@ -4,9 +4,7 @@ Chapter 13 deployed the MSK cluster with `client_broker = "PLAINTEXT"` and opene
 
 The usual objection to encrypting intra-VPC traffic is that the VPC boundary already provides isolation—an attacker on the public internet cannot reach port 9092, so what is there to protect? The objection holds for the public internet, but the VPC boundary is not the only threat model. A compromised pod inside the cluster, a misconfigured VPC peering attachment, or a broad security group rule opened during debugging all create paths for lateral movement. Any process in the same VPC that can reach the MSK security group can read every Kafka message in transit if those messages are unencrypted. Enabling TLS closes that exposure with near-zero performance impact—modern server CPUs handle TLS at line rate using AES-NI hardware acceleration, and MSK brokers are no different[^1].
 
-The change is also required for compliance. SOC 2 Type II, PCI DSS, and most HIPAA interpretations require encryption in transit for all data. A finding that reads "Kafka traffic between EKS nodes and MSK is unencrypted" will fail an audit. Fixing it is a one-line Terraform change.
-
-No application code changes are needed. The Go Kafka client libraries handle TLS transparently when pointed at the TLS listener. The broker address changes from port 9092 to port 9094; everything above that is identical.
+The change is also required for compliance. SOC 2 Type II, PCI DSS, and most HIPAA interpretations require encryption in transit for all data. A finding that reads "Kafka traffic between EKS nodes and MSK is unencrypted" will fail an audit. Fixing the broker listener is a small Terraform change, but the application must also tell Sarama to use TLS. Pointing a plaintext client at port 9094 will fail during the Kafka protocol handshake.
 
 ---
 
@@ -112,18 +110,14 @@ This string replaces the port 9092 addresses in the production Kustomize overlay
 
 ## Updating the Production ConfigMap Patches
 
-The production Kustomize overlay in `deploy/k8s/overlays/production/kustomization.yaml` contains three ConfigMap patches that set `KAFKA_BROKERS` to the MSK bootstrap string. Each currently uses the placeholder `MSK_BOOTSTRAP_BROKERS` pointing at port 9092. Update all three to use the TLS bootstrap string on port 9094.
+The production Kustomize overlay in `deploy/k8s/overlays/production/kustomization.yaml` contains three ConfigMap patches that set `KAFKA_BROKERS` to the MSK bootstrap string. In the final repository, those patches use the placeholder `MSK_BOOTSTRAP_BROKERS_TLS`. When you apply this hardening step, replace that placeholder with the actual TLS bootstrap string on port 9094.
 
-The patches live in the `patches:` block of `kustomization.yaml`. The only value that changes is `KAFKA_BROKERS`—the port number shifts from 9092 to 9094, and the addresses come from `bootstrap_brokers_tls` rather than `bootstrap_brokers`:
+The patches live in the `patches:` block of `kustomization.yaml`. Two values change: `KAFKA_BROKERS` shifts from the plaintext bootstrap output to `bootstrap_brokers_tls`, and `KAFKA_TLS` is set to `"true"` so the Sarama clients use TLS:
 
 ```yaml
 # deploy/k8s/overlays/production/kustomization.yaml (excerpt)
 
   # --- ConfigMap patches (Kafka brokers → MSK TLS) ---
-  # Each patch specifies only KAFKA_BROKERS. Strategic merge on ConfigMap.data
-  # merges by key, so sibling keys (GRPC_PORT, CATALOG_GRPC_ADDR, etc.) are
-  # preserved from the base — listing them here would risk shadowing future
-  # changes in the base with stale values copied into the overlay.
   - target:
       kind: ConfigMap
       name: catalog-config
@@ -136,6 +130,7 @@ The patches live in the `patches:` block of `kustomization.yaml`. The only value
         namespace: library
       data:
         KAFKA_BROKERS: "b-1.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094,b-2.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094"
+        KAFKA_TLS: "true"
 
   - target:
       kind: ConfigMap
@@ -149,6 +144,7 @@ The patches live in the `patches:` block of `kustomization.yaml`. The only value
         namespace: library
       data:
         KAFKA_BROKERS: "b-1.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094,b-2.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094"
+        KAFKA_TLS: "true"
 
   - target:
       kind: ConfigMap
@@ -162,6 +158,7 @@ The patches live in the `patches:` block of `kustomization.yaml`. The only value
         namespace: library
       data:
         KAFKA_BROKERS: "b-1.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094,b-2.library.abc123.c2.kafka.us-east-1.amazonaws.com:9094"
+        KAFKA_TLS: "true"
 ```
 
 Replace the placeholder broker addresses with the actual output from `terraform output msk_bootstrap_brokers_tls`. As in Chapter 13, you can automate this in the CI/CD pipeline by writing the TLS bootstrap string to SSM Parameter Store during the Terraform apply and reading it back before running `kubectl apply`.
@@ -172,55 +169,33 @@ The base ConfigMaps under `deploy/k8s/base/library/` are not touched. They conti
 
 ## Go Client TLS Configuration
 
-Here is the part that surprises engineers coming from other ecosystems: you probably do not need to change the application code, and you certainly do not need a custom CA bundle.
-
-MSK TLS certificates are issued by Amazon Trust Services, Amazon's public certificate authority. The root certificates for Amazon Trust Services are included in the system trust store on every major Linux distribution, including the base images used by the library services (images built with multi-stage builds that copy the compiled binary into a scratch or distroless base)[^3]. Go's `crypto/tls` package uses the system trust store by default. When the Kafka client connects to port 9094, it performs a standard TLS handshake, verifies the broker's certificate against the system roots, and proceeds. No custom CA bundle, no `InsecureSkipVerify`, no manual certificate distribution.
-
-The only code change is enabling TLS in the client configuration. If the services use `sarama`:
+Sarama does not infer TLS from the broker port. The library system uses a small shared helper in `pkg/kafka` so producers and consumers all get the same TLS behavior:
 
 ```go
-config := sarama.NewConfig()
-config.Net.TLS.Enable = true
-// config.Net.TLS.Config is nil by default, which causes sarama to use
-// a zero-value tls.Config. A zero-value tls.Config uses the system root
-// certificate pool — exactly what we need for MSK.
-```
-
-If the services use `segmentio/kafka-go`:
-
-```go
-dialer := &kafka.Dialer{
-    Timeout:   10 * time.Second,
-    DualStack: true,
-    TLS:       &tls.Config{}, // empty config, system roots apply
+func NewSaramaConfig(tlsEnabled bool) *sarama.Config {
+    cfg := sarama.NewConfig()
+    if tlsEnabled {
+        cfg.Net.TLS.Enable = true
+        cfg.Net.TLS.Config = &tls.Config{MinVersion: tls.VersionTLS12}
+    }
+    return cfg
 }
 ```
 
-In both cases, passing an empty `tls.Config{}` is equivalent to passing `nil` for the CA pool—the standard library falls back to the system root store, which trusts Amazon Trust Services, which signed the MSK broker certificate. The connection succeeds without any further configuration.
+The Catalog publisher, Reservation publisher, Catalog reservation-event observer, and Search consumer all call this helper. Local development leaves `KAFKA_TLS=false`; the production overlay sets `KAFKA_TLS=true`.
 
-If the services use `confluent-kafka-go`, TLS is configured through the `security.protocol` property:
+MSK TLS certificates are issued by Amazon Trust Services, Amazon's public certificate authority. Go's `crypto/tls` package uses the system trust store by default when `RootCAs` is nil. That means the application does not need a custom CA bundle or `InsecureSkipVerify`; it does need a container image that actually contains the system CA bundle.
 
-```go
-producer, err := kafka.NewProducer(&kafka.ConfigMap{
-    "bootstrap.servers": brokers,
-    "security.protocol": "ssl",
-    // ssl.ca.location is not needed — librdkafka uses the system CA store
-})
-```
-
-The one exception to "no code change needed" arises if your container images use a stripped-down base that does not include a CA bundle—for example, an empty `scratch` image. In that case, Go's `crypto/tls` cannot find any system roots and the TLS handshake will fail with an error like `x509: certificate signed by unknown authority`. The fix is to copy the CA bundle into the image during the Docker build:
+The runtime images therefore install `ca-certificates` before switching to the non-root app user:
 
 ```dockerfile
-FROM alpine:3.20 AS certs
-RUN apk add --no-cache ca-certificates
-
-FROM scratch
-COPY --from=certs /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /app/service /service
-ENTRYPOINT ["/service"]
+FROM alpine:3.19
+RUN apk add --no-cache ca-certificates \
+    && addgroup -S app && adduser -S app -G app
+COPY --from=builder /bin/catalog /usr/local/bin/catalog
 ```
 
-The library system's Dockerfiles already copy the CA bundle from Alpine, so this is handled. The point is worth understanding so that the error message—if you ever encounter it in a different project—does not send you down a rabbit hole of debugging TLS configuration when the fix is two Dockerfile lines.
+If you use `scratch` or another stripped-down runtime image in a different project, copy `/etc/ssl/certs/ca-certificates.crt` into the image yourself. Otherwise the TLS handshake can fail with `x509: certificate signed by unknown authority` even when the Sarama TLS config is correct.
 
 ---
 
@@ -230,7 +205,7 @@ The approach above describes a fresh deployment—no data in the existing cluste
 
 **Step 1: Switch to `TLS_PLAINTEXT`.** This activates the TLS listener without disabling the plaintext one. Both ports are open. Apply the Terraform change and wait for MSK to complete the broker configuration update. MSK applies this change as a rolling restart—brokers are restarted one at a time, so the cluster remains available, though with reduced redundancy during the restart window. Expect one to two minutes per broker.
 
-**Step 2: Deploy with port 9094.** Update the ConfigMap patches to use the TLS bootstrap string and run `kubectl apply -k deploy/k8s/overlays/production/`. The pods restart and begin connecting on port 9094. The plaintext listener is still active, so any pod that has not yet restarted continues to work on port 9092 during the rolling update.
+**Step 2: Deploy with port 9094 and `KAFKA_TLS=true`.** Update the ConfigMap patches to use the TLS bootstrap string, set `KAFKA_TLS=true`, and run `kubectl apply -k deploy/k8s/overlays/production/`. The pods restart and begin connecting on port 9094. The plaintext listener is still active, so any pod that has not yet restarted continues to work on port 9092 during the rolling update.
 
 **Step 3: Verify consumers.** Check that all consumer groups are making progress. The MSK console shows per-group lag under Monitoring. Alternatively, use `kcat` from inside a pod:
 

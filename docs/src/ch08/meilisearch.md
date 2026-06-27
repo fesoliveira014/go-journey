@@ -240,20 +240,39 @@ The bootstrap package handles this:
 
 type IndexBootstrapper interface {
     EnsureIndex(ctx context.Context) error
+    ResetIndex(ctx context.Context) error
     Count(ctx context.Context) (int64, error)
     Upsert(ctx context.Context, doc model.BookDocument) error
 }
 
-func Run(ctx context.Context, catalog catalogv1.CatalogServiceClient, svc IndexBootstrapper) error {
+type Mode string
+
+const (
+    ModeIfEmpty  Mode = "if_empty"
+    ModeAlways   Mode = "always"
+    ModeDisabled Mode = "disabled"
+)
+
+func Run(ctx context.Context, catalog catalogv1.CatalogServiceClient, svc IndexBootstrapper, mode Mode) error {
+    if mode == ModeAlways {
+        if err := svc.ResetIndex(ctx); err != nil {
+            return err
+        }
+    }
+
     if err := svc.EnsureIndex(ctx); err != nil {
         return err
+    }
+
+    if mode == ModeDisabled {
+        return nil
     }
 
     count, err := svc.Count(ctx)
     if err != nil {
         return err
     }
-    if count > 0 {
+    if mode == ModeIfEmpty && count > 0 {
         log.Printf("search index already has %d documents, skipping bootstrap", count)
         return nil
     }
@@ -298,10 +317,10 @@ func Run(ctx context.Context, catalog catalogv1.CatalogServiceClient, svc IndexB
 The logic is straightforward:
 
 1. **Ensure the index exists** with the correct attribute configuration.
-2. **Check if the index already has documents.** If so, skip—the index was already populated, either by a previous bootstrap or by Kafka events.
+2. **Honor the bootstrap mode.** `if_empty` skips when documents already exist, `always` clears and rebuilds, and `disabled` only ensures the index configuration.
 3. **Page through the catalog via gRPC**, upserting each book into Meilisearch.
 
-The `IndexBootstrapper` interface is another example of interface segregation. The bootstrap code needs `EnsureIndex`, `Count`, and `Upsert`—it does not need `Search` or `Suggest`. Defining a narrow interface makes the mock trivial and the dependency explicit.
+The `IndexBootstrapper` interface is another example of interface segregation. The bootstrap code needs `EnsureIndex`, `ResetIndex`, `Count`, and `Upsert`—it does not need `Search` or `Suggest`. Defining a narrow interface makes the mock trivial and the dependency explicit.
 
 Notice that bootstrap errors on individual books are logged but do not stop the process. If one book fails to index (maybe it has unusual characters that Meilisearch rejects), we continue with the rest. The missing book will appear in the index the next time it is updated in the catalog.
 
@@ -316,7 +335,7 @@ func TestBootstrap_SkipsWhenIndexHasDocuments(t *testing.T) {
     svc := &mockSearchService{count: 5}
     catalog := &mockCatalogClient{}
 
-    err := bootstrap.Run(context.Background(), catalog, svc)
+    err := bootstrap.Run(context.Background(), catalog, svc, bootstrap.ModeIfEmpty)
     if err != nil {
         t.Fatalf("unexpected error: %v", err)
     }
@@ -337,7 +356,7 @@ func TestBootstrap_IndexesAllBooksWhenEmpty(t *testing.T) {
         },
     }
 
-    err := bootstrap.Run(context.Background(), catalog, svc)
+    err := bootstrap.Run(context.Background(), catalog, svc, bootstrap.ModeIfEmpty)
     if err != nil {
         t.Fatalf("unexpected error: %v", err)
     }
@@ -526,14 +545,14 @@ task, err := client.WaitForTask(taskInfo.TaskUID)
 
 ## Bootstrap Is Not Reconciliation
 
-The Search service bootstraps from Catalog only when the Meilisearch index is empty:
+The Search service defaults to bootstrapping from Catalog only when the Meilisearch index is empty:
 
 ```go
 count, err := svc.Count(ctx)
 if err != nil {
     return err
 }
-if count > 0 {
+if mode == bootstrap.ModeIfEmpty && count > 0 {
     log.Printf("search index already has %d documents, skipping bootstrap", count)
     return nil
 }
@@ -541,12 +560,25 @@ if count > 0 {
 
 That behavior keeps local startup cheap, but it does not repair a partially populated or stale index. If the service indexed the first 100 books, crashed, then restarted, `count > 0` would skip bootstrap even though the index is incomplete. The same gap appears when Catalog logs and continues after a Kafka publish failure: the book write can succeed while Search misses the event.
 
-Production systems usually add at least one repair path:
+This project now includes an explicit repair path. Normal startup uses:
 
-- A `search resync` CLI or admin job that clears and rebuilds the index from Catalog.
-- A scheduled reconciliation job that compares Catalog and Search counts, then replays missing records.
-- A startup mode such as `SEARCH_BOOTSTRAP_MODE=always|if_empty|disabled`.
-- A transactional outbox plus replayable event log so missed events can be republished safely.
+```bash
+SEARCH_BOOTSTRAP_MODE=if_empty
+```
+
+For a one-off rebuild, run:
+
+```bash
+cd services/search
+MEILI_URL=http://localhost:7700 \
+MEILI_MASTER_KEY=dev-master-key-change-in-production \
+CATALOG_GRPC_ADDR=localhost:50052 \
+go run ./cmd/reindex
+```
+
+`cmd/reindex` calls the same bootstrap package in `always` mode: it deletes the Meilisearch index, waits for the delete task to finish, recreates the index settings, and pages through Catalog. That handles both missing documents and stale documents for books that were deleted from Catalog.
+
+Other production systems may add scheduled reconciliation or a transactional outbox plus replayable event log so missed events can be republished safely.
 
 The invariant is simple: Search is a projection, not the source of truth. If it drifts, you should be able to rebuild it from Catalog.
 

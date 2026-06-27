@@ -103,7 +103,7 @@ func (s *CatalogService) CreateBook(ctx context.Context, book *model.Book) (*mod
 }
 ```
 
-The critical decision here is error handling. The database write succeeded—the book exists. If the Kafka publish fails (broker is down, network partition), we do not roll back the database. Instead, we log the error and return success to the caller. The search index will be temporarily inconsistent, but the bootstrap mechanism (covered in section 8.3) will catch it up on restart.
+The critical decision here is error handling. The database write succeeded—the book exists. If the Kafka publish fails (broker is down, network partition), we do not roll back the database. Instead, we log the error and return success to the caller. The search index will be temporarily inconsistent. Section 8.3 adds a bootstrap/reindex path so operators can rebuild the Search projection from Catalog when that drift matters.
 
 This is a deliberate trade-off: **availability over strict consistency**. In a library system, it is acceptable for a newly created book to not appear in search results for a few seconds (or even minutes). It would not be acceptable for the "create book" API to fail because the search infrastructure is having problems.
 

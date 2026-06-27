@@ -445,7 +445,7 @@ If you are following along without running the infrastructure, here is a summary
 
 ## What's next
 
-The library system is running on AWS with managed database, message broker, and load balancer infrastructure. Chapter 14 hardens the deployment for production: configuring DNS with Route 53 and TLS with ACM, managing secrets with External Secrets Operator, and encrypting Kafka traffic. None of these changes touch application code—everything lives in Terraform and the production Kustomize overlay.
+The library system is running on AWS with managed database, message broker, and load balancer infrastructure. Chapter 14 hardens the deployment for production: configuring DNS with Route 53 and TLS with ACM, managing secrets with External Secrets Operator, and encrypting Kafka traffic. Most of that work lives in Terraform and the production Kustomize overlay; Kafka TLS also needs a small application configuration path so the Go clients actually speak TLS to MSK.
 
 ---
 

@@ -12,6 +12,7 @@ import (
 type mockIndex struct {
 	docs      map[string]model.BookDocument
 	ensured   bool
+	reset     bool
 	searchRes []model.BookDocument
 }
 
@@ -43,6 +44,12 @@ func (m *mockIndex) Count(_ context.Context) (int64, error) {
 
 func (m *mockIndex) EnsureIndex(_ context.Context) error {
 	m.ensured = true
+	return nil
+}
+
+func (m *mockIndex) ResetIndex(_ context.Context) error {
+	m.reset = true
+	m.docs = make(map[string]model.BookDocument)
 	return nil
 }
 
@@ -122,6 +129,24 @@ func TestSearchService_EnsureIndex(t *testing.T) {
 	}
 	if !idx.ensured {
 		t.Error("expected EnsureIndex to be called")
+	}
+}
+
+func TestSearchService_ResetIndex(t *testing.T) {
+	t.Parallel()
+	idx := newMockIndex()
+	idx.docs["1"] = model.BookDocument{ID: "1"}
+	svc := service.NewSearchService(idx)
+
+	err := svc.ResetIndex(context.Background())
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+	if !idx.reset {
+		t.Error("expected ResetIndex to be called")
+	}
+	if len(idx.docs) != 0 {
+		t.Errorf("expected docs to be cleared, got %d", len(idx.docs))
 	}
 }
 

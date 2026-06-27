@@ -176,7 +176,7 @@ func TestConsumer_Integration_ReservationCreated(t *testing.T) {
 	}
 
 	go func() {
-		if err := consumer.Run(ctx, brokers, "reservations", "catalog-reservation-audit-test-created"); err != nil {
+		if err := consumer.Run(ctx, brokers, "reservations", false, "catalog-reservation-audit-test-created"); err != nil {
 			t.Logf("consumer exited: %v", err)
 		}
 	}()
@@ -213,7 +213,7 @@ func TestConsumer_Integration_ReservationReturned(t *testing.T) {
 	}
 
 	go func() {
-		if err := consumer.Run(ctx, brokers, "reservations", "catalog-reservation-audit-test-returned"); err != nil {
+		if err := consumer.Run(ctx, brokers, "reservations", false, "catalog-reservation-audit-test-returned"); err != nil {
 			t.Logf("consumer exited: %v", err)
 		}
 	}()

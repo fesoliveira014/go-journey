@@ -215,6 +215,7 @@ patches:
       data:
         GRPC_PORT: "50052"
         KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS_TLS"
+        KAFKA_TLS: "true"
         OTEL_COLLECTOR_ENDPOINT: ""
 
   - target:
@@ -230,6 +231,7 @@ patches:
       data:
         GRPC_PORT: "50053"
         KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS_TLS"
+        KAFKA_TLS: "true"
         CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
         MAX_ACTIVE_RESERVATIONS: "5"
         OTEL_COLLECTOR_ENDPOINT: ""
@@ -247,8 +249,10 @@ patches:
       data:
         GRPC_PORT: "50054"
         KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS_TLS"
+        KAFKA_TLS: "true"
         MEILI_URL: "http://meilisearch.data.svc.cluster.local:7700"
         CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
+        SEARCH_BOOTSTRAP_MODE: "if_empty"
 
   - target:
       kind: ConfigMap

@@ -33,6 +33,16 @@ pkg-db-src:
     COPY pkg/db/ /pkg-db/
     SAVE ARTIFACT /pkg-db pkg-db
 
+pkg-kafka-mod:
+    FROM scratch
+    COPY pkg/kafka/go.mod pkg/kafka/go.sum* /pkg-kafka/
+    SAVE ARTIFACT /pkg-kafka pkg-kafka
+
+pkg-kafka-src:
+    FROM scratch
+    COPY pkg/kafka/ /pkg-kafka/
+    SAVE ARTIFACT /pkg-kafka pkg-kafka
+
 pkg-otel-mod:
     FROM scratch
     COPY pkg/otel/go.mod pkg/otel/go.sum* /pkg-otel/

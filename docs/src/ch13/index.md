@@ -79,7 +79,7 @@ The right column is not a wholesale replacement. kind stays in the development w
 
 The Kustomize layering from Chapter 12 is paying its first serious dividend here. Most application manifests remain unchanged; one structural cleanup moves local-only PostgreSQL and Kafka manifests out of the production render before the overlay is added. You wrote the application manifests once, validated them against a kind cluster, and now promote them with environment-specific patches.
 
-What changes lives entirely in a new Kustomize overlay at `k8s/overlays/production/`. That overlay patches:
+Most production-specific behavior lives in a new Kustomize overlay at `k8s/overlays/production/`. The one structural cleanup is moving local-only PostgreSQL and Kafka manifests out of the shared render so production does not deploy in-cluster infrastructure it will never use. The overlay patches:
 
 - **Image references**—from local names like `library/catalog:latest` to ECR URIs like `123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog:abc1234`
 - **Database endpoints**—the `DB_HOST` environment variable for each service now points to an RDS endpoint rather than `postgres.data.svc.cluster.local`

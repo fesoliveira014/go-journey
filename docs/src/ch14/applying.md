@@ -129,7 +129,7 @@ With Terraform complete and secrets present in Secrets Manager, apply the update
 kubectl apply -k deploy/k8s/overlays/production
 ```
 
-This applies the full overlay diff from Chapter 14 in one shot: the `SecretStore` and `ExternalSecret` resources from section 14.3, the Ingress patch with TLS annotations and the ACM certificate ARN from section 14.2, the ConfigMap patch with the `KAFKA_BROKERS` value updated to port 9094 from section 14.4, and `COOKIE_SECURE=true` for the gateway. Resources that already exist and have not changed are left untouched (Kubernetes `apply` is declarative—it reconciles, not replaces.)
+This applies the full overlay diff from Chapter 14 in one shot: the `SecretStore` and `ExternalSecret` resources from section 14.3, the Ingress patch with TLS annotations and the ACM certificate ARN from section 14.2, the ConfigMap patch with `KAFKA_BROKERS` updated to port 9094 and `KAFKA_TLS=true` from section 14.4, and `COOKIE_SECURE=true` for the gateway. Resources that already exist and have not changed are left untouched (Kubernetes `apply` is declarative—it reconciles, not replaces.)
 
 Expected additions in the output:
 
@@ -147,7 +147,7 @@ configmap/reservation-config configured
 configmap/search-config configured
 ```
 
-The Deployments for `auth`, `catalog`, `reservation`, and `search` will be updated with the new `KAFKA_BROKERS` value. Kubernetes will perform a rolling update for each—old pods are terminated only after new pods are running and passing their readiness probes. The cluster remains available throughout.
+The Deployments for `catalog`, `reservation`, and `search` will be updated with the new `KAFKA_BROKERS` and `KAFKA_TLS` values. Kubernetes will perform a rolling update for each—old pods are terminated only after new pods are running and passing their readiness probes. The cluster remains available throughout.
 
 ---
 
@@ -253,11 +253,14 @@ aws route53 list-resource-record-sets \
 
 ## Step 7: Verify MSK TLS
 
-Confirm that the services are connecting to Kafka over TLS by opening a TLS connection to the broker from inside the cluster:
+Confirm that the services can reach Kafka over TLS by opening a TLS connection to the broker from inside the cluster. Use a short-lived debug pod rather than an application pod; the application images carry CA certificates, but they do not include `openssl`:
 
 ```bash
-kubectl exec -it deploy/catalog -n library -- sh -c \
-  "echo | openssl s_client -connect MSK_BROKER:9094 2>/dev/null | head -5"
+kubectl run -it --rm tls-check \
+  --image=alpine:3.19 \
+  --restart=Never \
+  -n library \
+  -- sh -c "apk add --no-cache openssl ca-certificates >/dev/null && echo | openssl s_client -connect MSK_BROKER:9094 2>/dev/null | head -5"
 ```
 
 Replace `MSK_BROKER` with one of the broker hostnames from `terraform output msk_bootstrap_brokers_tls` (the hostname portion only, without the port). Expected output:
@@ -295,7 +298,7 @@ If something goes wrong at any step, here is how to recover.
 ```bash
 kubectl patch configmap catalog-config -n library \
   --type merge \
-  -p '{"data":{"KAFKA_BROKERS":"b-1.library.xxxxx.kafka.us-east-1.amazonaws.com:9092,..."}}'
+  -p '{"data":{"KAFKA_BROKERS":"b-1.library.xxxxx.kafka.us-east-1.amazonaws.com:9092,...","KAFKA_TLS":"false"}}'
 ```
 
 Pods will pick up the change on their next restart (or you can force a rollout with `kubectl rollout restart deployment/catalog -n library`).

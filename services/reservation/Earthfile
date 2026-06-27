@@ -10,9 +10,10 @@ deps:
     COPY ../../+gen-mod/gen ../gen
     COPY ../../+pkg-auth-mod/pkg-auth ../pkg/auth
     COPY ../../+pkg-db-mod/pkg-db ../pkg/db
+    COPY ../../+pkg-kafka-mod/pkg-kafka ../pkg/kafka
     COPY ../../+pkg-otel-mod/pkg-otel ../pkg/otel
     ENV GOWORK=off
-    RUN go mod download && (cd ../gen && go mod download) && (cd ../pkg/auth && go mod download) && (cd ../pkg/db && go mod download) && (cd ../pkg/otel && go mod download)
+    RUN go mod download && (cd ../gen && go mod download) && (cd ../pkg/auth && go mod download) && (cd ../pkg/db && go mod download) && (cd ../pkg/kafka && go mod download) && (cd ../pkg/otel && go mod download)
     SAVE ARTIFACT go.mod AS LOCAL go.mod
     SAVE ARTIFACT go.sum AS LOCAL go.sum
 
@@ -22,6 +23,7 @@ src:
     COPY ../../+gen-src/gen ../gen
     COPY ../../+pkg-auth-src/pkg-auth ../pkg/auth
     COPY ../../+pkg-db-src/pkg-db ../pkg/db
+    COPY ../../+pkg-kafka-src/pkg-kafka ../pkg/kafka
     COPY ../../+pkg-otel-src/pkg-otel ../pkg/otel
 
 lint:
@@ -48,7 +50,7 @@ build:
 
 docker:
     FROM alpine:3.19
-    RUN addgroup -S app && adduser -S app -G app
+    RUN apk add --no-cache ca-certificates && addgroup -S app && adduser -S app -G app
     COPY +build/reservation /usr/local/bin/reservation
     USER app
     EXPOSE 50053

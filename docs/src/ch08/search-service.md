@@ -347,8 +347,13 @@ The `main.go` file constructs all dependencies and starts the server:
 idx := index.NewMeilisearchIndex(meiliURL, meiliKey)
 searchSvc := service.NewSearchService(idx)
 
-// Bootstrap: sync from catalog if index is empty
-if err := bootstrap.Run(ctx, catalogClient, searchSvc); err != nil {
+bootstrapMode, err := bootstrap.ParseMode(os.Getenv("SEARCH_BOOTSTRAP_MODE"))
+if err != nil {
+    log.Fatalf("invalid SEARCH_BOOTSTRAP_MODE value: %v", err)
+}
+
+// Bootstrap: sync from catalog according to SEARCH_BOOTSTRAP_MODE
+if err := bootstrap.Run(ctx, catalogClient, searchSvc, bootstrapMode); err != nil {
     log.Printf("bootstrap failed (starting with empty index): %v", err)
 }
 
