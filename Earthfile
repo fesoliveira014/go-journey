@@ -23,6 +23,16 @@ pkg-auth-src:
     COPY pkg/auth/ /pkg-auth/
     SAVE ARTIFACT /pkg-auth pkg-auth
 
+pkg-db-mod:
+    FROM scratch
+    COPY pkg/db/go.mod pkg/db/go.sum* /pkg-db/
+    SAVE ARTIFACT /pkg-db pkg-db
+
+pkg-db-src:
+    FROM scratch
+    COPY pkg/db/ /pkg-db/
+    SAVE ARTIFACT /pkg-db pkg-db
+
 pkg-otel-mod:
     FROM scratch
     COPY pkg/otel/go.mod pkg/otel/go.sum* /pkg-otel/
