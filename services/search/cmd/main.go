@@ -17,6 +17,7 @@ import (
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
 	searchv1 "github.com/fesoliveira014/library-system/gen/search/v1"
+	kafkautil "github.com/fesoliveira014/library-system/pkg/kafka"
 	"github.com/fesoliveira014/library-system/services/search/internal/bootstrap"
 	"github.com/fesoliveira014/library-system/services/search/internal/consumer"
 	"github.com/fesoliveira014/library-system/services/search/internal/handler"
@@ -35,9 +36,17 @@ func main() {
 	}
 	meiliKey := os.Getenv("MEILI_MASTER_KEY")
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
+	kafkaTLS, err := kafkautil.ParseTLSEnabled(os.Getenv("KAFKA_TLS"))
+	if err != nil {
+		log.Fatalf("invalid KAFKA_TLS value: %v", err)
+	}
 	catalogAddr := os.Getenv("CATALOG_GRPC_ADDR")
 	if catalogAddr == "" {
 		catalogAddr = "localhost:50052"
+	}
+	bootstrapMode, err := bootstrap.ParseMode(os.Getenv("SEARCH_BOOTSTRAP_MODE"))
+	if err != nil {
+		log.Fatalf("invalid SEARCH_BOOTSTRAP_MODE value: %v", err)
 	}
 
 	idx := index.NewMeilisearchIndex(meiliURL, meiliKey)
@@ -55,7 +64,7 @@ func main() {
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
 
-	if err := bootstrap.Run(ctx, catalogClient, searchSvc); err != nil {
+	if err := bootstrap.Run(ctx, catalogClient, searchSvc, bootstrapMode); err != nil {
 		log.Printf("bootstrap failed (starting with empty index): %v", err)
 	}
 
@@ -63,8 +72,8 @@ func main() {
 	if kafkaBrokers != "" {
 		brokers := strings.Split(kafkaBrokers, ",")
 		go func() {
-			log.Println("starting kafka consumer for catalog.books.changed topic")
-			if err := consumer.Run(ctx, brokers, "catalog.books.changed", searchSvc); err != nil {
+			log.Printf("starting kafka consumer for catalog.books.changed topic (tls=%v)", kafkaTLS)
+			if err := consumer.Run(ctx, brokers, "catalog.books.changed", searchSvc, kafkaTLS); err != nil {
 				log.Printf("kafka consumer error: %v", err)
 			}
 		}()

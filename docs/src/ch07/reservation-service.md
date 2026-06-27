@@ -232,7 +232,7 @@ This pattern is sometimes called "optimistic decrement with compensation" and is
 
 ### Returning a Book
 
-The return flow is simpler—verify ownership, check status, update, publish:
+The return flow is simpler than create, but it still has to release Catalog inventory synchronously. The Kafka event is a fact for observers; it is not what increments `available_copies`.
 
 ```go
 func (s *ReservationService) ReturnBook(ctx context.Context, reservationID uuid.UUID) (*model.Reservation, error) {
@@ -263,6 +263,8 @@ func (s *ReservationService) ReturnBook(ctx context.Context, reservationID uuid.
         return nil, fmt.Errorf("update reservation: %w", err)
     }
 
+    s.restoreAvailability(ctx, updated.BookID, "reservation.returned", updated.ID)
+
     if err := s.publisher.Publish(ctx, ReservationEvent{
         Type:          "reservation.returned",
         ReservationID: updated.ID.String(),
@@ -278,6 +280,8 @@ func (s *ReservationService) ReturnBook(ctx context.Context, reservationID uuid.
 ```
 
 The ownership check (`res.UserID != userID`) is critical. Without it, any authenticated user could return anyone's reservation. This is a common security concern in multi-tenant systems—always verify that the requesting user owns the resource they are acting on.
+
+The restore call is deliberately between the database update and the event publish. Once the row is `returned`, Catalog should get the copy back immediately through its `UpdateAvailability(+1)` command. If that Catalog call fails after the reservation row has already been updated, the system has drift: the reservation is returned, but Catalog still shows one fewer available copy. The code logs that failure through `restoreAvailability`. A production system would add reconciliation for this class of drift, just as the create path needs reconciliation if decrement compensation fails.
 
 ### Expiring Reservations: Read Path vs. Background Reaper
 

@@ -9,6 +9,8 @@ ENV GOWORK=off
 # 1. Copy only go.mod/go.sum for dependency caching
 COPY gen/go.mod gen/go.sum* ./gen/
 COPY pkg/auth/go.mod pkg/auth/go.sum* ./pkg/auth/
+COPY pkg/db/go.mod pkg/db/go.sum* ./pkg/db/
+COPY pkg/kafka/go.mod pkg/kafka/go.sum* ./pkg/kafka/
 COPY pkg/otel/go.mod pkg/otel/go.sum* ./pkg/otel/
 COPY services/reservation/go.mod services/reservation/go.sum* ./services/reservation/
 
@@ -20,6 +22,8 @@ RUN go mod download
 WORKDIR /app
 COPY gen/ ./gen/
 COPY pkg/auth/ ./pkg/auth/
+COPY pkg/db/ ./pkg/db/
+COPY pkg/kafka/ ./pkg/kafka/
 COPY pkg/otel/ ./pkg/otel/
 COPY services/reservation/ ./services/reservation/
 
@@ -29,7 +33,7 @@ RUN CGO_ENABLED=0 go build -o /bin/reservation ./cmd/
 
 # Stage 2: Runtime
 FROM alpine:3.19
-RUN addgroup -S app && adduser -S app -G app
+RUN apk add --no-cache ca-certificates && addgroup -S app && adduser -S app -G app
 COPY --from=builder /bin/reservation /usr/local/bin/reservation
 USER app
 EXPOSE 50053

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/meilisearch/meilisearch-go"
 
@@ -27,6 +28,7 @@ type IndexRepository interface {
 	Suggest(ctx context.Context, prefix string, limit int) ([]model.BookDocument, error)
 	Count(ctx context.Context) (int64, error)
 	EnsureIndex(ctx context.Context) error
+	ResetIndex(ctx context.Context) error
 }
 
 // MeilisearchIndex implements IndexRepository backed by Meilisearch.
@@ -80,6 +82,31 @@ func (m *MeilisearchIndex) EnsureIndex(_ context.Context) error {
 		return fmt.Errorf("update sortable attributes: %w", err)
 	}
 
+	return nil
+}
+
+// ResetIndex deletes the search index if it exists. The delete operation is
+// asynchronous in Meilisearch, so this waits for completion before returning.
+func (m *MeilisearchIndex) ResetIndex(ctx context.Context) error {
+	task, err := m.client.DeleteIndexWithContext(ctx, indexName)
+	if err != nil {
+		if meiliErr, ok := err.(*meilisearch.Error); ok {
+			if meiliErr.MeilisearchApiError.Code == "index_not_found" {
+				return nil
+			}
+		}
+		return fmt.Errorf("delete index: %w", err)
+	}
+	if task == nil {
+		return nil
+	}
+	result, err := m.client.WaitForTaskWithContext(ctx, task.TaskUID, 100*time.Millisecond)
+	if err != nil {
+		return fmt.Errorf("wait for index delete: %w", err)
+	}
+	if result.Status != meilisearch.TaskStatusSucceeded {
+		return fmt.Errorf("delete index task ended with status %s", result.Status)
+	}
 	return nil
 }
 

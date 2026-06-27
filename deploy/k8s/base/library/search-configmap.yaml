@@ -6,5 +6,7 @@ metadata:
 data:
   GRPC_PORT: "50054"
   KAFKA_BROKERS: "kafka-0.kafka.messaging.svc.cluster.local:9092"
+  KAFKA_TLS: "false"
   MEILI_URL: "http://meilisearch.data.svc.cluster.local:7700"
   CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
+  SEARCH_BOOTSTRAP_MODE: "if_empty"

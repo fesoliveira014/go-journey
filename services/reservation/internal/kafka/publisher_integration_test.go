@@ -46,7 +46,7 @@ func TestPublisher_Integration_SendMessage(t *testing.T) {
 	brokers := setupKafka(t)
 	const topic = "reservations"
 
-	pub, err := reservationkafka.NewPublisher(brokers, topic)
+	pub, err := reservationkafka.NewPublisher(brokers, topic, false)
 	if err != nil {
 		t.Fatalf("create publisher: %v", err)
 	}
@@ -123,7 +123,7 @@ func TestPublisher_Integration_OTelHeaders(t *testing.T) {
 		otelgo.SetTracerProvider(otelgo.GetTracerProvider())
 	})
 
-	pub, err := reservationkafka.NewPublisher(brokers, topic)
+	pub, err := reservationkafka.NewPublisher(brokers, topic, false)
 	if err != nil {
 		t.Fatalf("create publisher: %v", err)
 	}

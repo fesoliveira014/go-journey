@@ -104,7 +104,7 @@ func TestConsumer_Integration_BookCreated(t *testing.T) {
 	defer cancel()
 
 	go func() {
-		if err := consumer.Run(ctx, brokers, topic, indexer); err != nil {
+		if err := consumer.Run(ctx, brokers, topic, indexer, false); err != nil {
 			t.Logf("consumer.Run returned: %v", err)
 		}
 	}()
@@ -193,7 +193,7 @@ func TestConsumer_Integration_BookDeleted(t *testing.T) {
 	defer cancel()
 
 	go func() {
-		if err := consumer.Run(ctx, brokers, topic, indexer); err != nil {
+		if err := consumer.Run(ctx, brokers, topic, indexer, false); err != nil {
 			t.Logf("consumer.Run returned: %v", err)
 		}
 	}()

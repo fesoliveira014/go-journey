@@ -8,6 +8,7 @@ import (
 	"github.com/IBM/sarama"
 	otelgo "go.opentelemetry.io/otel"
 
+	kafkautil "github.com/fesoliveira014/library-system/pkg/kafka"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/service"
 )
 
@@ -18,8 +19,8 @@ type Publisher struct {
 }
 
 // NewPublisher creates a Kafka publisher for the given topic.
-func NewPublisher(brokers []string, topic string) (*Publisher, error) {
-	config := sarama.NewConfig()
+func NewPublisher(brokers []string, topic string, tlsEnabled bool) (*Publisher, error) {
+	config := kafkautil.NewSaramaConfig(tlsEnabled)
 	config.Producer.Return.Successes = true
 	config.Producer.RequiredAcks = sarama.WaitForAll
 

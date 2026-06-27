@@ -6,9 +6,12 @@ replace github.com/fesoliveira014/library-system/gen => ../../gen
 
 replace github.com/fesoliveira014/library-system/pkg/auth => ../../pkg/auth
 
+replace github.com/fesoliveira014/library-system/pkg/kafka => ../../pkg/kafka
+
 require (
 	github.com/IBM/sarama v1.47.0
 	github.com/fesoliveira014/library-system/gen v0.0.0-00010101000000-000000000000
+	github.com/fesoliveira014/library-system/pkg/kafka v0.0.0-00010101000000-000000000000
 	github.com/google/uuid v1.6.0
 	github.com/meilisearch/meilisearch-go v0.36.1
 	github.com/testcontainers/testcontainers-go/modules/kafka v0.41.0

@@ -6,6 +6,7 @@ metadata:
 data:
   GRPC_PORT: "50053"
   KAFKA_BROKERS: "kafka-0.kafka.messaging.svc.cluster.local:9092"
+  KAFKA_TLS: "false"
   CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
   MAX_ACTIVE_RESERVATIONS: "5"
   OTEL_COLLECTOR_ENDPOINT: ""

@@ -8,8 +8,9 @@ deps:
     COPY go.mod go.sum* ./
     COPY ../../+gen-mod/gen ../gen
     COPY ../../+pkg-auth-mod/pkg-auth ../pkg/auth
+    COPY ../../+pkg-kafka-mod/pkg-kafka ../pkg/kafka
     ENV GOWORK=off
-    RUN go mod download && (cd ../gen && go mod download) && (cd ../pkg/auth && go mod download)
+    RUN go mod download && (cd ../gen && go mod download) && (cd ../pkg/auth && go mod download) && (cd ../pkg/kafka && go mod download)
     SAVE ARTIFACT go.mod AS LOCAL go.mod
     SAVE ARTIFACT go.sum AS LOCAL go.sum
 
@@ -18,6 +19,7 @@ src:
     COPY --dir cmd internal ./
     COPY ../../+gen-src/gen ../gen
     COPY ../../+pkg-auth-src/pkg-auth ../pkg/auth
+    COPY ../../+pkg-kafka-src/pkg-kafka ../pkg/kafka
 
 lint:
     FROM +src
@@ -43,7 +45,7 @@ build:
 
 docker:
     FROM alpine:3.19
-    RUN addgroup -S app && adduser -S app -G app
+    RUN apk add --no-cache ca-certificates && addgroup -S app && adduser -S app -G app
     COPY +build/search /usr/local/bin/search
     USER app
     EXPOSE 50054

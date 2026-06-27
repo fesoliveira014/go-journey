@@ -49,7 +49,7 @@ One command. Compose reads the YAML, creates the network, builds the images, sta
 
 ## The `docker-compose.yml` Structure
 
-Here is `deploy/docker-compose.yml` in full:
+At the Chapter 3 checkpoint, `deploy/docker-compose.yml` contains only PostgreSQL, Catalog, and Gateway. The final `main` branch compose file contains the full stack introduced across later chapters.
 
 ```yaml
 services:
