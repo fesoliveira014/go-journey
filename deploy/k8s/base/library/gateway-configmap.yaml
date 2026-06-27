@@ -9,4 +9,5 @@ data:
   CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
   RESERVATION_GRPC_ADDR: "reservation.library.svc.cluster.local:50053"
   SEARCH_GRPC_ADDR: "search.library.svc.cluster.local:50054"
+  COOKIE_SECURE: "false"
   OTEL_COLLECTOR_ENDPOINT: ""

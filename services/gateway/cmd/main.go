@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"time"
 
@@ -46,6 +47,7 @@ func main() {
 		slog.Error("JWT_SECRET is required")
 		os.Exit(1)
 	}
+	cookieSecure := strings.EqualFold(os.Getenv("COOKIE_SECURE"), "true")
 
 	// FLASH_COOKIE_KEY signs the flash cookie so a client cannot tamper with
 	// its contents. Use at least 32 random bytes; generate with
@@ -136,7 +138,10 @@ func main() {
 	catalogClient := catalogv1.NewCatalogServiceClient(catalogConn)
 	reservationClient := reservationv1.NewReservationServiceClient(reservationConn)
 	searchClient := searchv1.NewSearchServiceClient(searchConn)
-	srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl, handler.WithFlashKey(flashKey))
+	srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl,
+		handler.WithFlashKey(flashKey),
+		handler.WithSecureCookies(cookieSecure),
+	)
 
 	mux := http.NewServeMux()
 	mux.Handle("GET /static/", http.StripPrefix("/static/", http.FileServer(http.Dir("static"))))
@@ -173,6 +178,7 @@ func main() {
 	mux.HandleFunc("POST /admin/books/{id}/delete", srv.AdminBookDelete)
 
 	var h http.Handler = mux
+	h = srv.CSRF(h)
 	h = middleware.Auth(h, jwtSecret)
 	h = middleware.Logging(h)
 	h = otelhttp.NewHandler(h, "gateway")

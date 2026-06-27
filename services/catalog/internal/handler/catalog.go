@@ -18,12 +18,28 @@ import (
 // CatalogHandler implements the generated catalogv1.CatalogServiceServer interface.
 type CatalogHandler struct {
 	catalogv1.UnimplementedCatalogServiceServer
-	svc *service.CatalogService
+	svc                  *service.CatalogService
+	internalServiceToken string
+}
+
+// Option configures optional handler settings.
+type Option func(*CatalogHandler)
+
+// WithInternalServiceToken configures the shared token required by internal
+// service-to-service mutation RPCs such as UpdateAvailability.
+func WithInternalServiceToken(token string) Option {
+	return func(h *CatalogHandler) {
+		h.internalServiceToken = token
+	}
 }
 
 // NewCatalogHandler creates a new gRPC handler backed by the given service.
-func NewCatalogHandler(svc *service.CatalogService) *CatalogHandler {
-	return &CatalogHandler{svc: svc}
+func NewCatalogHandler(svc *service.CatalogService, opts ...Option) *CatalogHandler {
+	h := &CatalogHandler{svc: svc}
+	for _, opt := range opts {
+		opt(h)
+	}
+	return h
 }
 
 func (h *CatalogHandler) CreateBook(ctx context.Context, req *catalogv1.CreateBookRequest) (*catalogv1.Book, error) {
@@ -136,6 +152,10 @@ func (h *CatalogHandler) ListBooks(ctx context.Context, req *catalogv1.ListBooks
 }
 
 func (h *CatalogHandler) UpdateAvailability(ctx context.Context, req *catalogv1.UpdateAvailabilityRequest) (*catalogv1.UpdateAvailabilityResponse, error) {
+	if err := pkgauth.RequireInternalToken(ctx, h.internalServiceToken); err != nil {
+		return nil, err
+	}
+
 	id, err := uuid.Parse(req.GetId())
 	if err != nil {
 		return nil, status.Error(codes.InvalidArgument, "invalid book ID")
@@ -181,6 +201,10 @@ func toGRPCError(err error) error {
 		// FailedPrecondition: the book exists, the request is valid, but
 		// the current state of the row rules it out. The reservation
 		// service maps this back to its own ErrNoAvailableCopies sentinel.
+		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, model.ErrInvalidAvailability):
+		return status.Error(codes.FailedPrecondition, err.Error())
+	case errors.Is(err, model.ErrBookHasActiveReservations):
 		return status.Error(codes.FailedPrecondition, err.Error())
 	default:
 		return status.Error(codes.Internal, "internal error")

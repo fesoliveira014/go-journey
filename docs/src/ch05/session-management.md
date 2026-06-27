@@ -21,12 +21,23 @@ If you have worked with Spring Security, this is the same trade-off between `Jwt
 
 ## Cookie Attributes
 
-The `setSessionCookie` function writes the JWT to a cookie with specific security attributes:
+The gateway reads `COOKIE_SECURE` at startup and passes it into the handler. Local Docker Compose keeps this false because the gateway runs over plain HTTP. The production overlay sets it to true because traffic terminates at HTTPS:
+
+```go
+cookieSecure := strings.EqualFold(os.Getenv("COOKIE_SECURE"), "true")
+
+srv := handler.New(authClient, catalogClient, reservationClient, searchClient, tmpl,
+    handler.WithFlashKey(flashKey),
+    handler.WithSecureCookies(cookieSecure),
+)
+```
+
+The `setSessionCookie` method writes the JWT to a cookie with specific security attributes:
 
 ```go
 // services/gateway/internal/handler/auth.go
 
-func setSessionCookie(w http.ResponseWriter, token string) {
+func (s *Server) setSessionCookie(w http.ResponseWriter, token string) {
     http.SetCookie(w, &http.Cookie{
         Name:     "session",
         Value:    token,
@@ -34,6 +45,7 @@ func setSessionCookie(w http.ResponseWriter, token string) {
         HttpOnly: true,
         SameSite: http.SameSiteLaxMode,
         MaxAge:   86400,
+        Secure:   s.secureCookies,
     })
 }
 ```
@@ -44,16 +56,19 @@ Each attribute matters:
 - **`SameSite: Lax`**—The cookie is sent on same-site requests and top-level navigations (clicking a link) but not on cross-site sub-requests (embedded images, iframes, AJAX from another domain). This prevents most CSRF attacks. `Strict` would also block the cookie on top-level navigations from other sites, which breaks OAuth2 callbacks.
 - **`MaxAge: 86400`**—The cookie expires in 24 hours (matching the JWT expiration from Chapter 4). `MaxAge` is preferred over `Expires` because it is relative, not absolute—no clock skew issues.
 - **`Path: "/"`**—The cookie is sent for all paths. Without this, the cookie would only apply to the path that set it.
-- **`Secure`** is omitted because we are running on `localhost` over HTTP during development. In production, you must add `Secure: true` so the cookie is only sent over HTTPS.
+- **`Secure: s.secureCookies`**—False for local HTTP, true in production. When true, the browser only sends the cookie over HTTPS.
 
 Clearing the cookie on logout sets `MaxAge: -1`, which tells the browser to delete it immediately:
 
 ```go
-func clearSessionCookie(w http.ResponseWriter) {
+func (s *Server) clearSessionCookie(w http.ResponseWriter) {
     http.SetCookie(w, &http.Cookie{
-        Name:   "session",
-        Path:   "/",
-        MaxAge: -1,
+        Name:     "session",
+        Path:     "/",
+        MaxAge:   -1,
+        HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+        Secure:   s.secureCookies,
     })
 }
 ```
@@ -85,7 +100,7 @@ func (s *Server) LoginSubmit(w http.ResponseWriter, r *http.Request) {
         s.render(w, r, "login.html", map[string]any{"Error": "Invalid email or password", "Email": email})
         return
     }
-    setSessionCookie(w, resp.Token)
+    s.setSessionCookie(w, resp.Token)
     s.setFlash(w, "Welcome back!")
     http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
@@ -179,7 +194,7 @@ func (s *Server) OAuth2Callback(w http.ResponseWriter, r *http.Request) {
         s.renderError(w, r, http.StatusUnauthorized, "OAuth2 login failed")
         return
     }
-    setSessionCookie(w, resp.Token)
+    s.setSessionCookie(w, resp.Token)
     s.setFlash(w, "Welcome!")
     http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
@@ -208,6 +223,8 @@ func (s *Server) setFlash(w http.ResponseWriter, message string) {
         Path:     "/",
         MaxAge:   10,
         HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+        Secure:   s.secureCookies,
     })
 }
 
@@ -217,9 +234,12 @@ func (s *Server) consumeFlash(w http.ResponseWriter, r *http.Request) string {
         return ""
     }
     http.SetCookie(w, &http.Cookie{
-        Name:   "flash",
-        Path:   "/",
-        MaxAge: -1,
+        Name:     "flash",
+        Path:     "/",
+        MaxAge:   -1,
+        HttpOnly: true,
+        SameSite: http.SameSiteLaxMode,
+        Secure:   s.secureCookies,
     })
     var message string
     if err := s.flash.Decode("flash", c.Value, &message); err != nil {
@@ -260,9 +280,73 @@ srv := handler.New(authClient, catalogClient, reservationClient, searchClient, t
     handler.WithFlashKey(flashKey))
 ```
 
-The `Server` constructor has grown since Section 5.1—it now accepts the reservation and search clients introduced in Chapters 7 and 8, plus a functional option for flash message configuration.
+The `Server` constructor has grown since Section 5.1—it now accepts the reservation and search clients introduced in Chapters 7 and 8, plus functional options for signed flash/CSRF cookies and production-only secure cookies.
 
 [securecookie]: https://pkg.go.dev/github.com/gorilla/securecookie
+
+---
+
+## CSRF Protection for Forms
+
+Because the JWT lives in a cookie, the browser sends it automatically on form POSTs. `SameSite=Lax` blocks many cross-site submission paths, but we still add explicit CSRF tokens for unsafe methods, especially admin mutations.
+
+The gateway uses a signed double-submit cookie:
+
+1. Rendering a page calls `s.csrfToken(w, r)`.
+2. The server creates a random token, signs it with `securecookie`, and stores it in an HttpOnly `csrf_token` cookie.
+3. Templates place the raw token in a hidden `_csrf` field.
+4. The `srv.CSRF` middleware rejects POST, PUT, PATCH, and DELETE requests unless the submitted token matches the signed cookie.
+
+```go
+// services/gateway/internal/handler/csrf.go
+
+func (s *Server) CSRF(next http.Handler) http.Handler {
+    return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+        switch r.Method {
+        case http.MethodGet, http.MethodHead, http.MethodOptions, http.MethodTrace:
+            next.ServeHTTP(w, r)
+            return
+        }
+        if !s.validCSRF(r) {
+            http.Error(w, "invalid CSRF token", http.StatusForbidden)
+            return
+        }
+        next.ServeHTTP(w, r)
+    })
+}
+```
+
+The token is available to every full-page template through `PageData`:
+
+```go
+type PageData struct {
+    User      *UserInfo
+    Flash     string
+    CSRFToken string
+    Data      any
+}
+```
+
+Every POST form includes it:
+
+```html
+<form method="POST" action="/login" class="auth-form">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
+    <!-- form fields -->
+</form>
+```
+
+Finally, `main.go` wraps the mux before auth/logging instrumentation:
+
+```go
+var h http.Handler = mux
+h = srv.CSRF(h)
+h = middleware.Auth(h, jwtSecret)
+h = middleware.Logging(h)
+h = otelhttp.NewHandler(h, "gateway")
+```
+
+This is still intentionally small. A production framework might rotate CSRF tokens per request or tie them to a server-side session. For this project, a signed random token plus HTTPS-only cookies in production gives the admin forms a clear security boundary without adding a session database.
 
 ---
 
@@ -272,7 +356,7 @@ Logout is straightforward—clear the session cookie and redirect:
 
 ```go
 func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
-    clearSessionCookie(w)
+    s.clearSessionCookie(w)
     http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 ```

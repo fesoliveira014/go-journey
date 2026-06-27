@@ -6,6 +6,7 @@ import (
 
 	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	catalogv1 "github.com/fesoliveira014/library-system/gen/catalog/v1"
@@ -155,5 +156,44 @@ func TestCatalogHandler_GetBook_InvalidID(t *testing.T) {
 	st, _ := status.FromError(err)
 	if st.Code() != codes.InvalidArgument {
 		t.Errorf("expected InvalidArgument for bad UUID, got %v", st.Code())
+	}
+}
+
+func TestCatalogHandler_UpdateAvailabilityRequiresInternalToken(t *testing.T) {
+	t.Parallel()
+	repo := newInMemoryRepo()
+	svc := service.NewCatalogService(repo, &noopPublisher{})
+	h := handler.NewCatalogHandler(svc, handler.WithInternalServiceToken("service-secret"))
+	book, err := svc.CreateBook(adminContext(), &model.Book{
+		Title:       "Test Book",
+		Author:      "Test Author",
+		TotalCopies: 2,
+	})
+	if err != nil {
+		t.Fatalf("setup: create book: %v", err)
+	}
+
+	_, err = h.UpdateAvailability(context.Background(), &catalogv1.UpdateAvailabilityRequest{
+		Id:    book.ID.String(),
+		Delta: -1,
+	})
+	st, ok := status.FromError(err)
+	if !ok {
+		t.Fatalf("expected gRPC status error, got %v", err)
+	}
+	if st.Code() != codes.Unauthenticated {
+		t.Fatalf("expected Unauthenticated without internal token, got %v", st.Code())
+	}
+
+	ctx := metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-internal-service-token", "service-secret"))
+	resp, err := h.UpdateAvailability(ctx, &catalogv1.UpdateAvailabilityRequest{
+		Id:    book.ID.String(),
+		Delta: -1,
+	})
+	if err != nil {
+		t.Fatalf("expected internal token to authorize update, got %v", err)
+	}
+	if resp.GetAvailableCopies() != 1 {
+		t.Fatalf("expected available copies 1, got %d", resp.GetAvailableCopies())
 	}
 }

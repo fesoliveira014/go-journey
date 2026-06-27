@@ -6,7 +6,7 @@ With the fundamentals in place, we can now build the Auth service end to end. Th
 
 ## Proto Definition
 
-The Auth service defines six RPCs in `proto/auth/v1/auth.proto`:
+At the Chapter 4 checkpoint, the Auth service defines six RPCs in `proto/auth/v1/auth.proto`:
 
 ```protobuf
 service AuthService {
@@ -22,6 +22,8 @@ service AuthService {
 The first three are the core authentication RPCs. `Register` and `Login` return an `AuthResponse` containing a JWT token and the user object. Other services (or a gateway) call `ValidateToken` to verify a token and extract the user ID and role without holding the JWT secret themselves. In our architecture, however, services share the secret and validate locally via the interceptor.
 
 `GetUser` is a simple lookup by ID. `InitOAuth2` and `CompleteOAuth2` implement the OAuth2 authorization code flow, which we cover in detail in section 4.3.
+
+Chapter 6 adds a seventh RPC, `ListUsers`, for the admin dashboard. If you are looking at the final repository, seeing seven Auth RPCs is expected; this section shows the earlier Chapter 4 snapshot.
 
 The `AuthResponse` message pairs a token with a user:
 

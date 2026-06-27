@@ -36,6 +36,11 @@ spec:
                 secretKeyRef:
                   name: jwt-secret
                   key: JWT_SECRET
+            - name: FLASH_COOKIE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: flash-cookie-key
+                  key: FLASH_COOKIE_KEY
           envFrom:
             - configMapRef:
                 name: gateway-config

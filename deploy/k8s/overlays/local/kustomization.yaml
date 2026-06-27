@@ -15,6 +15,14 @@ secretGenerator:
     namespace: library
     literals:
       - JWT_SECRET=dev-secret-change-in-production
+  - name: flash-cookie-key
+    namespace: library
+    literals:
+      - FLASH_COOKIE_KEY=0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef
+  - name: internal-service-token
+    namespace: library
+    literals:
+      - INTERNAL_SERVICE_TOKEN=dev-internal-service-token-change-in-production
   - name: postgres-catalog-secret
     namespace: library
     literals:

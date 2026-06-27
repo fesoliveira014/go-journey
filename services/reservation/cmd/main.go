@@ -60,6 +60,11 @@ func main() {
 		slog.Error("JWT_SECRET environment variable is required")
 		os.Exit(1)
 	}
+	internalServiceToken := os.Getenv("INTERNAL_SERVICE_TOKEN")
+	if internalServiceToken == "" {
+		slog.Error("INTERNAL_SERVICE_TOKEN environment variable is required")
+		os.Exit(1)
+	}
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 	if kafkaBrokers == "" {
 		kafkaBrokers = "localhost:9092"
@@ -109,6 +114,7 @@ func main() {
 	catalogConn, err := grpc.NewClient(catalogAddr,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithStatsHandler(otelgrpc.NewClientHandler()),
+		grpc.WithUnaryInterceptor(pkgauth.UnaryInternalTokenInterceptor(internalServiceToken)),
 	)
 	if err != nil {
 		slog.Error("connect to catalog service", "error", err)

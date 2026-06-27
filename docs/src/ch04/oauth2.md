@@ -54,7 +54,7 @@ To use Google OAuth2, you need credentials from the Google Cloud Console:
 3. Navigate to **APIs & Services > Credentials**
 4. Click **Create Credentials > OAuth 2.0 Client ID**
 5. Set the application type to **Web application**
-6. Add your redirect URI (e.g., `http://localhost:8080/auth/callback`)
+6. Add your redirect URI (e.g., `http://localhost:8080/auth/oauth2/google/callback`)
 7. Copy the Client ID and Client Secret
 
 Set these as environment variables:
@@ -62,7 +62,7 @@ Set these as environment variables:
 ```bash
 GOOGLE_CLIENT_ID=your-client-id.apps.googleusercontent.com
 GOOGLE_CLIENT_SECRET=your-secret
-GOOGLE_REDIRECT_URL=http://localhost:8080/auth/callback
+GOOGLE_REDIRECT_URL=http://localhost:8080/auth/oauth2/google/callback
 ```
 
 **You can skip this step.** The Auth service gracefully handles missing credentials. If `GOOGLE_CLIENT_ID` is empty, the OAuth2 config is not initialized, and the `InitOAuth2` and `CompleteOAuth2` RPCs return `Unavailable: OAuth2 not configured`. The rest of the service (registration, login, token validation) works normally.
@@ -158,7 +158,7 @@ func (h *AuthHandler) CompleteOAuth2(ctx context.Context, req *authv1.CompleteOA
     if err != nil {
         // Log internally for diagnostics, but return a generic message to the client —
         // the raw OAuth error may include provider details or token fragments.
-        slog.Error("oauth code exchange failed", "error", err)
+        slog.ErrorContext(ctx, "oauth code exchange failed", "error", err)
         return nil, status.Error(codes.Internal, "authentication failed")
     }
 

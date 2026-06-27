@@ -9,6 +9,7 @@
 {{if .Data.Description}}<p>{{.Data.Description}}</p>{{end}}
 {{if and .User (gt .Data.AvailableCopies 0)}}
 <form method="POST" action="/books/{{.Data.Id}}/reserve">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
     <button type="submit">Reserve This Book</button>
 </form>
 {{end}}

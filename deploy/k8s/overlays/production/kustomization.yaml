@@ -96,6 +96,11 @@ patches:
                       secretKeyRef:
                         name: jwt-secret
                         key: JWT_SECRET
+                  - name: INTERNAL_SERVICE_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: internal-service-token
+                        key: INTERNAL_SERVICE_TOKEN
 
   - target:
       kind: Deployment
@@ -160,6 +165,11 @@ patches:
                       secretKeyRef:
                         name: jwt-secret
                         key: JWT_SECRET
+                  - name: INTERNAL_SERVICE_TOKEN
+                    valueFrom:
+                      secretKeyRef:
+                        name: internal-service-token
+                        key: INTERNAL_SERVICE_TOKEN
 
   # --- Ingress patch (NGINX → ALB) ---
   - target:
@@ -239,6 +249,19 @@ patches:
         KAFKA_BROKERS: "MSK_BOOTSTRAP_BROKERS_TLS"
         MEILI_URL: "http://meilisearch.data.svc.cluster.local:7700"
         CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
+
+  - target:
+      kind: ConfigMap
+      name: gateway-config
+      namespace: library
+    patch: |
+      apiVersion: v1
+      kind: ConfigMap
+      metadata:
+        name: gateway-config
+        namespace: library
+      data:
+        COOKIE_SECURE: "true"
 
 # Secrets are now managed by External Secrets Operator (ESO).
 # ESO reads from AWS Secrets Manager and creates the Kubernetes Secrets

@@ -14,13 +14,15 @@ import (
 )
 
 type Server struct {
-	auth        authv1.AuthServiceClient
-	catalog     catalogv1.CatalogServiceClient
-	reservation reservationv1.ReservationServiceClient
-	search      searchv1.SearchServiceClient
-	tmpl        map[string]*template.Template
-	baseTmpl    *template.Template // base set for rendering partials
-	flash       *securecookie.SecureCookie
+	auth          authv1.AuthServiceClient
+	catalog       catalogv1.CatalogServiceClient
+	reservation   reservationv1.ReservationServiceClient
+	search        searchv1.SearchServiceClient
+	tmpl          map[string]*template.Template
+	baseTmpl      *template.Template // base set for rendering partials
+	flash         *securecookie.SecureCookie
+	csrf          *securecookie.SecureCookie
+	secureCookies bool
 }
 
 // Option configures optional fields on the Server. Used with New.
@@ -34,6 +36,15 @@ type Option func(*Server)
 func WithFlashKey(hashKey []byte) Option {
 	return func(s *Server) {
 		s.flash = securecookie.New(hashKey, nil)
+		s.csrf = securecookie.New(hashKey, nil)
+	}
+}
+
+// WithSecureCookies controls the Secure flag on browser cookies. Keep this
+// false for local HTTP development; set it true behind HTTPS in production.
+func WithSecureCookies(secure bool) Option {
+	return func(s *Server) {
+		s.secureCookies = secure
 	}
 }
 
@@ -49,7 +60,12 @@ func New(auth authv1.AuthServiceClient, catalog catalogv1.CatalogServiceClient, 
 		opt(s)
 	}
 	if s.flash == nil {
-		s.flash = securecookie.New(securecookie.GenerateRandomKey(32), nil)
+		hashKey := securecookie.GenerateRandomKey(32)
+		s.flash = securecookie.New(hashKey, nil)
+		s.csrf = securecookie.New(hashKey, nil)
+	}
+	if s.csrf == nil {
+		s.csrf = securecookie.New(securecookie.GenerateRandomKey(32), nil)
 	}
 	return s
 }

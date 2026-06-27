@@ -61,6 +61,11 @@ func main() {
 		slog.Error("JWT_SECRET environment variable is required")
 		os.Exit(1)
 	}
+	internalServiceToken := os.Getenv("INTERNAL_SERVICE_TOKEN")
+	if internalServiceToken == "" {
+		slog.Error("INTERNAL_SERVICE_TOKEN environment variable is required")
+		os.Exit(1)
+	}
 	kafkaBrokers := os.Getenv("KAFKA_BROKERS")
 
 	db, err := pkgdb.Open(dbDSN, pkgdb.Config{})
@@ -97,7 +102,7 @@ func main() {
 	}
 
 	catalogSvc := service.NewCatalogService(bookRepo, publisher)
-	catalogHandler := handler.NewCatalogHandler(catalogSvc)
+	catalogHandler := handler.NewCatalogHandler(catalogSvc, handler.WithInternalServiceToken(internalServiceToken))
 
 	ctx, cancel := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer cancel()
@@ -105,7 +110,7 @@ func main() {
 	if len(brokers) > 0 {
 		go func() {
 			slog.Info("starting kafka consumer", "topic", "reservations")
-			if err := consumer.Run(ctx, brokers, "reservations", catalogSvc); err != nil {
+			if err := consumer.Run(ctx, brokers, "reservations"); err != nil {
 				slog.Error("kafka consumer error", "error", err)
 			}
 		}()

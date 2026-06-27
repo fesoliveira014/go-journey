@@ -86,3 +86,64 @@ func TestInterceptor_SkippedMethod(t *testing.T) {
 		t.Errorf("expected 'public', got %v", resp)
 	}
 }
+
+func TestUnaryInternalTokenInterceptor(t *testing.T) {
+	t.Parallel()
+	interceptor := auth.UnaryInternalTokenInterceptor("service-secret")
+
+	err := interceptor(
+		context.Background(),
+		"/test.Service/Method",
+		nil,
+		nil,
+		nil,
+		func(ctx context.Context, _ string, _, _ interface{}, _ *grpc.ClientConn, _ ...grpc.CallOption) error {
+			md, ok := metadata.FromOutgoingContext(ctx)
+			if !ok {
+				t.Fatal("expected outgoing metadata")
+			}
+			got := md.Get("x-internal-service-token")
+			if len(got) != 1 || got[0] != "service-secret" {
+				t.Fatalf("expected internal service token, got %v", got)
+			}
+			return nil
+		},
+	)
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestRequireInternalToken(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		ctx  context.Context
+		want codes.Code
+	}{
+		{name: "valid", ctx: metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-internal-service-token", "expected")), want: codes.OK},
+		{name: "missing", ctx: context.Background(), want: codes.Unauthenticated},
+		{name: "wrong", ctx: metadata.NewIncomingContext(context.Background(), metadata.Pairs("x-internal-service-token", "wrong")), want: codes.PermissionDenied},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			err := auth.RequireInternalToken(tt.ctx, "expected")
+			if tt.want == codes.OK {
+				if err != nil {
+					t.Fatalf("expected no error, got %v", err)
+				}
+				return
+			}
+			st, ok := status.FromError(err)
+			if !ok {
+				t.Fatalf("expected gRPC status error, got %v", err)
+			}
+			if st.Code() != tt.want {
+				t.Fatalf("expected %v, got %v", tt.want, st.Code())
+			}
+		})
+	}
+}

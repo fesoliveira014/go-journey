@@ -154,7 +154,7 @@ Three pods: the main controller that reconciles `ExternalSecret` resources, a ce
 
 ## Creating the non-RDS secrets
 
-RDS secrets are created automatically by Secrets Manager when you set `manage_master_user_password = true`. The JWT secret and the Meilisearch master key are not database credentials and have no equivalent automated source—you need to create them once:
+RDS secrets are created automatically by Secrets Manager when you set `manage_master_user_password = true`. The JWT secret, gateway flash/CSRF cookie key, internal service token, and Meilisearch master key are not database credentials and have no equivalent automated source—you need to create them once:
 
 ```bash
 # Generate a cryptographically random 64-byte JWT secret and store it.
@@ -164,6 +164,21 @@ aws secretsmanager create-secret \
   --name library-system/jwt-secret \
   --description "JWT signing secret for the library system auth service" \
   --secret-string "{\"secret\":\"$(openssl rand -hex 64)\"}"
+
+# Generate a 32-byte hex key for gorilla/securecookie. The gateway decodes
+# this value at startup, so keep it hex-encoded.
+aws secretsmanager create-secret \
+  --name library-system/flash-cookie-key \
+  --description "Signed flash and CSRF cookie key for the gateway" \
+  --secret-string "{\"key\":\"$(openssl rand -hex 32)\"}"
+
+# Generate a shared internal token for Catalog availability mutations.
+# This is a learning-project simplification; production systems should prefer
+# service identities or short-lived credentials.
+aws secretsmanager create-secret \
+  --name library-system/internal-service-token \
+  --description "Internal service token for Catalog availability commands" \
+  --secret-string "{\"token\":\"$(openssl rand -hex 32)\"}"
 
 # Generate a random Meilisearch master key. Meilisearch requires this
 # to be present at first startup; it cannot be changed after the index
@@ -176,7 +191,7 @@ aws secretsmanager create-secret \
 
 The JSON wrapper (`{"secret": "..."}`) is deliberate. ESO's `remoteRef.property` field extracts a specific key from a JSON-formatted secret value. If you store a bare string instead, you must omit the `property` field and ESO will use the entire value—which works, but JSON-formatted secrets are easier to extend later (if you need to add a `rotation_lambda_arn` field, for example) and are the format Secrets Manager's own rotation framework expects.
 
-Verify both secrets exist:
+Verify the manually created secrets exist:
 
 ```bash
 aws secretsmanager list-secrets --query "SecretList[?starts_with(Name, 'library-system')].Name"
@@ -327,7 +342,67 @@ apiVersion: external-secrets.io/v1beta1
 kind: ExternalSecret
 metadata:
   name: meilisearch-secret
-  namespace: data          # Meilisearch runs in the data namespace, not library
+  namespace: library       # Search runs in the library namespace
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: SecretStore
+  target:
+    name: meilisearch-secret
+    creationPolicy: Owner
+  data:
+    - secretKey: MEILI_MASTER_KEY
+      remoteRef:
+        key: library-system/meilisearch-key
+        property: key
+---
+# --- Gateway signed-cookie key ---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: flash-cookie-key
+  namespace: library
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: SecretStore
+  target:
+    name: flash-cookie-key
+    creationPolicy: Owner
+  data:
+    - secretKey: FLASH_COOKIE_KEY
+      remoteRef:
+        key: library-system/flash-cookie-key
+        property: key
+---
+# --- Internal service token ---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: internal-service-token
+  namespace: library
+spec:
+  refreshInterval: 1h
+  secretStoreRef:
+    name: aws-secrets-manager
+    kind: SecretStore
+  target:
+    name: internal-service-token
+    creationPolicy: Owner
+  data:
+    - secretKey: INTERNAL_SERVICE_TOKEN
+      remoteRef:
+        key: library-system/internal-service-token
+        property: token
+---
+# --- Meilisearch server key ---
+apiVersion: external-secrets.io/v1beta1
+kind: ExternalSecret
+metadata:
+  name: meilisearch-secret
+  namespace: data          # The Meilisearch StatefulSet runs in data
 spec:
   refreshInterval: 1h
   secretStoreRef:
@@ -343,10 +418,10 @@ spec:
         property: key
 ```
 
-Note that the Meilisearch ExternalSecret targets the `data` namespace—not `library`—because the Meilisearch StatefulSet runs in the `data` namespace. This also requires a SecretStore in the `data` namespace. The YAML is identical to the `library`-namespace SecretStore, with only the namespace changed:
+Note that the Meilisearch key appears in both namespaces: the Search service reads it in `library`, and the Meilisearch StatefulSet reads it in `data`. The `data` namespace also requires a SecretStore. Add a second document to `deploy/k8s/overlays/production/secret-store.yaml`; it is identical to the `library`-namespace SecretStore, with only the namespace changed:
 
 ```yaml
-# deploy/k8s/overlays/production/secret-store-data.yaml
+# deploy/k8s/overlays/production/secret-store.yaml
 apiVersion: external-secrets.io/v1beta1
 kind: SecretStore
 metadata:
@@ -364,9 +439,9 @@ spec:
             namespace: external-secrets
 ```
 
-Add this file to the `resources` list in the production overlay's `kustomization.yaml`.
+Because both SecretStores live in `secret-store.yaml`, the production overlay only needs that one file in its `resources` list.
 
-Each `ExternalSecret` maps a single field from a Secrets Manager secret to a single key in a Kubernetes Secret. The `target.name` matches exactly the name used in the StatefulSet or Deployment's `secretKeyRef.name`—`postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `jwt-secret`, and `meilisearch-secret`. No application manifest changes are required.
+Each `ExternalSecret` maps a single field from a Secrets Manager secret to a single key in a Kubernetes Secret. The `target.name` matches exactly the name used in the StatefulSet or Deployment's `secretKeyRef.name`—`postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `jwt-secret`, `flash-cookie-key`, `internal-service-token`, and `meilisearch-secret`. No application manifest changes are required.
 
 The `creationPolicy: Owner` setting is worth understanding. It means ESO creates the Kubernetes Secret and marks itself as the owner via a Kubernetes owner reference. If you run `kubectl delete externalsecret postgres-catalog-secret -n library`, Kubernetes will garbage-collect the associated Secret automatically. This is the right policy for production: the Secret should not outlive its source of truth. The alternative, `creationPolicy: Merge`, is useful when you want to add ESO-managed keys into an existing Secret that is partially managed by other means—not the case here.
 
@@ -422,7 +497,7 @@ Apply the updated overlay:
 kubectl apply -k deploy/k8s/overlays/production/
 ```
 
-Kustomize will apply the `SecretStore` and all five `ExternalSecret` objects. ESO's controller detects the new `ExternalSecret` resources almost immediately and begins reconciling.
+Kustomize will apply the `SecretStore` objects and all `ExternalSecret` objects. ESO's controller detects the new resources almost immediately and begins reconciling.
 
 ---
 
@@ -435,6 +510,9 @@ $ kubectl get externalsecrets -n library
 
 NAME                       STORE                 REFRESH INTERVAL   STATUS         READY
 jwt-secret                 aws-secrets-manager   1h                 SecretSynced   True
+flash-cookie-key           aws-secrets-manager   1h                 SecretSynced   True
+internal-service-token     aws-secrets-manager   1h                 SecretSynced   True
+meilisearch-secret         aws-secrets-manager   1h                 SecretSynced   True
 postgres-auth-secret       aws-secrets-manager   1h                 SecretSynced   True
 postgres-catalog-secret    aws-secrets-manager   1h                 SecretSynced   True
 postgres-reservation-secret aws-secrets-manager  1h                 SecretSynced   True
@@ -457,13 +535,15 @@ The `Status.Conditions` section will contain a message. Common causes:
 - **`ResourceNotFoundException`**—the secret key (e.g., `rds!db-library-catalog`) does not exist in Secrets Manager. The RDS identifier in Terraform and the key name in the `ExternalSecret` must match. Run `aws secretsmanager list-secrets` to see the actual names.
 - **`InvalidParameterException`**—the `property` field does not match a key in the JSON payload. Verify the secret format with `aws secretsmanager get-secret-value --secret-id rds!db-library-catalog`.
 
-Once all five resources are `SecretSynced`, confirm the Kubernetes Secrets exist:
+Once all resources are `SecretSynced`, confirm the Kubernetes Secrets exist:
 
 ```
 $ kubectl get secrets -n library
 
 NAME                         TYPE     DATA   AGE
 jwt-secret                   Opaque   1      45s
+flash-cookie-key             Opaque   1      45s
+internal-service-token       Opaque   1      45s
 meilisearch-secret           Opaque   1      45s
 postgres-auth-secret         Opaque   1      45s
 postgres-catalog-secret      Opaque   1      45s

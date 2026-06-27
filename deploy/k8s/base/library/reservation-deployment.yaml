@@ -43,6 +43,11 @@ spec:
                 secretKeyRef:
                   name: jwt-secret
                   key: JWT_SECRET
+            - name: INTERNAL_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-service-token
+                  key: INTERNAL_SERVICE_TOKEN
           envFrom:
             - configMapRef:
                 name: reservation-config

@@ -88,7 +88,7 @@ services:
       JWT_EXPIRY: ${JWT_EXPIRY:-24h}
       GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID:-}
       GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET:-}
-      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-http://localhost:8080/oauth2/callback}
+      GOOGLE_REDIRECT_URL: ${GOOGLE_REDIRECT_URL:-http://localhost:8080/auth/oauth2/google/callback}
     ports:
       - "${AUTH_GRPC_PORT:-50051}:50051"
     depends_on:
@@ -106,6 +106,7 @@ services:
       DATABASE_URL: "host=postgres-catalog port=5432 user=${POSTGRES_CATALOG_USER:-postgres} password=${POSTGRES_CATALOG_PASSWORD:-postgres} dbname=${POSTGRES_CATALOG_DB:-catalog} sslmode=disable"
       GRPC_PORT: "50052"
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set in .env}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
       OTEL_COLLECTOR_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT:-otel-collector:4317}
     ports:
@@ -127,6 +128,7 @@ services:
       DATABASE_URL: "host=postgres-reservation port=5432 user=${POSTGRES_RESERVATION_USER:-postgres} password=${POSTGRES_RESERVATION_PASSWORD:-postgres} dbname=${POSTGRES_RESERVATION_DB:-reservation} sslmode=disable"
       GRPC_PORT: "50053"
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
+      INTERNAL_SERVICE_TOKEN: ${INTERNAL_SERVICE_TOKEN:?INTERNAL_SERVICE_TOKEN must be set in .env}
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
       CATALOG_GRPC_ADDR: ${CATALOG_GRPC_ADDR:-catalog:50052}
       AUTH_GRPC_ADDR: ${AUTH_GRPC_ADDR:-auth:50051}
@@ -196,6 +198,7 @@ services:
       SEARCH_GRPC_ADDR: ${SEARCH_GRPC_ADDR:-search:50054}
       JWT_SECRET: ${JWT_SECRET:?JWT_SECRET must be set in .env}
       FLASH_COOKIE_KEY: ${FLASH_COOKIE_KEY:?FLASH_COOKIE_KEY must be set in .env (32+ hex bytes, e.g. openssl rand -hex 32)}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       OTEL_COLLECTOR_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT:-otel-collector:4317}
     ports:
       - "${GATEWAY_PORT:-8080}:8080"

@@ -2,6 +2,7 @@ package auth
 
 import (
 	"context"
+	"crypto/subtle"
 	"strings"
 
 	"github.com/google/uuid"
@@ -10,6 +11,8 @@ import (
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 )
+
+const internalServiceTokenHeader = "x-internal-service-token"
 
 // UnaryForwardAuthInterceptor returns a gRPC unary client interceptor that
 // forwards the JWT token from the context (set by the HTTP auth middleware)
@@ -28,6 +31,46 @@ func UnaryForwardAuthInterceptor() grpc.UnaryClientInterceptor {
 		}
 		return invoker(ctx, method, req, reply, cc, opts...)
 	}
+}
+
+// UnaryInternalTokenInterceptor returns a gRPC unary client interceptor that
+// attaches a static internal service token to outgoing RPC metadata. Use this
+// for narrow service-to-service commands that should not be callable with a
+// browser user's JWT.
+func UnaryInternalTokenInterceptor(token string) grpc.UnaryClientInterceptor {
+	return func(
+		ctx context.Context,
+		method string,
+		req, reply interface{},
+		cc *grpc.ClientConn,
+		invoker grpc.UnaryInvoker,
+		opts ...grpc.CallOption,
+	) error {
+		if token != "" {
+			ctx = metadata.AppendToOutgoingContext(ctx, internalServiceTokenHeader, token)
+		}
+		return invoker(ctx, method, req, reply, cc, opts...)
+	}
+}
+
+// RequireInternalToken verifies that the incoming RPC carries the configured
+// internal service token.
+func RequireInternalToken(ctx context.Context, expected string) error {
+	if expected == "" {
+		return status.Error(codes.Unauthenticated, "internal service token is not configured")
+	}
+	md, ok := metadata.FromIncomingContext(ctx)
+	if !ok {
+		return status.Error(codes.Unauthenticated, "missing metadata")
+	}
+	values := md.Get(internalServiceTokenHeader)
+	if len(values) == 0 {
+		return status.Error(codes.Unauthenticated, "missing internal service token")
+	}
+	if subtle.ConstantTimeCompare([]byte(values[0]), []byte(expected)) != 1 {
+		return status.Error(codes.PermissionDenied, "invalid internal service token")
+	}
+	return nil
 }
 
 // UnaryAuthInterceptor returns a gRPC unary server interceptor that validates

@@ -24,6 +24,7 @@
                 <td>
                     {{if eq .Status "active"}}
                     <form method="POST" action="/reservations/{{.Id}}/return" style="display:inline">
+                        <input type="hidden" name="_csrf" value="{{$.CSRFToken}}">
                         <button type="submit">Return</button>
                     </form>
                     {{else}}
