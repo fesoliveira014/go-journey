@@ -6,10 +6,10 @@ import (
 
 	otelapi "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/sdk/trace"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
 )
 
 func TestInit_SetsGlobalProviders(t *testing.T) {
-	t.Parallel()
 	shutdown, err := Init(context.Background(), "test-service", "0.0.1", "localhost:4317")
 	if err != nil {
 		t.Fatalf("Init() error: %v", err)
@@ -23,7 +23,6 @@ func TestInit_SetsGlobalProviders(t *testing.T) {
 }
 
 func TestInit_ShutdownIsIdempotent(t *testing.T) {
-	t.Parallel()
 	shutdown, err := Init(context.Background(), "test-service", "0.0.1", "localhost:4317")
 	if err != nil {
 		t.Fatalf("Init() error: %v", err)
@@ -37,5 +36,20 @@ func TestInit_ShutdownIsIdempotent(t *testing.T) {
 	// Second call should return the same error (sync.Once caches the result).
 	if (err1 == nil) != (err2 == nil) {
 		t.Errorf("idempotency broken: first=%v, second=%v", err1, err2)
+	}
+}
+
+func TestInit_EmptyEndpointUsesNoopProviders(t *testing.T) {
+	shutdown, err := Init(context.Background(), "test-service", "0.0.1", "")
+	if err != nil {
+		t.Fatalf("Init() error: %v", err)
+	}
+	if err := shutdown(context.Background()); err != nil {
+		t.Fatalf("shutdown() error: %v", err)
+	}
+
+	tp := otelapi.GetTracerProvider()
+	if _, ok := tp.(nooptrace.TracerProvider); !ok {
+		t.Errorf("expected noop tracer provider, got %T", tp)
 	}
 }

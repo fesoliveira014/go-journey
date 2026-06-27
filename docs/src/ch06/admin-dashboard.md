@@ -1,5 +1,8 @@
 # 6.2 Admin Dashboard
 
+> **Sequencing note**
+> The user dashboard belongs to Chapter 6. The reservation dashboard pieces are a post-Chapter 7 extension included here because this tooling chapter was added after the first full draft. If you are reading linearly, build `ListUsers` now and return to the reservation-admin material after Chapter 7 introduces the Reservation service.
+
 The admin can already manage books through the CRUD pages built in Chapter 5, but two questions remain unanswered: Who are the registered users, and what reservations exist across the system? This section adds an admin dashboard with two new gRPC RPCs and three new gateway pages.
 
 ---

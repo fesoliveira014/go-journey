@@ -191,7 +191,7 @@ books = []Book{b1, b2, b3}
 books = append(books, Book{Title: "Clean Code"})
 ```
 
-A nil slice and an empty slice behave the same for `len`, `append`, and `range`—but they are not equal under `reflect.DeepEqual`. The convention is to return a nil slice for "no results" rather than an empty one, and to let callers use `len(result) == 0` to check emptiness.
+A nil slice and an empty slice behave the same for `len`, `append`, and `range`—but they are not equal under `reflect.DeepEqual`. Use whichever makes the API contract clearer. For JSON responses, prefer an empty slice when clients expect `[]`; a nil slice encodes as `null`. Callers should usually use `len(result) == 0` to check emptiness either way.
 
 **Iteration** always uses `range`:
 
@@ -243,7 +243,7 @@ Map iteration order is deliberately randomized on each run—do not rely on it.
 
 ### Pointers
 
-You know pointers from C. Go pointers are simpler—same concept, no arithmetic, and the runtime enforces nil safety automatically.
+You know pointers from C. Go pointers are simpler—same concept and no arithmetic. Go does not have Kotlin-style nil safety, though: dereferencing a nil pointer panics at runtime, so check nil when a pointer may be absent.
 
 ```go
 b := Book{Title: "TGPL"}

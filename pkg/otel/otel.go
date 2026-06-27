@@ -11,11 +11,13 @@ import (
 	otelgo "go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	noopmetric "go.opentelemetry.io/otel/metric/noop"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	nooptrace "go.opentelemetry.io/otel/trace/noop"
 )
 
 // Init sets up OpenTelemetry tracing and metrics with OTLP/gRPC exporters.
@@ -25,6 +27,14 @@ import (
 // Returns a shutdown function that must be called (e.g. via defer) to flush and
 // close the exporters cleanly before the process exits.
 func Init(ctx context.Context, serviceName, serviceVersion, collectorEndpoint string) (func(context.Context) error, error) {
+	if collectorEndpoint == "" {
+		otelgo.SetTracerProvider(nooptrace.NewTracerProvider())
+		otelgo.SetMeterProvider(noopmetric.NewMeterProvider())
+		otelgo.SetTextMapPropagator(propagation.TraceContext{})
+		slog.SetDefault(slog.New(NewTraceLogHandler(os.Stdout)))
+		return func(context.Context) error { return nil }, nil
+	}
+
 	res, err := resource.New(ctx,
 		resource.WithAttributes(
 			semconv.ServiceNameKey.String(serviceName),

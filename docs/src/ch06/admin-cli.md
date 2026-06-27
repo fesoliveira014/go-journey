@@ -152,6 +152,8 @@ DATABASE_URL="postgres://postgres:postgres@localhost:5434/auth?sslmode=disable" 
     --name "Library Admin"
 ```
 
+Passing a password as a command-line flag is acceptable for this local tutorial, but it is not a good production habit: shell history and process listings can expose arguments. A production bootstrap tool should read the password from a no-echo prompt, a protected environment variable, or a one-time secret manager value.
+
 Expected output:
 
 ```

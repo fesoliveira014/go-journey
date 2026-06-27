@@ -1,5 +1,11 @@
 # Chapter 13: From Local to Cloud—Deploying to AWS
 
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-13-start`
+> End state: `git checkout chapter-13-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
 Chapter 12 got every service running in a real Kubernetes cluster: probes passing, StatefulSets stable, Ingress routing requests from your laptop to the gateway. kind gave you a full control plane in Docker containers—the right tool for developing and validating manifests without spending a cent. But kind is a development tool. The cluster lives on your machine, behind your home router, inaccessible from the internet. There is no persistent storage that outlives a `kind delete cluster`. There are no managed databases with automatic backups, no Multi-AZ brokers, no autoscaling node pools. If your laptop goes to sleep, the cluster does too.
 
 This chapter takes the same application—the same manifests, the same container images, the same Kustomize base—and deploys it to AWS. The application services run on Amazon EKS. PostgreSQL will move from a StatefulSet to Amazon RDS instances, one per service. Kafka will move from a StatefulSet to Amazon MSK. Images will be stored in Amazon ECR. Deployments will be triggered by GitHub Actions, not `kubectl apply` from a terminal. By the end, you will have a production-grade deployment pipeline that runs on every push to `main`.
@@ -71,7 +77,7 @@ The right column is not a wholesale replacement. kind stays in the development w
 
 ## What changes and what stays the same
 
-The Kustomize layering from Chapter 12 is paying its first serious dividend here. The base manifests under `k8s/base/` are untouched. You wrote them once, validated them against a kind cluster, and they are now ready to be promoted to production without modification.
+The Kustomize layering from Chapter 12 is paying its first serious dividend here. Most application manifests remain unchanged; one structural cleanup moves local-only PostgreSQL and Kafka manifests out of the production render before the overlay is added. You wrote the application manifests once, validated them against a kind cluster, and now promote them with environment-specific patches.
 
 What changes lives entirely in a new Kustomize overlay at `k8s/overlays/production/`. That overlay patches:
 
@@ -116,7 +122,7 @@ A cost-saving shortcut: if you only need the cluster for a few hours, set the MS
 
 You need four things in place before starting section 13.1.
 
-**AWS account** with sufficient IAM permissions to create EKS clusters, RDS instances, MSK clusters, VPCs, IAM roles, and ECR repositories. If you are using a personal account, attaching the `AdministratorAccess` policy to your IAM user is the simplest path. For a shared or corporate account, work with your administrator to scope the permissions appropriately.
+**AWS account** with sufficient IAM permissions to create EKS clusters, RDS instances, MSK clusters, VPCs, IAM roles, and ECR repositories. If you are using a personal sandbox account, attaching the `AdministratorAccess` policy to your IAM user is the simplest path for this tutorial, but treat that account as disposable and keep billing alerts enabled. For a shared, corporate, or long-lived account, use a least-privilege role scoped to the resources in this chapter and work with your administrator instead of granting broad admin access.
 
 **AWS CLI v2**—version 2.x is required; version 1 will not work with all EKS authentication mechanisms used here. Verify with:
 
