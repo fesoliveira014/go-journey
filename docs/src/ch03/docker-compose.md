@@ -28,13 +28,13 @@ docker run -d --name catalog \
   --network library-net \
   -e DATABASE_URL="host=postgres-catalog port=5432 ..." \
   -p 50052:50052 \
-  catalog:latest
+  library-system/catalog:latest
 
 # Start the gateway
 docker run -d --name gateway \
   --network library-net \
   -p 8080:8080 \
-  gateway:latest
+  library-system/gateway:latest
 ```
 
 That is six error-prone commands with no startup ordering. With Compose:

@@ -44,10 +44,9 @@ func NewMeilisearchIndex(url, apiKey string) *MeilisearchIndex {
 
 // EnsureIndex creates the "books" index (if it doesn't exist) and configures
 // searchable, filterable, and sortable attributes. Meilisearch operations are
-// asynchronous — they enqueue tasks and return immediately. Newly indexed
-// documents may not be searchable until the task completes (usually <1s).
-func (m *MeilisearchIndex) EnsureIndex(_ context.Context) error {
-	_, err := m.client.CreateIndex(&meilisearch.IndexConfig{
+// asynchronous, so this waits for each configuration task before returning.
+func (m *MeilisearchIndex) EnsureIndex(ctx context.Context) error {
+	task, err := m.client.CreateIndex(&meilisearch.IndexConfig{
 		Uid:        indexName,
 		PrimaryKey: "id",
 	})
@@ -63,23 +62,40 @@ func (m *MeilisearchIndex) EnsureIndex(_ context.Context) error {
 			return fmt.Errorf("create index: %w", err)
 		}
 	}
+	if err == nil {
+		if err := m.waitForTask(ctx, task, "create index"); err != nil {
+			return err
+		}
+	}
 
 	idx := m.client.Index(indexName)
 
-	if _, err := idx.UpdateSearchableAttributes(&[]string{
+	task, err = idx.UpdateSearchableAttributes(&[]string{
 		"title", "author", "isbn", "description", "genre",
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("update searchable attributes: %w", err)
 	}
-	if _, err := idx.UpdateFilterableAttributes(&[]interface{}{
+	if err := m.waitForTask(ctx, task, "update searchable attributes"); err != nil {
+		return err
+	}
+	task, err = idx.UpdateFilterableAttributes(&[]interface{}{
 		"genre", "author", "available_copies",
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("update filterable attributes: %w", err)
 	}
-	if _, err := idx.UpdateSortableAttributes(&[]string{
+	if err := m.waitForTask(ctx, task, "update filterable attributes"); err != nil {
+		return err
+	}
+	task, err = idx.UpdateSortableAttributes(&[]string{
 		"title", "published_year",
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("update sortable attributes: %w", err)
+	}
+	if err := m.waitForTask(ctx, task, "update sortable attributes"); err != nil {
+		return err
 	}
 
 	return nil
@@ -100,33 +116,26 @@ func (m *MeilisearchIndex) ResetIndex(ctx context.Context) error {
 	if task == nil {
 		return nil
 	}
-	result, err := m.client.WaitForTaskWithContext(ctx, task.TaskUID, 100*time.Millisecond)
-	if err != nil {
-		return fmt.Errorf("wait for index delete: %w", err)
-	}
-	if result.Status != meilisearch.TaskStatusSucceeded {
-		return fmt.Errorf("delete index task ended with status %s", result.Status)
-	}
-	return nil
+	return m.waitForTask(ctx, task, "delete index")
 }
 
-func (m *MeilisearchIndex) Upsert(_ context.Context, doc model.BookDocument) error {
+func (m *MeilisearchIndex) Upsert(ctx context.Context, doc model.BookDocument) error {
 	idx := m.client.Index(indexName)
 	pk := "id"
-	_, err := idx.AddDocuments([]model.BookDocument{doc}, &meilisearch.DocumentOptions{PrimaryKey: &pk})
+	task, err := idx.AddDocuments([]model.BookDocument{doc}, &meilisearch.DocumentOptions{PrimaryKey: &pk})
 	if err != nil {
 		return fmt.Errorf("upsert document: %w", err)
 	}
-	return nil
+	return m.waitForTask(ctx, task, "upsert document")
 }
 
-func (m *MeilisearchIndex) Delete(_ context.Context, id string) error {
+func (m *MeilisearchIndex) Delete(ctx context.Context, id string) error {
 	idx := m.client.Index(indexName)
-	_, err := idx.DeleteDocument(id, nil)
+	task, err := idx.DeleteDocument(id, nil)
 	if err != nil {
 		return fmt.Errorf("delete document: %w", err)
 	}
-	return nil
+	return m.waitForTask(ctx, task, "delete document")
 }
 
 func (m *MeilisearchIndex) Search(_ context.Context, query string, filters SearchFilters, page, pageSize int) ([]model.BookDocument, int64, int64, error) {
@@ -193,6 +202,20 @@ func (m *MeilisearchIndex) Count(_ context.Context) (int64, error) {
 		return 0, fmt.Errorf("get index stats: %w", err)
 	}
 	return stats.NumberOfDocuments, nil
+}
+
+func (m *MeilisearchIndex) waitForTask(ctx context.Context, task *meilisearch.TaskInfo, operation string) error {
+	if task == nil {
+		return nil
+	}
+	result, err := m.client.WaitForTaskWithContext(ctx, task.TaskUID, 100*time.Millisecond)
+	if err != nil {
+		return fmt.Errorf("wait for %s: %w", operation, err)
+	}
+	if result.Status != meilisearch.TaskStatusSucceeded {
+		return fmt.Errorf("%s task ended with status %s", operation, result.Status)
+	}
+	return nil
 }
 
 func buildFilterString(filters SearchFilters) []string {

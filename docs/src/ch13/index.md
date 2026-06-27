@@ -81,7 +81,7 @@ The Kustomize layering from Chapter 12 is paying its first serious dividend here
 
 Most production-specific behavior lives in a new Kustomize overlay at `k8s/overlays/production/`. The one structural cleanup is moving local-only PostgreSQL and Kafka manifests out of the shared render so production does not deploy in-cluster infrastructure it will never use. The overlay patches:
 
-- **Image references**—from local names like `library/catalog:latest` to ECR URIs like `123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog:abc1234`
+- **Image references**—from local names like `library-system/catalog:latest` to ECR URIs like `123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/catalog:abc1234`
 - **Database endpoints**—the `DB_HOST` environment variable for each service now points to an RDS endpoint rather than `postgres.data.svc.cluster.local`
 - **Kafka bootstrap servers**—the `KAFKA_BROKERS` variable points to MSK broker endpoints rather than `kafka.messaging.svc.cluster.local`
 - **Replica counts**—production runs two replicas of each stateless service for availability

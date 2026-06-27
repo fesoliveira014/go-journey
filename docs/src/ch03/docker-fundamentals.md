@@ -56,11 +56,11 @@ In object-oriented terms: an image is a class; a container is an object. You can
 
 ```bash
 # Build an image (compile the class)
-docker build -t catalog:latest .
+docker build -t library-system/catalog:latest .
 
 # Run a container (instantiate the object)
-docker run --name catalog-1 catalog:latest
-docker run --name catalog-2 catalog:latest   # second instance, same image
+docker run --name catalog-1 library-system/catalog:latest
+docker run --name catalog-2 library-system/catalog:latest   # second instance, same image
 ```
 
 Images are stored locally and can be pushed to registries (Docker Hub, GitHub Container Registry, AWS ECR) for sharing. When you `docker pull postgres:16-alpine`, you are downloading an image. When you `docker run` it, you create a container.

@@ -16,20 +16,20 @@ The first step is getting fresh images into the kind node. As discussed in secti
 earthly +docker
 ```
 
-This runs the `+docker` target defined in the root `Earthfile`, which builds each service image and tags them under `library/`. After it completes, verify they exist locally:
+This runs the `+docker` target defined in the root `Earthfile`, which builds each service image and tags them under `library-system/`. After it completes, verify they exist locally:
 
 ```bash
-docker images | grep library/
+docker images | grep library-system/
 ```
 
 **Load each image into the kind node:**
 
 ```bash
-kind load docker-image library/gateway:latest     --name library
-kind load docker-image library/auth:latest        --name library
-kind load docker-image library/catalog:latest     --name library
-kind load docker-image library/reservation:latest --name library
-kind load docker-image library/search:latest      --name library
+kind load docker-image library-system/gateway:latest     --name library
+kind load docker-image library-system/auth:latest        --name library
+kind load docker-image library-system/catalog:latest     --name library
+kind load docker-image library-system/reservation:latest --name library
+kind load docker-image library-system/search:latest      --name library
 ```
 
 Each `kind load` command copies the image tarball from the host Docker daemon into the `containerd` image store inside the `library-control-plane` container. This is a local copy operation—no registry push, no internet access required.
@@ -37,7 +37,7 @@ Each `kind load` command copies the image tarball from the host Docker daemon in
 **Confirm the images are visible inside the node:**
 
 ```bash
-docker exec library-control-plane crictl images | grep library/
+docker exec library-control-plane crictl images | grep library-system/
 ```
 
 `crictl` is the `containerd` CLI bundled inside kind nodes. You should see all five images listed. If one is missing, re-run the corresponding `kind load` command before proceeding. Attempting to deploy with a missing image results in `ImagePullBackOff`, because Kubernetes will attempt a registry pull that will fail.

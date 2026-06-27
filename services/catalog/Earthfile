@@ -55,4 +55,4 @@ docker:
     USER app
     EXPOSE 50052
     ENTRYPOINT ["/usr/local/bin/catalog"]
-    SAVE IMAGE catalog:latest
+    SAVE IMAGE library-system/catalog:latest

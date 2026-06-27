@@ -46,8 +46,8 @@ Apply complete! Resources: 47 added, 0 changed, 0 destroyed.
 Outputs:
 
 ecr_repository_urls = {
-  "auth"        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library/auth"
-  "catalog"     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog"
+  "auth"        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/auth"
+  "catalog"     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/catalog"
   ...
 }
 cluster_name             = "library-system"
@@ -100,7 +100,7 @@ aws ecr describe-repositories \
   --output table
 ```
 
-You should see entries for `library/gateway`, `library/auth`, `library/catalog`, `library/reservation`, and `library/search`.
+You should see entries for `library-system/gateway`, `library-system/auth`, `library-system/catalog`, `library-system/reservation`, and `library-system/search`.
 
 **RDS instances:**
 
@@ -169,7 +169,7 @@ Expected output:
 }
 ```
 
-This manual retrieval is only for verifying connectivity or for one-off debugging. Chapter 14 removes it entirely: the External Secrets Operator watches these ARNs and creates the corresponding Kubernetes Secrets automatically, so the production overlay's `secretGenerator` placeholder values are replaced by live credentials fetched at reconciliation time (section 14.3). For now—to apply the Kustomize overlay before Chapter 14 is in place—populate the production overlay's `secretGenerator` block in `deploy/k8s/overlays/production/kustomization.yaml` with the retrieved values, then apply. Do not commit real passwords to git; the placeholder approach is a temporary measure until ESO takes over.
+This manual retrieval is only for verifying connectivity or for one-off debugging. Chapter 14 removes it entirely: the External Secrets Operator watches these ARNs and creates the corresponding Kubernetes Secrets automatically, so the production overlay's `secretGenerator` placeholder values are replaced by live credentials fetched at reconciliation time (section 14.3). On `main`, the production overlay already includes the Chapter 14 External Secrets resources. At the Chapter 13 checkpoint, populate the production overlay's temporary `secretGenerator` block in `deploy/k8s/overlays/production/kustomization.yaml` with the retrieved values, then apply. Do not commit real passwords to git; the placeholder approach is a temporary measure until ESO takes over.
 
 ---
 
@@ -200,8 +200,8 @@ earthly +docker
 SERVICES=(gateway auth catalog reservation search)
 
 for svc in "${SERVICES[@]}"; do
-  docker tag "library/${svc}:latest" "${ECR_REGISTRY}/library/${svc}:latest"
-  docker push "${ECR_REGISTRY}/library/${svc}:latest"
+  docker tag "library-system/${svc}:latest" "${ECR_REGISTRY}/library-system/${svc}:latest"
+  docker push "${ECR_REGISTRY}/library-system/${svc}:latest"
   echo "Pushed ${svc}"
 done
 ```

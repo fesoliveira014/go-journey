@@ -158,17 +158,17 @@ If you deploy a pod referencing an image that exists only on the host, Kubernete
 The fix is `kind load`:
 
 ```bash
-kind load docker-image library/catalog:latest --name library
+kind load docker-image library-system/catalog:latest --name library
 ```
 
-This copies the image from your host Docker daemon into the containerd store inside the kind node. After this command, any pod in the cluster can use `library/catalog:latest` without a registry pull.
+This copies the image from your host Docker daemon into the containerd store inside the kind node. After this command, any pod in the cluster can use `library-system/catalog:latest` without a registry pull.
 
 You must also set `imagePullPolicy: Never` (or `IfNotPresent`) in your pod spec, otherwise Kubernetes will try to pull from a registry anyway:
 
 ```yaml
 containers:
   - name: catalog
-    image: library/catalog:latest
+    image: library-system/catalog:latest
     imagePullPolicy: Never
 ```
 
@@ -185,11 +185,11 @@ In Chapter 10 you built container images with `earthly +docker`. That target pro
 earthly +docker
 
 # 2. Load each into the kind cluster
-kind load docker-image library/auth:latest      --name library
-kind load docker-image library/catalog:latest   --name library
-kind load docker-image library/reservation:latest --name library
-kind load docker-image library/search:latest     --name library
-kind load docker-image library/gateway:latest   --name library
+kind load docker-image library-system/auth:latest      --name library
+kind load docker-image library-system/catalog:latest   --name library
+kind load docker-image library-system/reservation:latest --name library
+kind load docker-image library-system/search:latest     --name library
+kind load docker-image library-system/gateway:latest   --name library
 
 # 3. Apply manifests (covered in upcoming sections)
 kubectl apply -f k8s/

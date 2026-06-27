@@ -55,4 +55,4 @@ docker:
     USER app
     EXPOSE 50053
     ENTRYPOINT ["/usr/local/bin/reservation"]
-    SAVE IMAGE reservation:latest
+    SAVE IMAGE library-system/reservation:latest

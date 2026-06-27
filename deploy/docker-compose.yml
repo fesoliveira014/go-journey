@@ -78,6 +78,7 @@ services:
       - library-net
 
   auth:
+    image: library-system/auth:latest
     build:
       context: ..
       dockerfile: services/auth/Dockerfile
@@ -99,6 +100,7 @@ services:
       - library-net
 
   catalog:
+    image: library-system/catalog:latest
     build:
       context: ..
       dockerfile: services/catalog/Dockerfile
@@ -122,6 +124,7 @@ services:
       - library-net
 
   reservation:
+    image: library-system/reservation:latest
     build:
       context: ..
       dockerfile: services/reservation/Dockerfile
@@ -133,7 +136,6 @@ services:
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
       KAFKA_TLS: ${KAFKA_TLS:-false}
       CATALOG_GRPC_ADDR: ${CATALOG_GRPC_ADDR:-catalog:50052}
-      SEARCH_BOOTSTRAP_MODE: ${SEARCH_BOOTSTRAP_MODE:-if_empty}
       AUTH_GRPC_ADDR: ${AUTH_GRPC_ADDR:-auth:50051}
       MAX_ACTIVE_RESERVATIONS: ${MAX_ACTIVE_RESERVATIONS:-5}
       OTEL_COLLECTOR_ENDPOINT: ${OTEL_COLLECTOR_ENDPOINT:-otel-collector:4317}
@@ -167,6 +169,7 @@ services:
       - library-net
 
   search:
+    image: library-system/search:latest
     build:
       context: ..
       dockerfile: services/search/Dockerfile
@@ -177,6 +180,7 @@ services:
       KAFKA_BROKERS: ${KAFKA_BROKERS:-kafka:9092}
       KAFKA_TLS: ${KAFKA_TLS:-false}
       CATALOG_GRPC_ADDR: ${CATALOG_GRPC_ADDR:-catalog:50052}
+      SEARCH_BOOTSTRAP_MODE: ${SEARCH_BOOTSTRAP_MODE:-if_empty}
     ports:
       - "${SEARCH_GRPC_PORT:-50054}:50054"
     depends_on:
@@ -191,6 +195,7 @@ services:
       - library-net
 
   gateway:
+    image: library-system/gateway:latest
     build:
       context: ..
       dockerfile: services/gateway/Dockerfile

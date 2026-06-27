@@ -413,6 +413,8 @@ Several configuration choices are significant:
 
 The `Consume` call blocks until the context is cancelled or an error occurs. The outer `for` loop retries after transient errors (broker rebalancing, temporary network issues). When the context is cancelled (shutdown signal), the function returns cleanly.
 
+Chapter 14 extends this local plaintext consumer with the shared Kafka config helper and a `KAFKA_TLS` option for MSK TLS. At the Chapter 8 checkpoint, Kafka is still the local plaintext broker from Docker Compose and kind.
+
 ### Event Processing
 
 The `consumerHandler` implements Sarama's `ConsumerGroupHandler` interface. The interesting method is `ConsumeClaim`:
@@ -530,9 +532,7 @@ This is the advantage of extracting `handleEvent` as a standalone function: you 
 
 One subtlety worth understanding: Meilisearch operations are **asynchronous**. When you call `AddDocuments` or `DeleteDocument`, Meilisearch enqueues the operation and returns a task ID immediately. The document is not searchable until the task completes (typically under 100 ms for single-document operations, longer for bulk imports).
 
-Our code ignores the task ID—we call `AddDocuments` and move on without waiting for completion. This is acceptable for a real-time index fed by Kafka events: the latency between a catalog change and it appearing in search results is already measured in seconds (Kafka delivery + consumer processing). Adding a few more milliseconds of Meilisearch task processing does not meaningfully change the user experience.
-
-If you needed stronger guarantees (for example, in a test that indexes a document and immediately searches for it), you would use `WaitForTask`:
+The project waits for those task IDs in the Meilisearch adapter. That keeps tests deterministic and makes the reindex command honest: when it prints `reindex complete`, the delete, index-configuration, and document-add tasks it submitted have finished.
 
 ```go
 taskInfo, err := idx.AddDocuments(docs, &meilisearch.DocumentOptions{PrimaryKey: &pk})
@@ -540,6 +540,8 @@ taskInfo, err := idx.AddDocuments(docs, &meilisearch.DocumentOptions{PrimaryKey:
 task, err := client.WaitForTask(taskInfo.TaskUID)
 // task.Status == "succeeded" means the document is now searchable
 ```
+
+For a very high-volume projection, you would usually batch documents and wait per batch rather than wait after every single document. This project keeps the implementation simple and predictable.
 
 ---
 
@@ -576,7 +578,13 @@ CATALOG_GRPC_ADDR=localhost:50052 \
 go run ./cmd/reindex
 ```
 
-`cmd/reindex` calls the same bootstrap package in `always` mode: it deletes the Meilisearch index, waits for the delete task to finish, recreates the index settings, and pages through Catalog. That handles both missing documents and stale documents for books that were deleted from Catalog.
+`cmd/reindex` calls the same bootstrap package in `always` mode: it deletes the Meilisearch index, waits for the delete task to finish, recreates the index settings, and pages through Catalog. Each upsert waits for Meilisearch to finish the add-document task before moving on. That handles both missing documents and stale documents for books that were deleted from Catalog.
+
+The Search image also packages the command as `/usr/local/bin/search-reindex`, so the same repair path is available when you run the stack from containers:
+
+```bash
+docker compose exec search /usr/local/bin/search-reindex
+```
 
 Other production systems may add scheduled reconciliation or a transactional outbox plus replayable event log so missed events can be republished safely.
 
