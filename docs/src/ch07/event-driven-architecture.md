@@ -23,9 +23,9 @@ Asynchronous communication (message queues, event streams) is the right choice w
 - You want to **decouple** the producer from the consumer—they do not need to know about each other
 - Multiple consumers might react to the same event independently
 
-In our system, when a user reserves a book, the Reservation Service records the reservation in its own database and returns success immediately. It then publishes a `reservation.created` event. The Catalog Service consumes that event and decrements `available_copies`. If the Catalog Service is temporarily down, the event sits in Kafka until it comes back. No data is lost, no reservation fails.
+In our system, availability is not an asynchronous side effect. Catalog owns book inventory, so Reservation calls Catalog synchronously with an `UpdateAvailability` command before it creates a reservation row. That command runs a guarded database update in Catalog and either wins a copy or fails cleanly. After Reservation records its own state, it publishes `reservation.created`, `reservation.returned`, and `reservation.expired` events for downstream observers such as audit, notifications, analytics, or future projections.
 
-The Reservation Service does call the Catalog Service synchronously for one thing: checking availability *before* creating the reservation. This is a deliberate read-before-write pattern—we need current data to make the decision. The async event flow handles the write side effect afterward.
+That split is deliberate: commands go to the service that owns the state, while events announce facts after the state transition has happened.
 
 If you have used Spring's `@TransactionalEventListener` or `ApplicationEventPublisher`, the concept is the same: decouple the "something happened" notification from the "react to it" logic. The difference is that Spring events are in-process by default (same JVM), while Kafka events cross process and machine boundaries.
 
@@ -39,7 +39,7 @@ Two terms get used loosely in messaging systems; the distinction matters.
 
 **Events** announce that something happened: "a reservation was created," "a book was returned." They are broadcast to anyone who cares. The publisher does not know (or care) who consumes them. They cannot "fail" in the same way—the fact already happened.
 
-This distinction maps to CQRS (Command Query Responsibility Segregation), a pattern where the write side (commands) and read side (queries) are modeled separately. Our system uses a lightweight version of this: the Reservation Service owns the write model (reservation records), and the Catalog Service maintains its own read-optimized data (available copy counts) by consuming events. Neither service directly modifies the other's database.
+This distinction maps to CQRS (Command Query Responsibility Segregation), a pattern where the write side (commands) and read side (queries) are modeled separately. Our system uses a lightweight version of this: Catalog owns books and availability, Reservation owns reservation records, and Search owns a read projection that can be rebuilt from Catalog events. Neither service directly modifies another service's database.
 
 The `ReservationEvent` struct in our codebase is a true event—it describes a fact in the past tense:
 
@@ -77,16 +77,16 @@ msg := &sarama.ProducerMessage{
 }
 ```
 
-This guarantees that all events for the same book land in the same partition and are processed in order. If book `abc-123` has a `reservation.created` followed by a `reservation.returned`, the consumer sees them in that order. Without key-based partitioning, the events could arrive out of order across different partitions, leading to incorrect availability counts.
+This guarantees that all events for the same book land in the same partition and are processed in order. If book `abc-123` has a `reservation.created` followed by a `reservation.returned`, an audit or notification consumer sees them in that order. Without key-based partitioning, events for the same book could arrive out of order across different partitions.
 
 ### Consumer Groups
 
 A **consumer group** is a set of consumers that cooperate to consume a topic. Kafka assigns each partition to exactly one consumer in the group. If you have three partitions and two consumers in the group, one consumer gets two partitions and the other gets one. If a consumer dies, Kafka **rebalances**—reassigning its partitions to the surviving consumers.
 
-Our catalog consumer uses the group ID `catalog-availability-updater`:
+The Catalog reservation-event observer uses the group ID `catalog-reservation-audit`:
 
 ```go
-group, err := sarama.NewConsumerGroup(brokers, "catalog-availability-updater", config)
+group, err := sarama.NewConsumerGroup(brokers, "catalog-reservation-audit", config)
 ```
 
 If we later need a second service to react to reservation events (say, a notification service that emails users), it would use a *different* group ID. Each group gets its own independent read position on the topic, so both services see every event.
@@ -177,7 +177,7 @@ func (p *Publisher) Publish(ctx context.Context, event service.ReservationEvent)
 
 In production systems with high throughput or strict schema evolution requirements, you would use **Avro** or **Protobuf** with a Schema Registry. The Schema Registry enforces backward/forward compatibility rules, preventing a producer from publishing events that consumers cannot deserialize. For a learning project, JSON is fine—just know that it offers no schema enforcement and no built-in evolution guarantees.
 
-Section 7.3 covers the consumer side—how the Search Service reads and indexes these events.
+Section 7.3 covers the consumer side—how to read and validate reservation events without treating them as inventory commands. Chapter 8 then uses the same mechanics for the Search Service's real projection consumer.
 
 ---
 
@@ -186,14 +186,14 @@ Section 7.3 covers the consumer side—how the Search Service reads and indexes 
 Here is the complete flow when a user reserves a book:
 
 1. **Gateway** receives `POST /books/{id}/reserve` and calls the Reservation Service via gRPC.
-2. **Reservation Service** checks availability by calling the Catalog Service via gRPC (synchronous read).
+2. **Reservation Service** calls Catalog's `UpdateAvailability(-1)` RPC. Catalog atomically decrements `available_copies` only if the result stays within `[0, total_copies]`.
 3. **Reservation Service** creates the reservation record in its database.
 4. **Reservation Service** publishes a `reservation.created` event to the `reservations` Kafka topic.
-5. **Catalog Service** consumer picks up the event and decrements `available_copies` in the catalog database.
+5. **Downstream consumers** can observe the event for audit, notification, or analytics. Catalog does not consume the event to mutate its own availability.
 
-Steps 1–4 are synchronous from the user's perspective—they get a response after step 3. Step 5 happens asynchronously. There is a brief window where the reservation exists but the catalog still shows the old availability count. This is **eventual consistency** in action.
+Steps 1–3 are synchronous from the user's perspective—they get a response after the reservation row exists and Catalog availability has already changed. Step 4 happens after the write path and is intentionally best-effort.
 
-The same pattern applies in reverse for returns: the Reservation Service publishes `reservation.returned`, and the catalog consumer increments `available_copies`.
+The same ownership rule applies in reverse for returns and expirations: Reservation records the state transition and calls `UpdateAvailability(+1)` synchronously. The event remains a notification of what already happened.
 
 ---
 
@@ -215,28 +215,26 @@ if err := s.publisher.Publish(ctx, ReservationEvent{
 }
 ```
 
-The error is logged but not returned. The reservation was already created in the database—we do not roll it back. This is a pragmatic choice: the reservation is the source of truth. A slightly stale availability count is less harmful than a lost reservation. A reconciliation process (or manual intervention) can fix stale counts.
+The error is logged but not returned. The reservation was already created in the database and Catalog availability already changed through the synchronous command—we do not roll either back just because an audit/notification event failed to publish. This is a pragmatic choice: the owning state changes are the source of truth, while the event stream is a downstream propagation mechanism.
 
 The alternative—wrapping the database write and the Kafka publish in a single transaction—requires the **Outbox pattern** or **two-phase commit**. Both add significant complexity. The Outbox pattern writes the event to a database table in the same transaction as the business data, then a separate process tails the outbox table and publishes to Kafka. This guarantees at-least-once publishing. For our learning project, the fire-and-log approach is sufficient.
 
-### Idempotency on the Consumer Side
+### Idempotency and State Owners
 
-Since Kafka provides at-least-once delivery, a `reservation.created` event might be delivered twice. If the consumer blindly decrements `available_copies` each time, the count drifts.
+Since Kafka provides at-least-once delivery, a `reservation.created` event might be delivered twice. That is exactly why Catalog availability is not updated from this event stream: duplicate command-like events would make the count drift unless you add an event ID table, transactional outbox, replay rules, and reconciliation.
 
-Our catalog repository uses a SQL guard to prevent negative counts:
+Catalog still defends its own invariant at the command boundary:
 
 ```go
 // services/catalog/internal/repository/book.go
 
 result := r.db.WithContext(ctx).
     Model(&model.Book{}).
-    Where("id = ? AND available_copies + ? >= 0", id, delta).
+    Where("id = ? AND available_copies + ? BETWEEN 0 AND total_copies", id, delta).
     Update("available_copies", gorm.Expr("available_copies + ?", delta))
 ```
 
-The `WHERE available_copies + ? >= 0` clause prevents the count from going below zero. This is a safety net, not true idempotency. True idempotency would require tracking which events have already been processed (e.g., storing the event ID or Kafka offset alongside the update). For our system, the guard is good enough—a duplicate decrement is caught by the non-negative constraint, and a duplicate increment is harmless (the count might be off by one until the next event corrects it).
-
-In a production system, you would likely store a deduplication key (the reservation ID + event type) and check it before applying the update.
+The `BETWEEN 0 AND total_copies` clause prevents both negative availability and duplicate returns/expirations that would push availability above the total copy count. This is a database invariant, not event idempotency. If you later choose to drive inventory from events instead of synchronous commands, you must add true idempotency with a deduplication key such as `(reservation_id, event_type)`.
 
 ---
 
@@ -264,13 +262,13 @@ We will cover observability in detail in a later chapter. For now, note that thi
 
 ## Exercises
 
-1. **Trace the event flow.** Starting from `ReservationService.CreateReservation`, follow the code path through the publisher, Kafka, and into the catalog consumer's `handleEvent`. Write down each function call in order, noting which service owns each step.
+1. **Trace the command and event flow.** Starting from `ReservationService.CreateReservation`, follow the synchronous `UpdateAvailability(-1)` command and then the `reservation.created` publish. Write down which service owns each state change.
 
 2. **Design a new event.** Suppose we add a feature where admins can add more copies of a book. What event would the Catalog Service publish? What would the event type be named? Which services might consume it?
 
 3. **Outbox pattern sketch.** Write pseudocode for the Outbox pattern: instead of calling `publisher.Publish()` directly, the service writes an outbox row in the same database transaction. A background goroutine reads unpublished outbox rows and sends them to Kafka. What are the trade-offs compared to our current approach?
 
-4. **Idempotency key.** Modify the `reservationEvent` struct to include a unique event ID. Sketch how the consumer would use this ID to avoid processing the same event twice. What storage would you need?
+4. **Idempotency key.** Suppose you deliberately moved availability updates back to events. Modify the `reservationEvent` struct to include a unique event ID. Sketch how the consumer would use this ID to avoid processing the same event twice. What storage would you need?
 
 5. **Async producer.** Sarama offers `AsyncProducer` in addition to `SyncProducer`. Read the Sarama documentation and describe how `AsyncProducer` differs. When would you prefer it over `SyncProducer`?
 

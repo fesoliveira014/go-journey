@@ -269,7 +269,7 @@ There is a subtle UX issue. When a user reserves a book:
 1. The reservation is created (instant).
 2. The user is redirected to `/reservations`.
 3. The `reservation.created` event is published to Kafka.
-4. The catalog consumer processes the event and decrements `available_copies`.
+4. Reservation publishes `reservation.created` for downstream observers; Catalog availability was already decremented synchronously by the Reservation Service before the row was created.
 
 If the user navigates back to the book detail page between steps 2 and 4, they might see `Available: 3 / 3` even though they just reserved a copy. The availability update has not happened yet.
 

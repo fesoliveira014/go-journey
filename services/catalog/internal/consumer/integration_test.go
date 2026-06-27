@@ -23,13 +23,8 @@ import (
 	"github.com/fesoliveira014/library-system/services/catalog/internal/consumer"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/model"
 	"github.com/fesoliveira014/library-system/services/catalog/internal/repository"
-	"github.com/fesoliveira014/library-system/services/catalog/internal/service"
 	"github.com/fesoliveira014/library-system/services/catalog/migrations"
 )
-
-type noopPublisher struct{}
-
-func (n *noopPublisher) Publish(_ context.Context, _ service.BookEvent) error { return nil }
 
 func setupKafka(t *testing.T) []string {
 	t.Helper()
@@ -147,24 +142,15 @@ func produceEvent(t *testing.T, brokers []string, topic string, eventType string
 	}
 }
 
-func pollAvailability(t *testing.T, repo *repository.BookRepository, bookID uuid.UUID, expected int) {
+func assertAvailability(t *testing.T, repo *repository.BookRepository, bookID uuid.UUID, expected int) {
 	t.Helper()
 
-	ticker := time.NewTicker(200 * time.Millisecond)
-	defer ticker.Stop()
-	timeout := time.After(10 * time.Second)
-
-	ctx := context.Background()
-	for {
-		select {
-		case <-ticker.C:
-			book, err := repo.GetByID(ctx, bookID)
-			if err == nil && book.AvailableCopies == expected {
-				return
-			}
-		case <-timeout:
-			t.Fatalf("timed out waiting for available_copies == %d", expected)
-		}
+	book, err := repo.GetByID(context.Background(), bookID)
+	if err != nil {
+		t.Fatalf("failed to get book: %v", err)
+	}
+	if book.AvailableCopies != expected {
+		t.Errorf("expected available_copies == %d, got %d", expected, book.AvailableCopies)
 	}
 }
 
@@ -176,7 +162,6 @@ func TestConsumer_Integration_ReservationCreated(t *testing.T) {
 	defer cancel()
 
 	repo := repository.NewBookRepository(db)
-	svc := service.NewCatalogService(repo, &noopPublisher{})
 
 	book := &model.Book{
 		Title:           "Integration Test Book",
@@ -191,7 +176,7 @@ func TestConsumer_Integration_ReservationCreated(t *testing.T) {
 	}
 
 	go func() {
-		if err := consumer.Run(ctx, brokers, "reservations", svc); err != nil {
+		if err := consumer.Run(ctx, brokers, "reservations", "catalog-reservation-audit-test-created"); err != nil {
 			t.Logf("consumer exited: %v", err)
 		}
 	}()
@@ -200,18 +185,10 @@ func TestConsumer_Integration_ReservationCreated(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	produceEvent(t, brokers, "reservations", "reservation.created", created.ID)
-
-	pollAvailability(t, repo, created.ID, 4)
+	time.Sleep(500 * time.Millisecond)
 
 	cancel()
-
-	found, err := repo.GetByID(context.Background(), created.ID)
-	if err != nil {
-		t.Fatalf("failed to get book: %v", err)
-	}
-	if found.AvailableCopies != 4 {
-		t.Errorf("expected available_copies == 4, got %d", found.AvailableCopies)
-	}
+	assertAvailability(t, repo, created.ID, 5)
 }
 
 func TestConsumer_Integration_ReservationReturned(t *testing.T) {
@@ -222,14 +199,13 @@ func TestConsumer_Integration_ReservationReturned(t *testing.T) {
 	defer cancel()
 
 	repo := repository.NewBookRepository(db)
-	svc := service.NewCatalogService(repo, &noopPublisher{})
 
 	book := &model.Book{
 		Title:           "Integration Return Test Book",
 		Author:          "Test Author",
 		ISBN:            "9780000000002",
 		TotalCopies:     5,
-		AvailableCopies: 5,
+		AvailableCopies: 4,
 	}
 	created, err := repo.Create(ctx, book)
 	if err != nil {
@@ -237,7 +213,7 @@ func TestConsumer_Integration_ReservationReturned(t *testing.T) {
 	}
 
 	go func() {
-		if err := consumer.Run(ctx, brokers, "reservations", svc); err != nil {
+		if err := consumer.Run(ctx, brokers, "reservations", "catalog-reservation-audit-test-returned"); err != nil {
 			t.Logf("consumer exited: %v", err)
 		}
 	}()
@@ -245,21 +221,12 @@ func TestConsumer_Integration_ReservationReturned(t *testing.T) {
 	// Give consumer time to join the group before producing
 	time.Sleep(2 * time.Second)
 
-	// First decrement to 4 via reservation.created
+	// Reservation events are facts for observers; they must not mutate Catalog
+	// availability because Reservation already sent the synchronous command.
 	produceEvent(t, brokers, "reservations", "reservation.created", created.ID)
-	pollAvailability(t, repo, created.ID, 4)
-
-	// Then increment back to 5 via reservation.returned
 	produceEvent(t, brokers, "reservations", "reservation.returned", created.ID)
-	pollAvailability(t, repo, created.ID, 5)
+	time.Sleep(500 * time.Millisecond)
 
 	cancel()
-
-	found, err := repo.GetByID(context.Background(), created.ID)
-	if err != nil {
-		t.Fatalf("failed to get book: %v", err)
-	}
-	if found.AvailableCopies != 5 {
-		t.Errorf("expected available_copies == 5, got %d", found.AvailableCopies)
-	}
+	assertAvailability(t, repo, created.ID, 4)
 }

@@ -236,7 +236,7 @@ func (r *BookRepository) Delete(ctx context.Context, id uuid.UUID) error {
 func (r *BookRepository) UpdateAvailability(ctx context.Context, id uuid.UUID, delta int) error {
     result := r.db.WithContext(ctx).
         Model(&model.Book{}).
-        Where("id = ? AND available_copies + ? >= 0", id, delta).
+        Where("id = ? AND available_copies + ? BETWEEN 0 AND total_copies", id, delta).
         Update("available_copies", gorm.Expr("available_copies + ?", delta))
     // ...
 }
@@ -244,7 +244,7 @@ func (r *BookRepository) UpdateAvailability(ctx context.Context, id uuid.UUID, d
 
 This method is the race-condition trap—implemented incorrectly, it corrupts availability counts under concurrency. Rather than reading the current value into Go, incrementing it, and writing it back—which would introduce a race condition—it uses a SQL expression: `UPDATE books SET available_copies = available_copies + ? WHERE id = ?`. The increment happens atomically in the database. `gorm.Expr(...)` injects a raw SQL fragment into the query.
 
-The `WHERE` clause includes `available_copies + ? >= 0` as a guard to prevent negative availability, so an underflow simply matches zero rows, and `RowsAffected == 0` signals the error to the caller.
+The `WHERE` clause includes `available_copies + ? BETWEEN 0 AND total_copies` as a guard. That prevents both negative availability and accidental over-restocking from duplicate return or expiration handling. If the proposed value falls outside the invariant, the update matches zero rows and `RowsAffected == 0` signals the error to the caller.
 
 ---
 

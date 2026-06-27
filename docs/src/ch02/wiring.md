@@ -278,7 +278,7 @@ grpcurl -plaintext -d '{
 }' localhost:50052 catalog.v1.CatalogService.UpdateBook
 ```
 
-> **Note:** `UpdateBook` does not modify `available_copies`—that field is managed exclusively by the Reservation Service via the `UpdateAvailability` RPC.
+> **Note:** `UpdateBook` does not modify `available_copies`. Catalog owns the field and enforces its invariants through the dedicated `UpdateAvailability` RPC. In Chapter 7, the Reservation Service becomes the only normal caller of that internal command.
 
 ### Delete a Book
 
@@ -307,14 +307,16 @@ The idiomatic proto3 solution is `google.protobuf.FieldMask` for partial updates
 
 ### UpdateAvailability as a Forward Reference
 
-You may notice `UpdateAvailability` in the handler and service—it adjusts `available_copies` by a signed delta. This RPC is not driven by catalog management; it is driven by the Reservation Service. When a user checks out a book, the Reservation Service will call `UpdateAvailability(id, -1)` on the Catalog Service. When the book is returned, it calls `UpdateAvailability(id, +1)`.
+You may notice `UpdateAvailability` in the handler and service—it adjusts `available_copies` by a signed delta. This RPC is not driven by catalog management; it is an internal inventory command. When a user checks out a book, the Reservation Service will call `UpdateAvailability(id, -1)` on the Catalog Service. When the book is returned, it calls `UpdateAvailability(id, +1)`.
 
-This is part of the inter-service communication pattern covered in Chapter 7. The RPC exists now because the Catalog Service needs to own the availability invariant—no other service should directly manipulate `available_copies`. For now, you can exercise it via `grpcurl`:
+This is part of the inter-service communication pattern covered in Chapter 7. The RPC exists now because the Catalog Service needs to own the availability invariant—no other service should directly manipulate `available_copies`. At the Chapter 2 checkpoint, you can exercise it via `grpcurl`:
 
 ```bash
 grpcurl -plaintext -d '{"id": "a1b2c3d4-...", "delta": -1}' \
     localhost:50052 catalog.v1.CatalogService.UpdateAvailability
 ```
+
+In the final repository, this method also requires the `x-internal-service-token` metadata header because it is an internal mutation, not a public catalog-management operation.
 
 ---
 

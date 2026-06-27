@@ -266,3 +266,29 @@ func TestBookRepository_UpdateAvailability(t *testing.T) {
 		t.Errorf("expected 4 available copies, got %d", found.AvailableCopies)
 	}
 }
+
+func TestBookRepository_UpdateAvailability_RejectsAboveTotalCopies(t *testing.T) {
+	db := testDB(t)
+	repo := repository.NewBookRepository(db)
+	ctx := context.Background()
+
+	book := newTestBook("0008")
+	book.TotalCopies = 5
+	book.AvailableCopies = 5
+	created, err := repo.Create(ctx, book)
+	if err != nil {
+		t.Fatalf("setup: create book: %v", err)
+	}
+
+	if err := repo.UpdateAvailability(ctx, created.ID, 1); err != model.ErrInvalidAvailability {
+		t.Fatalf("expected ErrInvalidAvailability, got %v", err)
+	}
+
+	found, err := repo.GetByID(ctx, created.ID)
+	if err != nil {
+		t.Fatalf("fetch book: %v", err)
+	}
+	if found.AvailableCopies != 5 {
+		t.Errorf("expected available copies to remain 5, got %d", found.AvailableCopies)
+	}
+}

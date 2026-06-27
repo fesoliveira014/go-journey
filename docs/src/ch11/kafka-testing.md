@@ -1,6 +1,6 @@
 # 11.4 Kafka Testing
 
-The unit tests for the catalog consumer (`consumer_test.go`) are correct and fast. They call `handleEvent` directly with hand-crafted byte slices, check that the right `UpdateAvailability` delta is applied, and verify that unknown event types are silently ignored. They run in under a millisecond each.
+The unit tests for the catalog reservation-event observer (`consumer_test.go`) are correct and fast. They call `handleEvent` directly with hand-crafted byte slices, verify that known reservation events are accepted without mutating Catalog availability, and verify that unknown event types are silently ignored. They run in under a millisecond each.
 
 But they leave four things completely untested:
 
@@ -214,18 +214,18 @@ The OTel header check is deliberately minimal: it only verifies that `traceparen
 
 ---
 
-## Testing the catalog consumer end-to-end
+## Testing the catalog reservation observer end-to-end
 
-The catalog consumer test is more ambitious. It needs to verify the full chain: a `reservation.created` event on Kafka causes `available_copies` to decrease by one in PostgreSQL. That requires both a Kafka container and a PostgreSQL container.
+The catalog reservation observer test verifies the Kafka wiring without treating reservation events as inventory commands. The important chain is: publish a real reservation event, run the real consumer group, and confirm the event is consumed and committed without calling Catalog's availability mutation path.
 
-You already have a PostgreSQL setup from section 11.2. Reuse the same `setupPostgres` helper. The test then needs to:
+Because the observer has no database dependency, this test only needs Kafka:
 
-1. Insert a book with 5 available copies.
-2. Produce a `reservation.created` event for that book's ID.
-3. Start `consumer.Run` in a goroutine.
-4. Poll the database until `available_copies` equals 4 or until a timeout.
+1. Produce a `reservation.created` event for a book ID.
+2. Start `consumer.Run` in a goroutine with a unique topic.
+3. Wait until the consumer group's committed offset advances.
+4. Cancel the context and assert the goroutine exits.
 
-Step 4 is the tricky part. `consumer.Run` is asynchronous—it runs in a separate goroutine and delivers results via side effects on the database. You cannot use a channel here because the consumer does not signal when it has processed a message. The standard approach is a polling loop with a timeout.
+The offset check is the observable behavior: if the consumer can deserialize the event, route it, and call `session.MarkMessage`, Kafka commits the offset. If the JSON contract breaks or `handleEvent` starts returning an error, the offset never advances and the test times out.
 
 ```go
 //go:build integration
@@ -243,14 +243,12 @@ import (
     "github.com/google/uuid"
 
     catalogconsumer "github.com/fesoliveira014/library-system/services/catalog/internal/consumer"
-    "github.com/fesoliveira014/library-system/services/catalog/internal/model"
-    "github.com/fesoliveira014/library-system/services/catalog/internal/repository"
-    "github.com/fesoliveira014/library-system/services/catalog/internal/service"
 )
 
-func TestConsumer_ReservationCreated_DecreasesAvailability(t *testing.T) {
+func TestConsumer_ReservationCreated_CommitsOffset(t *testing.T) {
     brokers := sharedBrokers
     topic := fmt.Sprintf("reservations-consumer-test-%s", t.Name())
+    groupID := fmt.Sprintf("test-%s", t.Name())
 
     // Produce the event before starting the consumer so the offset is waiting.
     bookID := uuid.New()
@@ -277,46 +275,35 @@ func TestConsumer_ReservationCreated_DecreasesAvailability(t *testing.T) {
         t.Fatalf("send message: %v", err)
     }
 
-    // Insert a book with 5 available copies into the test database.
-    repo := repository.NewBookRepository(sharedDB)
-    svc := service.NewCatalogService(repo, nil) // nil publisher — the consumer path does not publish events
-
-    book, err := repo.Create(context.Background(), &model.Book{
-        ID:              bookID,
-        Title:           "Integration Test Book",
-        Author:          "Test Author",
-        ISBN:            fmt.Sprintf("TEST-%s", bookID.String()[:8]),
-        TotalCopies:     5,
-        AvailableCopies: 5,
-    })
-    if err != nil {
-        t.Fatalf("create book: %v", err)
-    }
-
     // Start the consumer with a unique group ID to avoid offset collisions
     // with other test runs or parallel tests.
     ctx, cancel := context.WithCancel(context.Background())
     defer cancel()
 
-    groupID := fmt.Sprintf("test-%s", t.Name())
     go func() {
-        if err := catalogconsumer.Run(ctx, brokers, topic, svc, groupID); err != nil {
+        if err := catalogconsumer.Run(ctx, brokers, topic, groupID); err != nil {
             t.Logf("consumer exited: %v", err)
         }
     }()
 
-    // Poll the database until available_copies decreases to 4.
+    // Poll Kafka until the group commits offset 1 for partition 0.
+    admin, err := sarama.NewClusterAdmin(brokers, sarama.NewConfig())
+    if err != nil {
+        t.Fatalf("create admin client: %v", err)
+    }
+    defer admin.Close()
+
     deadline := time.After(10 * time.Second)
     for {
         select {
         case <-deadline:
-            t.Fatal("timed out waiting for availability update")
+            t.Fatal("timed out waiting for committed offset")
         case <-time.After(200 * time.Millisecond):
-            updated, err := repo.GetByID(context.Background(), book.ID)
+            offsets, err := admin.ListConsumerGroupOffsets(groupID, map[string][]int32{topic: {0}})
             if err != nil {
-                t.Fatalf("get book: %v", err)
+                continue
             }
-            if updated.AvailableCopies == 4 {
+            if offsets.Blocks[topic][0].Offset >= 1 {
                 cancel()
                 return
             }
@@ -325,14 +312,14 @@ func TestConsumer_ReservationCreated_DecreasesAvailability(t *testing.T) {
 }
 ```
 
-The polling loop deserves explanation. `time.After(10 * time.Second)` returns a channel that fires once after 10 seconds. `time.After(200 * time.Millisecond)` returns a new channel each iteration that fires after 200ms. The `select` blocks until one of them is ready. If 10 seconds pass without the condition being met, the test fails. If the condition is met in any 200ms window, the test cancels the consumer and returns. This is the standard Go pattern for asserting eventual consistency without busy-waiting.
+The polling loop deserves explanation. `time.After(10 * time.Second)` returns a channel that fires once after 10 seconds. `time.After(200 * time.Millisecond)` returns a new channel each iteration that fires after 200ms. The `select` blocks until one of them is ready. If 10 seconds pass without the offset advancing, the test fails. If the offset advances in any 200ms window, the test cancels the consumer and returns. This is the standard Go pattern for asserting asynchronous progress without busy-waiting.
 
 Do not use `time.Sleep` here. A fixed sleep that is long enough to be reliable is long enough to make your CI noticeably slower. The polling loop with a reasonable timeout gives the same guarantee with far lower average latency—in practice the consumer processes the message in under a second, and the loop exits in one or two iterations.
 
-Note that `consumer.Run` in the real code has a hardcoded group ID (`"catalog-availability-updater"`). For the consumer to be testable with per-test group IDs, you would need to refactor `Run` to accept the group ID as a parameter. The signature above reflects that refactored version:
+For the consumer to be testable with per-test group IDs, `Run` should accept the group ID as a parameter. If your local code still hardcodes the group ID, refactor it before writing this integration test:
 
 ```go
-func Run(ctx context.Context, brokers []string, topic string, svc AvailabilityUpdater, groupID string) error
+func Run(ctx context.Context, brokers []string, topic string, groupID string) error
 ```
 
 This is a concrete example of how writing integration tests shapes your API design. The hardcoded group ID was an implementation convenience that becomes an obstacle the moment you want to run two tests simultaneously. Accepting the group ID as a parameter is the right production API anyway—it allows operators to tune the consumer group name without recompiling.
@@ -542,7 +529,7 @@ The `defer cancel()` at the top of each test function is the defense. Even if th
 
 ## Summary
 
-The tests in this section cover the two integration surfaces that unit tests cannot reach: the serialization path between the reservation publisher and the catalog consumer, and the Kafka-to-database path within the Catalog Service. The search consumer test demonstrates that you do not always need the full dependency chain—a capturing mock combined with a real Kafka round-trip is often sufficient to test message routing and deserialization.
+The tests in this section cover the integration surfaces that unit tests cannot reach: the serialization path between the reservation publisher and the catalog observer, the consumer-group offset path, and the Search Service's Kafka-to-index projection. The search consumer test demonstrates that you do not always need the full dependency chain—a capturing mock combined with a real Kafka round-trip is often sufficient to test message routing and deserialization.
 
 The key patterns introduced here carry over to any Kafka integration test in Go:
 

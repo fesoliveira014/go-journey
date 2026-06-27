@@ -200,7 +200,7 @@ Why hand-written over `mockgen`? Small, focused interfaces (often 1–3 methods)
 
 ## Exercise: Enforce a Deletion Invariant
 
-The current `DeleteBook` implementation delegates directly to the repository:
+At the start of this exercise on the Chapter 2 checkpoint, `DeleteBook` delegates directly to the repository:
 
 ```go
 func (s *CatalogService) DeleteBook(ctx context.Context, id uuid.UUID) error {

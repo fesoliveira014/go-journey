@@ -65,7 +65,7 @@ Catalog already has `signal.NotifyContext`. It just needs the shutdown goroutine
  if len(brokers) > 0 {
      go func() {
          slog.Info("starting kafka consumer", "topic", "reservations")
-         if err := consumer.Run(ctx, brokers, "reservations", catalogSvc); err != nil {
+        if err := consumer.Run(ctx, brokers, "reservations"); err != nil {
              slog.Error("kafka consumer error", "error", err)
          }
      }()

@@ -105,6 +105,14 @@ func (s *CatalogService) UpdateBook(ctx context.Context, book *model.Book) (*mod
 }
 
 func (s *CatalogService) DeleteBook(ctx context.Context, id uuid.UUID) error {
+	book, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return err
+	}
+	if book.AvailableCopies < book.TotalCopies {
+		return model.ErrBookHasActiveReservations
+	}
+
 	if err := s.repo.Delete(ctx, id); err != nil {
 		return err
 	}

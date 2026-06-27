@@ -1,6 +1,6 @@
 # 7.3 Kafka Consumer
 
-Section 7.1 covered the theory of event-driven architecture. This section gets into the mechanical details: how the Catalog Service consumes reservation events from Kafka using the Sarama library's consumer group API.
+Section 7.1 covered the theory of event-driven architecture. This section gets into the mechanical details: how a service consumes reservation events from Kafka using the Sarama library's consumer group API.
 
 If you have used Spring Kafka, consumer setup is a matter of annotating a method with `@KafkaListener` and letting the framework handle group management, deserialization, and offset commits. In Go with Sarama, you implement an interface and manage the consume loop explicitly. More code, but nothing is hidden.
 
@@ -32,22 +32,13 @@ Our implementation keeps Setup and Cleanup empty—we have no session-scoped res
 // services/catalog/internal/consumer/consumer.go
 
 type consumerHandler struct {
-    svc AvailabilityUpdater
 }
 
 func (h *consumerHandler) Setup(_ sarama.ConsumerGroupSession) error   { return nil }
 func (h *consumerHandler) Cleanup(_ sarama.ConsumerGroupSession) error { return nil }
 ```
 
-The `AvailabilityUpdater` interface is the consumer's only dependency:
-
-```go
-type AvailabilityUpdater interface {
-    UpdateAvailability(ctx context.Context, id uuid.UUID, delta int) (*model.Book, error)
-}
-```
-
-This is a **role interface**—it describes the one capability the consumer needs from the Catalog Service. The full `CatalogService` has many methods (Create, Update, Delete, List), but the consumer only calls `UpdateAvailability`. Defining a narrow interface means the consumer is decoupled from the rest of the Catalog Service. In tests, you mock one method, not twenty.
+This consumer intentionally has no dependency on `CatalogService`. Catalog availability changes through the synchronous `UpdateAvailability` command path in the Reservation Service. The reservation event stream is still useful, but not as a command channel back into the state owner.
 
 ---
 
@@ -56,20 +47,20 @@ This is a **role interface**—it describes the one capability the consumer need
 The `Run` function sets up the consumer group and enters an infinite consume loop:
 
 ```go
-func Run(ctx context.Context, brokers []string, topic string, svc AvailabilityUpdater) error {
+func Run(ctx context.Context, brokers []string, topic string) error {
     config := sarama.NewConfig()
     config.Consumer.Group.Rebalance.GroupStrategies = []sarama.BalanceStrategy{
         sarama.NewBalanceStrategyRoundRobin(),
     }
     config.Consumer.Offsets.Initial = sarama.OffsetOldest
 
-    group, err := sarama.NewConsumerGroup(brokers, "catalog-availability-updater", config)
+    group, err := sarama.NewConsumerGroup(brokers, "catalog-reservation-audit", config)
     if err != nil {
         return fmt.Errorf("create consumer group: %w", err)
     }
     defer group.Close()
 
-    handler := &consumerHandler{svc: svc}
+    handler := &consumerHandler{}
 
     for {
         if err := group.Consume(ctx, []string{topic}, handler); err != nil {
@@ -108,7 +99,7 @@ func (h *consumerHandler) ConsumeClaim(
         msgCtx := otelgo.GetTextMapPropagator().Extract(ctx, consumerHeaderCarrier(msg.Headers))
         msgCtx, span := otelgo.Tracer("catalog").Start(msgCtx, "catalog.consume.reservation")
 
-        if err := handleEvent(msgCtx, h.svc, msg.Value); err != nil {
+        if err := handleEvent(msgCtx, msg.Value); err != nil {
             slog.ErrorContext(msgCtx, "failed to handle event", "error", err)
             span.End()
             continue
@@ -150,7 +141,7 @@ In a production system, you would add retry logic (with backoff) and a dead-lett
 The `handleEvent` function deserializes the message and routes by event type:
 
 ```go
-func handleEvent(ctx context.Context, svc AvailabilityUpdater, data []byte) error {
+func handleEvent(ctx context.Context, data []byte) error {
     var event reservationEvent
     if err := json.Unmarshal(data, &event); err != nil {
         return fmt.Errorf("unmarshal event: %w", err)
@@ -161,19 +152,16 @@ func handleEvent(ctx context.Context, svc AvailabilityUpdater, data []byte) erro
         return fmt.Errorf("parse book ID: %w", err)
     }
 
-    var delta int
     switch event.EventType {
-    case "reservation.created":
-        delta = -1
     case "reservation.returned", "reservation.expired":
-        delta = 1
+        slog.InfoContext(ctx, "observed reservation event", "event_type", event.EventType, "book_id", bookID)
+    case "reservation.created":
+        slog.InfoContext(ctx, "observed reservation event", "event_type", event.EventType, "book_id", bookID)
     default:
         slog.WarnContext(ctx, "unknown event type", "event_type", event.EventType)
         return nil
     }
-
-    _, err = svc.UpdateAvailability(ctx, bookID, delta)
-    return err
+    return nil
 }
 ```
 
@@ -186,21 +174,21 @@ type reservationEvent struct {
 }
 ```
 
-This is intentional. The consumer does not need the reservation ID, user ID, or timestamp to update availability. By defining a minimal struct, the consumer is resilient to the producer adding new fields—`json.Unmarshal` ignores unknown fields by default.
+This is intentional. The observer only needs the event type and book ID to validate and log the fact. By defining a minimal struct, the consumer is resilient to the producer adding new fields—`json.Unmarshal` ignores unknown fields by default.
 
 The routing logic is a switch:
 
-- `reservation.created` -> decrement availability (delta = -1)
-- `reservation.returned` or `reservation.expired` -> increment availability (delta = +1)
+- `reservation.created` -> observe the creation event
+- `reservation.returned` or `reservation.expired` -> observe the release event
 - Unknown event types -> log a warning and return nil (no error)
 
 Returning `nil` for unknown events is important. If the Reservation Service starts publishing a new event type (say, `reservation.extended`), the catalog consumer should not crash—it should ignore events it does not understand. This is the **tolerant reader** pattern: be liberal in what you accept.
 
 ---
 
-## Updating Availability
+## Why This Consumer Does Not Update Availability
 
-The consumer calls `svc.UpdateAvailability(ctx, bookID, delta)`, which runs this SQL through GORM:
+The old temptation is to treat reservation events as commands and call `svc.UpdateAvailability(ctx, bookID, delta)` from the consumer. That creates a double-write problem in this project because `ReservationService` already calls Catalog synchronously:
 
 ```go
 // services/catalog/internal/repository/book.go
@@ -208,25 +196,15 @@ The consumer calls `svc.UpdateAvailability(ctx, bookID, delta)`, which runs this
 func (r *BookRepository) UpdateAvailability(ctx context.Context, id uuid.UUID, delta int) error {
     result := r.db.WithContext(ctx).
         Model(&model.Book{}).
-        Where("id = ? AND available_copies + ? >= 0", id, delta).
+        Where("id = ? AND available_copies + ? BETWEEN 0 AND total_copies", id, delta).
         Update("available_copies", gorm.Expr("available_copies + ?", delta))
-    if result.Error != nil {
-        return result.Error
-    }
-    if delta >= 0 && result.RowsAffected == 0 {
-        return model.ErrBookNotFound
-    }
-    return nil
+    // ...
 }
 ```
 
-The `WHERE available_copies + ? >= 0` clause is a database-level guard against negative counts. This is important for two reasons:
+That guarded update belongs on the command path. It protects the invariant that `available_copies` stays between zero and `total_copies`, and it closes the reservation race for the last copy. If a consumer also decremented on `reservation.created`, one successful reservation would remove two copies.
 
-1. **Concurrent decrements.** If two `reservation.created` events for the same book are processed simultaneously (from different partitions, or after a rebalance), the SQL guard ensures one of them is a no-op rather than creating a negative count.
-
-2. **Duplicate events.** Since Kafka provides at-least-once delivery, the same event might be processed twice. For decrements, the guard prevents double-counting below zero. For increments, there is no guard—a duplicate `reservation.returned` could increment the count beyond `total_copies`. In a production system, you would track processed event IDs to prevent this.
-
-The `delta >= 0 && result.RowsAffected == 0` check returns `ErrBookNotFound` only for positive deltas (returns/expirations). For negative deltas (reservations), zero affected rows could mean either "book not found" or "guard prevented negative count"—the code treats both the same way: silently does nothing. This is a simplification noted in the code comments.
+The lesson is broader than this one endpoint: use events to publish facts to projections and observers; use commands for state changes owned by a specific service. If you want a pure event-driven inventory model, remove the synchronous command and add an outbox, event IDs, idempotency storage, retries, and reconciliation before trusting it.
 
 ---
 
@@ -273,7 +251,7 @@ In the Catalog Service's `main.go`, the consumer runs as a background goroutine 
 
 ```go
 go func() {
-    if err := consumer.Run(ctx, brokers, "reservations", catalogSvc); err != nil {
+    if err := consumer.Run(ctx, brokers, "reservations"); err != nil {
         slog.Error("consumer exited", "error", err)
     }
 }()
@@ -281,7 +259,7 @@ go func() {
 
 The `Run` function blocks until `ctx` is cancelled (application shutdown). The gRPC server blocks the main goroutine. When the process receives a shutdown signal, the context is cancelled, which causes both the consumer and the gRPC server to stop.
 
-This is the **co-located consumer** pattern: the consumer runs inside the same process as the service it updates. The alternative is a standalone consumer process. Co-location is simpler (one deployment, shared database connection) but means the consumer's load competes with the gRPC server's load. For our traffic levels, this is not a concern.
+This is the **co-located consumer** pattern: the consumer runs inside the same process as the service that owns the related domain. The alternative is a standalone consumer process. Co-location is simpler (one deployment, one logging/tracing setup) but means the consumer's load competes with the gRPC server's load. For our traffic levels, this is not a concern.
 
 ---
 
@@ -293,18 +271,14 @@ In Spring Kafka, the equivalent consumer would look something like this:
 @Component
 public class ReservationEventConsumer {
 
-    private final CatalogService catalogService;
-
-    @KafkaListener(topics = "reservations", groupId = "catalog-availability-updater")
+    @KafkaListener(topics = "reservations", groupId = "catalog-reservation-audit")
     public void handle(ConsumerRecord<String, String> record) {
         ReservationEvent event = objectMapper.readValue(record.value(), ReservationEvent.class);
-        int delta = switch (event.type()) {
-            case "reservation.created" -> -1;
-            case "reservation.returned", "reservation.expired" -> 1;
-            default -> 0;
-        };
-        if (delta != 0) {
-            catalogService.updateAvailability(UUID.fromString(event.bookId()), delta);
+        switch (event.type()) {
+            case "reservation.created", "reservation.returned", "reservation.expired" ->
+                log.info("observed reservation event {}", event.type());
+            default ->
+                log.warn("unknown reservation event {}", event.type());
         }
     }
 }
@@ -320,7 +294,7 @@ Spring handles consumer group creation, the consume loop, offset commits, deseri
 
 2. **Dead-letter topic.** Extend the consumer to publish failed messages to a `reservations.dlq` topic after exhausting retries. You will need a Sarama `SyncProducer` alongside the consumer.
 
-3. **Test handleEvent.** Write a unit test for the `handleEvent` function. Create a mock `AvailabilityUpdater` and verify that: (a) `reservation.created` calls `UpdateAvailability` with delta -1, (b) `reservation.returned` calls with delta +1, (c) an unknown event type returns nil without calling `UpdateAvailability`, (d) malformed JSON returns an error.
+3. **Test handleEvent.** Write a unit test for the `handleEvent` function. Verify that: (a) `reservation.created`, `reservation.returned`, and `reservation.expired` are accepted without mutating Catalog availability, (b) an unknown event type returns nil, (c) malformed JSON returns an error, and (d) an invalid book ID returns an error.
 
 4. **Consumer lag monitoring.** Kafka consumer lag is the difference between the latest offset in a partition and the consumer's committed offset. High lag means the consumer is falling behind. Describe how you would expose this metric. (Hint: Sarama's `ConsumerGroupClaim` exposes `HighWaterMarkOffset()` per partition.)
 

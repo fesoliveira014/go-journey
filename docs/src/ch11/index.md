@@ -1,5 +1,11 @@
 # Chapter 11: Testing Strategies
 
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-11-start`
+> End state: `git checkout chapter-11-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
 Chapters 1 through 9 built a working five-service system: catalog, auth, reservation, search, and a gateway front-end. Along the way, you wrote unit tests for nearly every package—service-layer logic, handler routing, token validation, event publishing. Those tests run in milliseconds, require no external process, and catch a wide class of bugs.
 
 They do not catch everything.
@@ -141,7 +147,7 @@ The remaining sections build the testing strategy layer by layer:
 
 **11.4—Kafka Testing** covers the serialization seam between the Catalog Service's event producer and the Reservation and Search Service consumers. You will start a Kafka broker via Testcontainers, publish events through the production publisher code, consume them through the production consumer code, and assert that the full round-trip preserves all fields correctly.
 
-**11.5—Service-Level End-to-End Tests** composes the previous layers into a scenario-level test: a user reserves a book, the Catalog Service publishes a `BookReserved` event, the Reservation Service consumes it and updates its own database, and the search index is invalidated. The test starts all necessary containers, wires the services together, and drives the scenario through the gateway's HTTP API.
+**11.5—Service-Level End-to-End Tests** composes the previous layers into a scenario-level test inside one service boundary: a reservation request calls Catalog synchronously for availability, records the Reservation-owned row, and publishes the reservation lifecycle event for downstream observers. This is still a service-level E2E test, not a full browser-to-all-services test.
 
 ---
 
