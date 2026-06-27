@@ -84,6 +84,11 @@ spec:
                 secretKeyRef:
                   name: jwt-secret
                   key: JWT_SECRET
+            - name: INTERNAL_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-service-token
+                  key: INTERNAL_SERVICE_TOKEN
           resources:
             requests:
               cpu: "100m"
@@ -480,6 +485,11 @@ spec:
                 secretKeyRef:
                   name: jwt-secret
                   key: JWT_SECRET
+            - name: INTERNAL_SERVICE_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: internal-service-token
+                  key: INTERNAL_SERVICE_TOKEN
           resources:
             requests:
               cpu: "50m"
@@ -683,6 +693,11 @@ spec:
                 secretKeyRef:
                   name: jwt-secret
                   key: JWT_SECRET
+            - name: FLASH_COOKIE_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: flash-cookie-key
+                  key: FLASH_COOKIE_KEY
           resources:
             requests:
               cpu: "50m"
@@ -738,6 +753,7 @@ data:
   CATALOG_GRPC_ADDR: "catalog.library.svc.cluster.local:50052"
   RESERVATION_GRPC_ADDR: "reservation.library.svc.cluster.local:50053"
   SEARCH_GRPC_ADDR: "search.library.svc.cluster.local:50054"
+  COOKIE_SECURE: "false"
   OTEL_COLLECTOR_ENDPOINT: ""
 ```
 
@@ -745,11 +761,11 @@ data:
 
 ## Secrets
 
-The Deployment manifests reference several Secrets by name (`jwt-secret`, `postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `meilisearch-secret`). Notice that the base directory does **not** include a `secrets.yaml` file. This is intentional—secret values should never exist in the base, even as empty placeholders. Instead, each overlay is responsible for creating the Secrets that its environment needs.
+The Deployment manifests reference several Secrets by name (`jwt-secret`, `flash-cookie-key`, `internal-service-token`, `postgres-catalog-secret`, `postgres-auth-secret`, `postgres-reservation-secret`, `meilisearch-secret`). Notice that the base directory does **not** include a `secrets.yaml` file. This is intentional—secret values should never exist in the base, even as empty placeholders. Instead, each overlay is responsible for creating the Secrets that its environment needs.
 
 The local overlay (section 12.5) uses Kustomize's `secretGenerator` to create all required Secrets with development values. The production overlay uses the External Secrets Operator to sync values from AWS Secrets Manager (Chapter 14). This pattern keeps credentials out of version control entirely.
 
-The key names populated by the overlay (`JWT_SECRET`, `POSTGRES_PASSWORD`, `MEILI_MASTER_KEY`) match the `secretKeyRef.key` values in the Deployment manifests exactly. The OAuth2 client secret (`GOOGLE_CLIENT_SECRET`) is referenced by the auth Deployment with `optional: true`, so it only needs to be provided in environments where Google OAuth2 is configured.
+The key names populated by the overlay (`JWT_SECRET`, `FLASH_COOKIE_KEY`, `INTERNAL_SERVICE_TOKEN`, `POSTGRES_PASSWORD`, `MEILI_MASTER_KEY`) match the `secretKeyRef.key` values in the Deployment manifests exactly. The OAuth2 client secret (`GOOGLE_CLIENT_SECRET`) is referenced by the auth Deployment with `optional: true`, so it only needs to be provided in environments where Google OAuth2 is configured.
 
 **Base64 is not encryption.** Anyone with read access to a Secret object—via `kubectl get secret jwt-secret -o yaml`—can decode the value with `base64 -d`. Secrets are only marginally better than ConfigMaps at rest (in etcd) unless you enable etcd encryption, and they are only as secure as your RBAC policy. The canonical solution for production is an external secret store (HashiCorp Vault, AWS Secrets Manager, GCP Secret Manager) synced to Kubernetes Secrets by an operator. We cover this in Chapter 14. For the local cluster, the local overlay's `secretGenerator` provides concrete values without putting them in version control.
 

@@ -1,6 +1,6 @@
 # 6.4 Putting It Together
 
-This section walks through the entire flow end-to-end: starting the stack, bootstrapping an admin, seeding the catalog, and verifying everything through the UI. Follow these steps in order.
+This section walks through the full checkpoint flow end-to-end: starting the stack, bootstrapping an admin, seeding the catalog, and verifying everything through the UI. The reservation steps require the Reservation service from Chapter 7; if you are reading strictly linearly, do Steps 1-6 now and return to Steps 7-8 after Chapter 7.
 
 ---
 
@@ -112,6 +112,6 @@ This confirms the full flow: the Reservation Service resolves the book title fro
 
 At this point the library system is functional: users can register, browse, and reserve books; admins can manage the catalog and monitor activity. But the services are tightly coupled—the Reservation Service calls Catalog and Auth synchronously via gRPC, and the Search Service is not yet connected.
 
-In **Chapter 7**, we introduce **Kafka** and **event-driven architecture**. The Catalog Service will publish `book.created`, `book.updated`, and `book.deleted` events. The Search Service will consume these events to build and maintain a search index. The Reservation Service will publish `reservation.created` and `reservation.returned` events that the Catalog Service consumes to update available copy counts.
+In **Chapter 7**, we introduce **Kafka** and **event-driven architecture**. The Reservation Service will call Catalog synchronously for availability changes, then publish `reservation.created` and `reservation.returned` events as facts for downstream observers. In Chapter 8, the Catalog Service will publish `book.created`, `book.updated`, and `book.deleted` events that the Search Service consumes to build and maintain a search index.
 
 This shift from synchronous RPC to asynchronous events is where the microservices architecture starts to pay for its complexity—services become more decoupled, more resilient, and more independently deployable.

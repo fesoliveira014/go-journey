@@ -10,7 +10,7 @@ Here is `services/catalog/Dockerfile` in its entirety:
 
 ```dockerfile
 # Stage 1: Build
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 
 # Disable workspace mode — we only copy this service and gen/, not all
@@ -52,12 +52,12 @@ Walk through it top to bottom.
 ### Base Image and Workspace
 
 ```dockerfile
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 ENV GOWORK=off
 ```
 
-We start from `golang:1.22-alpine`, the official Go image based on Alpine Linux. Alpine is a minimal Linux distribution (~5 MB)—using it as a base instead of the full Debian-based `golang:1.22` saves about 400 MB in the builder stage.
+We start from `golang:1.26-alpine`, the official Go image based on Alpine Linux. Alpine is a minimal Linux distribution (~5 MB)—using it as a base instead of the full Debian-based `golang:1.26` saves about 400 MB in the builder stage.
 
 `GOWORK=off` is the most important line in this Dockerfile, and it requires context.
 
@@ -185,7 +185,7 @@ Here is `services/gateway/Dockerfile`:
 
 ```dockerfile
 # Stage 1: Build
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 
 ENV GOWORK=off
@@ -285,7 +285,7 @@ The Catalog service is harder to run standalone because it needs PostgreSQL. Tha
 <details>
 <summary>Solution</summary>
 
-The image sizes should be approximately 15–25 MB each, depending on the binary size. Compare this to the `golang:1.22-alpine` base image (~300 MB)—the multi-stage build cut the image size by over 90%.
+The image sizes should be approximately 15–25 MB each, depending on the binary size. Compare this to the `golang:1.26-alpine` base image (~300 MB)—the multi-stage build cut the image size by over 90%.
 
 ```bash
 $ docker images | grep -E 'catalog|gateway'

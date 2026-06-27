@@ -748,7 +748,7 @@ Earthly's `WITH DOCKER` block provides Docker-in-Docker capability that makes in
 # In services/catalog/Earthfile
 
 src:
-    FROM golang:1.22-alpine
+    FROM golang:1.26-alpine
     WORKDIR /app
     COPY go.mod go.sum ./
     RUN go mod download

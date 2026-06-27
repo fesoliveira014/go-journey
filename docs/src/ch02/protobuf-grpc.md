@@ -269,7 +269,7 @@ The Reservation service, for example, will call `NewCatalogServiceClient(conn)` 
 
 ## Exercise: Add a `SearchBooks` RPC
 
-The system will eventually have a Search service, but the Catalog service needs to expose a search endpoint first. Your task is to add a `SearchBooks` RPC to `proto/catalog/v1/catalog.proto`.
+This is a temporary local SQL search exercise. In Chapter 8, we replace this with a dedicated Search service backed by Meilisearch. For now, your task is to add a `SearchBooks` RPC to `proto/catalog/v1/catalog.proto` so you can practice evolving a protobuf contract.
 
 Requirements:
 - The request message should accept a `query` string (the search term)

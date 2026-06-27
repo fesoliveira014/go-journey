@@ -9,9 +9,10 @@ deps:
     # Copy local module go.mod files via root Earthfile artifact targets
     COPY ../../+gen-mod/gen ../gen
     COPY ../../+pkg-auth-mod/pkg-auth ../pkg/auth
+    COPY ../../+pkg-db-mod/pkg-db ../pkg/db
     COPY ../../+pkg-otel-mod/pkg-otel ../pkg/otel
     ENV GOWORK=off
-    RUN go mod download && (cd ../gen && go mod download) && (cd ../pkg/auth && go mod download) && (cd ../pkg/otel && go mod download)
+    RUN go mod download && (cd ../gen && go mod download) && (cd ../pkg/auth && go mod download) && (cd ../pkg/db && go mod download) && (cd ../pkg/otel && go mod download)
     SAVE ARTIFACT go.mod AS LOCAL go.mod
     SAVE ARTIFACT go.sum AS LOCAL go.sum
 
@@ -20,6 +21,7 @@ src:
     COPY --dir cmd internal migrations ./
     COPY ../../+gen-src/gen ../gen
     COPY ../../+pkg-auth-src/pkg-auth ../pkg/auth
+    COPY ../../+pkg-db-src/pkg-db ../pkg/db
     COPY ../../+pkg-otel-src/pkg-otel ../pkg/otel
 
 lint:

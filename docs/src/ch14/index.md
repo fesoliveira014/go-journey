@@ -1,18 +1,25 @@
 # Chapter 14: Production Hardening
 
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-14-start`
+> End state: `git checkout chapter-14-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
 Chapter 13 deployed the library system to real infrastructure: an EKS cluster running five services, three RDS instances holding persistent state, an MSK cluster brokering Kafka events, and a GitHub Actions pipeline shipping code on every push to `main`. That is a genuine production deployment—the application is reachable, the data survives pod restarts, and nobody has to run `kubectl apply` from a laptop.
 
-But "reachable" and "production-ready" are not the same thing. Three gaps remained when Chapter 13 ended, each deferred to get the system running before addressing hardening. This chapter closes all three. None of them require changes to application code, Dockerfiles, or Earthfiles—everything that needs to change lives in Terraform and the production Kustomize overlay.
+But "reachable" and "production-ready" are not the same thing. Four gaps remained when Chapter 13 ended, each deferred to get the system running before addressing hardening. This chapter closes them. Most changes live in Terraform and the production Kustomize overlay. Kafka TLS also requires a small application configuration change so the Sarama client uses TLS, and the gateway enables production cookie settings for HTTPS.
 
 ---
 
-## The three gaps
+## The four gaps
 
 | Gap | Chapter 13 state | Chapter 14 target |
 |-----|-----------------|-------------------|
 | DNS + TLS | HTTP via ALB hostname, no custom domain | HTTPS with a custom domain via Route 53 + ACM |
 | Secrets | Placeholder values in the production overlay's `secretGenerator` | External Secrets Operator syncing live values from AWS Secrets Manager |
 | Kafka encryption | Plaintext connections on port 9092 | TLS connections on port 9094 |
+| Browser session hardening | Local-friendly cookies and form posts | `COOKIE_SECURE=true` behind HTTPS and CSRF tokens on unsafe form methods |
 
 Each row is a separate concern with its own tools and its own section in this chapter. They are also independent—apply them in any order, or apply just one. The sections below treat them sequentially because that matches the natural dependency order when you are also setting up DNS for the first time.
 
@@ -32,13 +39,14 @@ Kafka's plaintext listener (port 9092) transmits all broker traffic unencrypted 
 
 ## What stays the same
 
-The Kustomize layering from Chapter 12 and the CI/CD pipeline from Chapter 13 are untouched. The base manifests under `k8s/base/` remain unchanged—a deliberate constraint that demonstrates the value of the overlay pattern. Application services do not need to know anything about where TLS terminates, how secrets reach the pod's environment, or what port the Kafka broker is listening on. They connect to hostnames and read environment variables; the infrastructure layer handles everything else.
+The Kustomize layering from Chapter 12 and the CI/CD pipeline from Chapter 13 are mostly untouched. The base manifests under `k8s/base/` stay stable; production-specific values live in the overlay. Application services still connect to hostnames and read environment variables, but two hardening choices are application-visible: Sarama must be told to use Kafka TLS, and the gateway must set the `Secure` flag on cookies when HTTPS is in front of it.
 
 The Earthfile CI targets—`+lint`, `+test`, `+build`, `+integration-test`—run as they did in Chapter 13. The GitHub Actions pipeline that calls them is unchanged. The only files that change in this chapter are:
 
 - Terraform files under `terraform/`—for the Route 53 hosted zone, ACM certificate, and MSK listener configuration
 - The production Kustomize overlay under `k8s/overlays/production/`—for the External Secrets Operator configuration and the updated Kafka broker address
 - A new Terraform module for the External Secrets Operator IAM role and its associated Kubernetes resources
+- Gateway configuration that sets `COOKIE_SECURE=true` in production; CSRF middleware and hidden form tokens were added in Chapter 5 so admin POST forms are protected when cookies authenticate browser requests
 
 If you have been following the "what changes and what stays the same" framing from earlier chapters, the pattern holds here too.
 

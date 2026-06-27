@@ -78,7 +78,7 @@ Pin these base images to the latest supported versions at time of building. The 
 Consider this naive Dockerfile:
 
 ```dockerfile
-FROM golang:1.22-alpine
+FROM golang:1.26-alpine
 WORKDIR /app
 COPY . .
 RUN go mod download
@@ -90,7 +90,7 @@ Every time you change *any* source file, the `COPY . .` layer is invalidated. Th
 Now consider the optimized version:
 
 ```dockerfile
-FROM golang:1.22-alpine
+FROM golang:1.26-alpine
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -104,7 +104,7 @@ Here we copy `go.mod` and `go.sum` first, then download dependencies. This layer
 
 ```mermaid
 graph BT
-    L1["Layer 1: FROM golang:1.22-alpine<br/>(base image, ~300MB)"]
+    L1["Layer 1: FROM golang:1.26-alpine<br/>(base image, ~300MB)"]
     L2["Layer 2: COPY go.mod go.sum<br/>(tiny, ~1KB)"]
     L3["Layer 3: RUN go mod download<br/>(dependencies, cached)"]
     L4["Layer 4: COPY . .<br/>(your source code)"]
@@ -127,7 +127,7 @@ Multi-stage builds solve this. You use one stage (the "builder") to compile your
 
 ```dockerfile
 # Stage 1: Build
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 COPY go.mod go.sum ./
 RUN go mod download
@@ -142,7 +142,7 @@ USER app
 ENTRYPOINT ["/usr/local/bin/server"]
 ```
 
-The `COPY --from=builder` instruction reaches into the builder stage and extracts only the compiled binary. The final image is based on `alpine:3.19` (~5 MB), not `golang:1.22-alpine` (~300 MB). The total image size ends up around 15–20 MB instead of more than 300 MB.
+The `COPY --from=builder` instruction reaches into the builder stage and extracts only the compiled binary. The final image is based on `alpine:3.19` (~5 MB), not `golang:1.26-alpine` (~300 MB). The total image size ends up around 15–20 MB instead of more than 300 MB.
 
 The `USER app` instruction switches to a non-root user. Running containers as root is a security risk: if the process is compromised, the attacker has root inside the container. Our Go binary is statically linked and needs no elevated privileges, so there is no reason to run as root.
 

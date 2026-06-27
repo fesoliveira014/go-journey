@@ -178,7 +178,7 @@ Note the distinction between `Unauthenticated` (no role in context = the interce
 
 ### Auth Service
 
-The Auth service skips authentication for five of its six RPCs—only `GetUser` requires a token:
+The Auth service starts with six RPCs in Chapter 4 and skips authentication for five of them—only `GetUser` requires a token. Chapter 6 adds `ListUsers`, which is admin-only and also stays behind the interceptor:
 
 ```go
 skipMethods := []string{
@@ -196,7 +196,7 @@ grpcServer := grpc.NewServer(grpc.UnaryInterceptor(interceptor))
 
 ### Catalog Service
 
-The Catalog service skips authentication for read operations and the availability update (which would be called by an internal service):
+The Catalog service skips JWT authentication for read operations and for `UpdateAvailability`:
 
 ```go
 skipMethods := []string{
@@ -207,7 +207,40 @@ skipMethods := []string{
 interceptor := pkgauth.UnaryAuthInterceptor(jwtSecret, skipMethods)
 ```
 
+That last skip is easy to misread. `UpdateAvailability` is not public; it is an internal service-to-service mutation used by Reservation. It skips the user JWT interceptor because no browser user is directly performing that inventory command. The handler still requires a separate `INTERNAL_SERVICE_TOKEN` metadata value before it mutates availability:
+
+```go
+func (h *CatalogHandler) UpdateAvailability(ctx context.Context, req *catalogv1.UpdateAvailabilityRequest) (*catalogv1.UpdateAvailabilityResponse, error) {
+    if err := pkgauth.RequireInternalToken(ctx, h.internalServiceToken); err != nil {
+        return nil, err
+    }
+    // ... validate request and update availability
+}
+```
+
+The Reservation client injects the same token on outgoing Catalog calls:
+
+```go
+conn, err := grpc.NewClient(
+    catalogAddr,
+    grpc.WithTransportCredentials(insecure.NewCredentials()),
+    grpc.WithUnaryInterceptor(pkgauth.UnaryInternalTokenInterceptor(internalServiceToken)),
+)
+```
+
+This is still a learning-project simplification. In production, prefer mTLS with service identities, a workload identity system, or short-lived internal credentials. A static shared token is better than an unauthenticated internal mutation, but it is not a complete service-mesh security model.
+
 This means `CreateBook`, `UpdateBook`, and `DeleteBook` all require a valid JWT. But requiring a token is only **authentication**—any logged-in user could call these RPCs. We still need **authorization**.
+
+### Three Kinds of Trust
+
+This chapter now has three distinct trust checks:
+
+- **User authentication:** Is there a valid JWT, and which user does it represent?
+- **Admin authorization:** Does that authenticated user have the `admin` role for catalog management?
+- **Service-to-service authorization:** Is this call coming from another trusted service rather than a browser user?
+
+Keeping those concerns separate prevents a common mistake: treating "internal RPC" as a security boundary. Network topology helps, but the handler should still verify that a mutation call is allowed.
 
 ---
 

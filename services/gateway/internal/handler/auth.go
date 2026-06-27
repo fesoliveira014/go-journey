@@ -24,7 +24,7 @@ func (s *Server) LoginSubmit(w http.ResponseWriter, r *http.Request) {
 		s.render(w, r, "login.html", map[string]any{"Error": "Invalid email or password", "Email": email})
 		return
 	}
-	setSessionCookie(w, resp.Token)
+	s.setSessionCookie(w, resp.Token)
 	s.setFlash(w, "Welcome back!")
 	http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
@@ -60,14 +60,14 @@ func (s *Server) RegisterSubmit(w http.ResponseWriter, r *http.Request) {
 		})
 		return
 	}
-	setSessionCookie(w, resp.Token)
+	s.setSessionCookie(w, resp.Token)
 	s.setFlash(w, "Welcome! Your account has been created.")
 	http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
 
 // Logout handles POST /logout.
 func (s *Server) Logout(w http.ResponseWriter, r *http.Request) {
-	clearSessionCookie(w)
+	s.clearSessionCookie(w)
 	http.Redirect(w, r, "/", http.StatusSeeOther)
 }
 
@@ -93,13 +93,13 @@ func (s *Server) OAuth2Callback(w http.ResponseWriter, r *http.Request) {
 		s.renderError(w, r, http.StatusUnauthorized, "OAuth2 login failed")
 		return
 	}
-	setSessionCookie(w, resp.Token)
+	s.setSessionCookie(w, resp.Token)
 	s.setFlash(w, "Welcome!")
 	http.Redirect(w, r, "/books", http.StatusSeeOther)
 }
 
 // setSessionCookie writes a persistent session cookie to the response.
-func setSessionCookie(w http.ResponseWriter, token string) {
+func (s *Server) setSessionCookie(w http.ResponseWriter, token string) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
 		Value:    token,
@@ -107,14 +107,18 @@ func setSessionCookie(w http.ResponseWriter, token string) {
 		HttpOnly: true,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   86400,
+		Secure:   s.secureCookies,
 	})
 }
 
 // clearSessionCookie removes the session cookie from the browser.
-func clearSessionCookie(w http.ResponseWriter) {
+func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name:   "session",
-		Path:   "/",
-		MaxAge: -1,
+		Name:     "session",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   s.secureCookies,
 	})
 }

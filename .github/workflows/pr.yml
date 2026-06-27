@@ -6,7 +6,6 @@ on:
 permissions:
   contents: read
   pull-requests: write
-  id-token: write  # Required for Terraform plan with OIDC
 
 jobs:
   ci:

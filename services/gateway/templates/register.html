@@ -3,6 +3,7 @@
 <h1>Create an Account</h1>
 {{if .Data.Error}}<p class="form-error">{{.Data.Error}}</p>{{end}}
 <form method="POST" action="/register" class="auth-form">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
     <label for="name">Name</label>
     <input type="text" name="name" id="name" value="{{if .Data.Name}}{{.Data.Name}}{{end}}" required>
     <label for="email">Email</label>

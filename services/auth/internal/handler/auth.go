@@ -6,7 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"log/slog"
 	"sync"
 	"time"
 
@@ -175,7 +175,8 @@ func (h *AuthHandler) CompleteOAuth2(ctx context.Context, req *authv1.CompleteOA
 
 	oauthToken, err := h.oauthConfig.Exchange(ctx, req.GetCode())
 	if err != nil {
-		return nil, status.Error(codes.Internal, fmt.Sprintf("failed to exchange code: %v", err))
+		slog.ErrorContext(ctx, "oauth code exchange failed", "error", err)
+		return nil, status.Error(codes.Internal, "authentication failed")
 	}
 
 	client := h.oauthConfig.Client(ctx, oauthToken)

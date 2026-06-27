@@ -119,15 +119,16 @@ func (r *BookRepository) List(ctx context.Context, filter model.BookFilter, page
 }
 
 // UpdateAvailability atomically adjusts available_copies by delta. The WHERE
-// guard prevents the counter from going negative: a decrement that would
-// underflow matches zero rows and is reported back as ErrNoAvailableCopies.
-// This is the gate the reservation service relies on to avoid a TOCTOU race
-// when two users race for the last copy of a book — the database enforces
-// single-winner semantics, not an in-application check.
+// guard keeps the counter within [0, total_copies]: a decrement that would
+// underflow or an increment that would exceed total_copies matches zero rows
+// and is reported back as a domain error. This is the gate the reservation
+// service relies on to avoid a TOCTOU race when two users race for the last
+// copy of a book — the database enforces single-winner semantics, not an
+// in-application check.
 func (r *BookRepository) UpdateAvailability(ctx context.Context, id uuid.UUID, delta int) error {
 	result := r.db.WithContext(ctx).
 		Model(&model.Book{}).
-		Where("id = ? AND available_copies + ? >= 0", id, delta).
+		Where("id = ? AND available_copies + ? BETWEEN 0 AND total_copies", id, delta).
 		Update("available_copies", gorm.Expr("available_copies + ?", delta))
 	if result.Error != nil {
 		return result.Error
@@ -149,10 +150,7 @@ func (r *BookRepository) UpdateAvailability(ctx context.Context, id uuid.UUID, d
 		if delta < 0 {
 			return model.ErrNoAvailableCopies
 		}
-		// Positive delta against an existing row but zero rows affected
-		// shouldn't happen (the guard is only active for negative deltas),
-		// but fall through defensively.
-		return model.ErrBookNotFound
+		return model.ErrInvalidAvailability
 	}
 	return nil
 }

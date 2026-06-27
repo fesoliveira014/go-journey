@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
 	auth "github.com/fesoliveira014/library-system/pkg/auth"
@@ -32,6 +33,37 @@ func TestGenerateAndValidateToken(t *testing.T) {
 	}
 	if claims.Role != role {
 		t.Errorf("expected role %q, got %q", role, claims.Role)
+	}
+}
+
+func TestGenerateToken_UsesStableJSONClaimNames(t *testing.T) {
+	t.Parallel()
+	userID := uuid.New()
+	tokenString, err := auth.GenerateToken(userID, "admin", "test-secret", time.Hour)
+	if err != nil {
+		t.Fatalf("generate token: %v", err)
+	}
+
+	token, _, err := jwt.NewParser().ParseUnverified(tokenString, jwt.MapClaims{})
+	if err != nil {
+		t.Fatalf("parse token: %v", err)
+	}
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		t.Fatalf("expected jwt.MapClaims, got %T", token.Claims)
+	}
+
+	if claims["user_id"] != userID.String() {
+		t.Fatalf("expected user_id claim %q, got %v", userID.String(), claims["user_id"])
+	}
+	if claims["role"] != "admin" {
+		t.Fatalf("expected role claim %q, got %v", "admin", claims["role"])
+	}
+	if _, ok := claims["UserID"]; ok {
+		t.Fatal("token should not expose exported Go field name UserID")
+	}
+	if _, ok := claims["Role"]; ok {
+		t.Fatal("token should not expose exported Go field name Role")
 	}
 }
 

@@ -1,10 +1,18 @@
 # Chapter 12: Kubernetes
 
-Chapter 3 got all five services running locally with Docker Compose: a single `docker compose up` starts PostgreSQL, Kafka, Meilisearch, and every application container. For development and demonstration that is the right tool. But Docker Compose is a single-machine orchestrator. If the machine running it goes down, every service goes with it. If the Catalog Service crashes, nothing restarts it automatically. If traffic doubles overnight, there is no mechanism to add replicas. Deploying a new image means a gap in service while the old container stops and the new one starts.
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-12-start`
+> End state: `git checkout chapter-12-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
+By this point, Docker Compose can run the whole library system locally: a single `docker compose up` starts PostgreSQL, Kafka, Meilisearch, and every application container. For development and demonstration that is the right tool. But Docker Compose is a single-machine orchestrator. If the machine running it goes down, every service goes with it. If the Catalog Service crashes, nothing restarts it automatically. If traffic doubles overnight, there is no mechanism to add replicas. Deploying a new image means a gap in service while the old container stops and the new one starts.
 
 Kubernetes addresses all of those problems. It is a platform for running containerized workloads across a cluster of machines, with built-in self-healing, rolling updates, service discovery, autoscaling, and declarative configuration management. The same mental model you developed in Chapter 3 carries forward—containers, images, environment variables, volume mounts—but Kubernetes layers a control plane on top that continuously reconciles what is running against what you declared you want.
 
 This chapter introduces that control plane, maps the Docker Compose concepts you already know to their Kubernetes equivalents, and lays the groundwork for the sections that follow, where you will write real manifests and deploy the library system to a local cluster.
+
+One production caveat belongs here even though Chapter 13 handles the concrete implementation: schema migrations should be deliberate. Local containers can run migrations on startup because the blast radius is small. In Kubernetes production environments, prefer a release-controlled Job or migration step that runs before the new application version is rolled out, rather than letting every replica silently attempt schema changes during startup.
 
 ---
 

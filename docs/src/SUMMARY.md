@@ -84,3 +84,4 @@
   - [14.3 Secrets Management](./ch14/secrets.md)
   - [14.4 Kafka Encryption: MSK TLS](./ch14/msk-tls.md)
   - [14.5 Applying the Changes](./ch14/applying.md)
+- [Appendix: System Invariants](./appendix-invariants.md)

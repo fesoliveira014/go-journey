@@ -214,6 +214,33 @@ func TestCatalogService_DeleteBook_PublishesEvent(t *testing.T) {
 	}
 }
 
+func TestCatalogService_DeleteBook_WithCheckedOutCopies(t *testing.T) {
+	t.Parallel()
+	repo := newMockRepo()
+	pub := &mockPublisher{}
+	svc := service.NewCatalogService(repo, pub)
+	ctx := context.Background()
+
+	book := &model.Book{Title: "Title", Author: "Author", TotalCopies: 2}
+	created, err := svc.CreateBook(ctx, book)
+	if err != nil {
+		t.Fatalf("setup: create book: %v", err)
+	}
+	created.AvailableCopies = 1
+	pub.events = nil
+
+	err = svc.DeleteBook(ctx, created.ID)
+	if !errors.Is(err, model.ErrBookHasActiveReservations) {
+		t.Fatalf("expected ErrBookHasActiveReservations, got %v", err)
+	}
+	if _, err := repo.GetByID(ctx, created.ID); err != nil {
+		t.Fatalf("book should still exist after rejected delete: %v", err)
+	}
+	if len(pub.events) != 0 {
+		t.Fatalf("expected no delete event, got %v", pub.events)
+	}
+}
+
 func TestCatalogService_UpdateAvailability_ReturnsBook(t *testing.T) {
 	t.Parallel()
 	repo := newMockRepo()

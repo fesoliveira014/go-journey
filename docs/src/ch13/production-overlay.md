@@ -2,7 +2,7 @@
 
 Chapter 12 introduced Kustomize and structured the manifests into a base and two overlays. The local overlay configured kind-specific settings: a `secretGenerator` with plaintext development credentials, a single replica per service, and `imagePullPolicy: IfNotPresent` so kind's locally loaded images are used without hitting a registry. That overlay is still correct for local development and remains untouched.
 
-Now you write the production overlay. At this point you have an EKS cluster, three RDS instances, an MSK cluster, ECR repositories, and a working CI pipeline. The production overlay is the piece that wires those AWS resources into the Kubernetes manifests—without modifying a single file under `deploy/k8s/base/`.
+Now you write the production overlay. At this point you have an EKS cluster, three RDS instances, an MSK cluster, ECR repositories, and a working CI pipeline. The production overlay is the piece that wires those AWS resources into the Kubernetes manifests. Most application manifests stay untouched; the one deliberate base change is moving local-only PostgreSQL and Kafka resources into `deploy/k8s/base/local-infra/` so production never renders them.
 
 ---
 
@@ -155,6 +155,14 @@ secretGenerator:
     namespace: library
     literals:
       - JWT_SECRET=REPLACE_WITH_EXTERNAL_SECRET
+  - name: flash-cookie-key
+    namespace: library
+    literals:
+      - FLASH_COOKIE_KEY=REPLACE_WITH_EXTERNAL_SECRET
+  - name: internal-service-token
+    namespace: library
+    literals:
+      - INTERNAL_SERVICE_TOKEN=REPLACE_WITH_EXTERNAL_SECRET
   - name: postgres-catalog-secret
     namespace: library
     literals:
@@ -549,7 +557,7 @@ If a Deployment stalls, `kubectl describe deployment/<name> -n library` shows ev
 
 The `secretGenerator` in this overlay writes placeholder strings into Kubernetes Secrets. That is a deliberate simplification—real credentials belong in AWS Secrets Manager, not in a `kustomization.yaml` committed to a repository.
 
-Chapter 14 replaces the `secretGenerator` block entirely with ExternalSecret resources. The External Secrets Operator (ESO) watches ExternalSecret objects, fetches the value from AWS Secrets Manager, and creates or updates a native Kubernetes Secret. The Deployments do not change—they continue reading from `postgres-auth-secret` and `jwt-secret` by name. Only the source of those secrets changes.
+Chapter 14 replaces the `secretGenerator` block entirely with ExternalSecret resources. The External Secrets Operator (ESO) watches ExternalSecret objects, fetches the value from AWS Secrets Manager, and creates or updates a native Kubernetes Secret. The Deployments do not change—they continue reading from `postgres-auth-secret`, `jwt-secret`, `flash-cookie-key`, and `internal-service-token` by name. Only the source of those secrets changes.
 
 Until that work is complete, populate secrets out-of-band after applying the overlay:
 
@@ -566,7 +574,7 @@ This is operational friction, not a permanent solution—but it is preferable to
 
 ## Summary
 
-The production overlay adds seven things to the base without touching a single base manifest:
+After the local-only infrastructure has been moved out of the production render, the production overlay adds seven things to the application base:
 
 1. **Image rewrites** via the `images` transformer—ECR URIs replace local image names across all Deployments.
 2. **Replica patches**—all Deployments run two replicas for availability.
@@ -576,7 +584,7 @@ The production overlay adds seven things to the base without touching a single b
 6. **ConfigMap patches**—MSK bootstrap addresses replace the in-cluster Kafka DNS name in `catalog-config`, `reservation-config`, and `search-config`.
 7. **Ingress patch**—ALB controller annotations and `ingressClassName: alb` replace the NGINX configuration.
 
-The base manifests under `deploy/k8s/base/library/` are unchanged from Chapter 12. The local overlay continues to work identically for development. The production overlay encodes every environment difference in one directory. The property established in Chapter 12—environment differences are explicit and isolated—holds at production scale.
+The application manifests under `deploy/k8s/base/library/` are unchanged from Chapter 12. The local overlay continues to work identically for development because it includes `deploy/k8s/base/local-infra/`. The production overlay encodes every environment difference in one directory. The property established in Chapter 12—environment differences are explicit and isolated—holds at production scale.
 
 ---
 

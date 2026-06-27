@@ -16,16 +16,18 @@ type UserInfo struct {
 }
 
 type PageData struct {
-	User  *UserInfo
-	Flash string
-	Data  any
+	User      *UserInfo
+	Flash     string
+	CSRFToken string
+	Data      any
 }
 
 func (s *Server) render(w http.ResponseWriter, r *http.Request, name string, data any) {
 	pd := PageData{
-		User:  userFromContext(r.Context()),
-		Flash: s.consumeFlash(w, r),
-		Data:  data,
+		User:      userFromContext(r.Context()),
+		Flash:     s.consumeFlash(w, r),
+		CSRFToken: s.csrfToken(w, r),
+		Data:      data,
 	}
 	tmpl, ok := s.tmpl[name]
 	if !ok {
@@ -52,8 +54,9 @@ func (s *Server) renderPartial(w http.ResponseWriter, name string, data any) {
 
 func (s *Server) renderError(w http.ResponseWriter, r *http.Request, code int, message string) {
 	pd := PageData{
-		User:  userFromContext(r.Context()),
-		Flash: s.consumeFlash(w, r),
+		User:      userFromContext(r.Context()),
+		Flash:     s.consumeFlash(w, r),
+		CSRFToken: s.csrfToken(w, r),
 		Data: map[string]any{
 			"Status":  code,
 			"Message": message,
@@ -100,6 +103,8 @@ func (s *Server) setFlash(w http.ResponseWriter, message string) {
 		Path:     "/",
 		MaxAge:   10,
 		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   s.secureCookies,
 	})
 }
 
@@ -139,9 +144,12 @@ func (s *Server) consumeFlash(w http.ResponseWriter, r *http.Request) string {
 		return ""
 	}
 	http.SetCookie(w, &http.Cookie{
-		Name:   "flash",
-		Path:   "/",
-		MaxAge: -1,
+		Name:     "flash",
+		Path:     "/",
+		MaxAge:   -1,
+		HttpOnly: true,
+		SameSite: http.SameSiteLaxMode,
+		Secure:   s.secureCookies,
 	})
 	var message string
 	if err := s.flash.Decode("flash", c.Value, &message); err != nil {

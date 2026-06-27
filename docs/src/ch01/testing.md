@@ -215,7 +215,7 @@ test:
     RUN go test -v -race -cover ./...
 ```
 
-Running `earthly +test` executes the tests in the same `golang:1.22-alpine` image used for CI, eliminating "works on my machine" failures.[^4]
+Running `earthly +test` executes the tests in the same `golang:1.26-alpine` image used for CI, eliminating "works on my machine" failures.[^4]
 
 ---
 
@@ -225,9 +225,17 @@ In section 1.3 you were asked to implement a `GET /books/{id}` endpoint. Write t
 
 1. A valid numeric ID (e.g., `1`) returns HTTP 200 and a JSON body containing the correct book.
 2. An ID that does not exist (e.g., `9999`) returns HTTP 404.
-3. A non-GET method (e.g., `DELETE`) on a valid path returns HTTP 405.
+3. A non-GET method (e.g., `DELETE`) on a valid path returns HTTP 405 when the handler is registered through a method-aware `ServeMux`.
 
-Your test function should have the signature `func TestBooksIDHandler(t *testing.T)` and live in `services/gateway/internal/handler/books_test.go`. Each case should be a subtest named clearly enough that a failure message alone tells you what broke.
+Your test function should have the signature `func TestBooksIDRoute(t *testing.T)` and live in `services/gateway/internal/handler/books_test.go`. Register the route in a test mux before serving requests:
+
+```go
+mux := http.NewServeMux()
+mux.HandleFunc("GET /books/{id}", handler.BookByID)
+mux.ServeHTTP(rec, req)
+```
+
+That distinction matters. The `GET /books/{id}` route pattern is what produces the 405 for other methods; a directly invoked handler only sees the request you pass to it. Each case should be a subtest named clearly enough that a failure message alone tells you what broke.
 
 ---
 

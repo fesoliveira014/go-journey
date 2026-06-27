@@ -271,10 +271,12 @@ func TestReturnBook_Success(t *testing.T) {
 	t.Parallel()
 	userID := uuid.New()
 	resID := uuid.New()
+	bookID := uuid.New()
 	pub := &mockPublisher{}
+	var deltas []int32
 
 	stored := &model.Reservation{
-		ID: resID, UserID: userID, BookID: uuid.New(),
+		ID: resID, UserID: userID, BookID: bookID,
 		Status: model.StatusActive, ReservedAt: time.Now(),
 		DueAt: time.Now().Add(14 * 24 * time.Hour),
 	}
@@ -289,8 +291,17 @@ func TestReturnBook_Success(t *testing.T) {
 			return r, nil
 		},
 	}
+	catalog := &mockCatalog{
+		updateAvailabilityFn: func(_ context.Context, in *catalogv1.UpdateAvailabilityRequest, _ ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+			if in.Id != bookID.String() {
+				t.Errorf("expected book id %s, got %s", bookID, in.Id)
+			}
+			deltas = append(deltas, in.Delta)
+			return &catalogv1.UpdateAvailabilityResponse{}, nil
+		},
+	}
 
-	svc := service.NewReservationService(repo, nil, nil, pub, 5)
+	svc := service.NewReservationService(repo, catalog, nil, pub, 5)
 	res, err := svc.ReturnBook(userCtx(userID), resID)
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -303,6 +314,9 @@ func TestReturnBook_Success(t *testing.T) {
 	}
 	if len(pub.events) != 1 || pub.events[0].Type != "reservation.returned" {
 		t.Errorf("expected reservation.returned event, got %v", pub.events)
+	}
+	if len(deltas) != 1 || deltas[0] != 1 {
+		t.Fatalf("expected one availability increment, got %v", deltas)
 	}
 }
 
@@ -351,6 +365,7 @@ func TestListUserReservations_ExpiresOnRead(t *testing.T) {
 	t.Parallel()
 	userID := uuid.New()
 	pub := &mockPublisher{}
+	var deltas []int32
 
 	expired := &model.Reservation{
 		ID: uuid.New(), UserID: userID, BookID: uuid.New(),
@@ -371,8 +386,14 @@ func TestListUserReservations_ExpiresOnRead(t *testing.T) {
 			return r, nil
 		},
 	}
+	catalog := &mockCatalog{
+		updateAvailabilityFn: func(_ context.Context, in *catalogv1.UpdateAvailabilityRequest, _ ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+			deltas = append(deltas, in.Delta)
+			return &catalogv1.UpdateAvailabilityResponse{}, nil
+		},
+	}
 
-	svc := service.NewReservationService(repo, nil, nil, pub, 5)
+	svc := service.NewReservationService(repo, catalog, nil, pub, 5)
 	list, err := svc.ListUserReservations(userCtx(userID))
 	if err != nil {
 		t.Fatalf("unexpected error: %v", err)
@@ -389,18 +410,23 @@ func TestListUserReservations_ExpiresOnRead(t *testing.T) {
 	if len(pub.events) != 1 || pub.events[0].Type != "reservation.expired" {
 		t.Errorf("expected one reservation.expired event, got %v", pub.events)
 	}
+	if len(deltas) != 1 || deltas[0] != 1 {
+		t.Fatalf("expected one availability increment, got %v", deltas)
+	}
 }
 
 func TestReapExpired_FlipsOverdueRowsAndPublishes(t *testing.T) {
 	t.Parallel()
 	userID := uuid.New()
+	bookID := uuid.New()
 	overdue := &model.Reservation{
-		ID: uuid.New(), UserID: userID, BookID: uuid.New(),
+		ID: uuid.New(), UserID: userID, BookID: bookID,
 		Status: model.StatusActive,
 		DueAt:  time.Now().Add(-1 * time.Hour),
 	}
 	pub := &mockPublisher{}
 	var listCalledWith time.Time
+	var deltas []int32
 
 	repo := &mockRepo{
 		listDueForExpirationFn: func(_ context.Context, now time.Time) ([]*model.Reservation, error) {
@@ -411,8 +437,17 @@ func TestReapExpired_FlipsOverdueRowsAndPublishes(t *testing.T) {
 			return r, nil
 		},
 	}
+	catalog := &mockCatalog{
+		updateAvailabilityFn: func(_ context.Context, in *catalogv1.UpdateAvailabilityRequest, _ ...grpc.CallOption) (*catalogv1.UpdateAvailabilityResponse, error) {
+			if in.Id != bookID.String() {
+				t.Errorf("expected book id %s, got %s", bookID, in.Id)
+			}
+			deltas = append(deltas, in.Delta)
+			return &catalogv1.UpdateAvailabilityResponse{}, nil
+		},
+	}
 
-	svc := service.NewReservationService(repo, nil, nil, pub, 5)
+	svc := service.NewReservationService(repo, catalog, nil, pub, 5)
 	svc.ReapExpired(context.Background())
 
 	if listCalledWith.IsZero() {
@@ -428,6 +463,9 @@ func TestReapExpired_FlipsOverdueRowsAndPublishes(t *testing.T) {
 	// fall back to the reservation's own UserID.
 	if pub.events[0].UserID != userID.String() {
 		t.Errorf("expected event UserID %s, got %s", userID, pub.events[0].UserID)
+	}
+	if len(deltas) != 1 || deltas[0] != 1 {
+		t.Fatalf("expected one availability increment, got %v", deltas)
 	}
 }
 

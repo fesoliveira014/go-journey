@@ -177,7 +177,7 @@ Copy the role ARN. You will store it as a GitHub Actions variable (not a secretâ
 
 ## Updated workflow: main.yml
 
-The updated workflow preserves the existing `ci` and `build-and-push` jobs unchanged and adds a `deploy` job that runs after a successful build. The image promotion strategy is deliberate: the `build-and-push` job already built and pushed to GHCR. Rather than rebuilding, the deploy job pulls from GHCR and re-tags for ECR. This avoids double-building, ensures ECR contains exactly the same layer digests as GHCR, and keeps the ECR push atomic with the deployment.
+The Chapter 10 workflow already has `ci`, `integration-test`, `build-and-push`, and a disabled `deploy` stub (`if: false`). In this chapter, after the AWS infrastructure exists, you remove `if: false` and fill in the deployment steps. The image promotion strategy is deliberate: the `build-and-push` job already built and pushed to GHCR. Rather than rebuilding, the deploy job pulls from GHCR and re-tags for ECR. This avoids double-building, ensures ECR contains exactly the same layer digests as GHCR, and keeps the ECR push atomic with the deployment.
 
 ```yaml
 # .github/workflows/main.yml
@@ -203,8 +203,20 @@ jobs:
       - name: Run CI
         run: earthly +ci
 
-  build-and-push:
+  integration-test:
     needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Earthly
+        uses: earthly/actions-setup@v1
+        with:
+          version: v0.8.15
+      - name: Run integration tests
+        run: earthly -P +integration-test
+
+  build-and-push:
+    needs: [ci, integration-test]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -228,6 +240,8 @@ jobs:
   deploy:
     needs: build-and-push
     runs-on: ubuntu-latest
+    # Chapter 10 had if: false here. Remove it only after Terraform has
+    # created the ECR repositories, EKS cluster, and GitHub OIDC role.
     environment: production  # Requires manual approval if configured
     env:
       AWS_REGION: ${{ vars.AWS_REGION }}

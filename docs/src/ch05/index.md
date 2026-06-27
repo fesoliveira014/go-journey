@@ -1,5 +1,11 @@
 # Chapter 5: Gateway & Frontend
 
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-05-start`
+> End state: `git checkout chapter-05-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
 Until now, the only way to interact with the library system has been through `grpcurl` or a gRPC client library. That works for service-to-service communication, but end users need a browser-friendly interface. In this chapter, we build a **Gateway Service**—an HTTP server that renders HTML pages and delegates all business logic to the Auth and Catalog gRPC services behind it. This is the Backend-for-Frontend (BFF) pattern: a thin, presentation-focused layer tailored to a single client type (the browser).
 
 ## Architecture Overview

@@ -190,7 +190,7 @@ The gateway Dockerfile follows the same multi-stage pattern from Chapter 3, with
 # services/gateway/Dockerfile
 
 # Stage 1: Build
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26-alpine AS builder
 WORKDIR /app
 ENV GOWORK=off
 

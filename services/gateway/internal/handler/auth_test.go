@@ -18,9 +18,9 @@ import (
 
 // mockAuthClient implements authv1.AuthServiceClient for testing.
 type mockAuthClient struct {
-	loginFn        func(ctx context.Context, in *authv1.LoginRequest, opts ...grpc.CallOption) (*authv1.AuthResponse, error)
-	registerFn     func(ctx context.Context, in *authv1.RegisterRequest, opts ...grpc.CallOption) (*authv1.AuthResponse, error)
-	initOAuth2Fn   func(ctx context.Context, in *authv1.InitOAuth2Request, opts ...grpc.CallOption) (*authv1.InitOAuth2Response, error)
+	loginFn          func(ctx context.Context, in *authv1.LoginRequest, opts ...grpc.CallOption) (*authv1.AuthResponse, error)
+	registerFn       func(ctx context.Context, in *authv1.RegisterRequest, opts ...grpc.CallOption) (*authv1.AuthResponse, error)
+	initOAuth2Fn     func(ctx context.Context, in *authv1.InitOAuth2Request, opts ...grpc.CallOption) (*authv1.InitOAuth2Response, error)
 	completeOAuth2Fn func(ctx context.Context, in *authv1.CompleteOAuth2Request, opts ...grpc.CallOption) (*authv1.AuthResponse, error)
 }
 
@@ -173,6 +173,37 @@ func TestLoginSubmit_Success(t *testing.T) {
 	}
 	if sessionCookie.Value != "tok-abc" {
 		t.Errorf("expected session token %q, got %q", "tok-abc", sessionCookie.Value)
+	}
+}
+
+func TestLoginSubmit_SecureCookieOption(t *testing.T) {
+	t.Parallel()
+	mock := &mockAuthClient{
+		loginFn: func(_ context.Context, _ *authv1.LoginRequest, _ ...grpc.CallOption) (*authv1.AuthResponse, error) {
+			return &authv1.AuthResponse{Token: "tok-abc"}, nil
+		},
+	}
+	srv := handler.New(mock, nil, nil, nil, loginTemplates(t), handler.WithSecureCookies(true))
+
+	form := url.Values{"email": {"user@example.com"}, "password": {"secret"}}
+	req := httptest.NewRequest(http.MethodPost, "/login", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	rec := httptest.NewRecorder()
+
+	srv.LoginSubmit(rec, req)
+
+	var sessionCookie *http.Cookie
+	for _, c := range rec.Result().Cookies() {
+		if c.Name == "session" {
+			sessionCookie = c
+			break
+		}
+	}
+	if sessionCookie == nil {
+		t.Fatal("expected session cookie")
+	}
+	if !sessionCookie.Secure {
+		t.Fatal("expected Secure flag on session cookie")
 	}
 }
 

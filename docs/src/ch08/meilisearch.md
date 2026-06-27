@@ -524,6 +524,34 @@ task, err := client.WaitForTask(taskInfo.TaskUID)
 
 ---
 
+## Bootstrap Is Not Reconciliation
+
+The Search service bootstraps from Catalog only when the Meilisearch index is empty:
+
+```go
+count, err := svc.Count(ctx)
+if err != nil {
+    return err
+}
+if count > 0 {
+    log.Printf("search index already has %d documents, skipping bootstrap", count)
+    return nil
+}
+```
+
+That behavior keeps local startup cheap, but it does not repair a partially populated or stale index. If the service indexed the first 100 books, crashed, then restarted, `count > 0` would skip bootstrap even though the index is incomplete. The same gap appears when Catalog logs and continues after a Kafka publish failure: the book write can succeed while Search misses the event.
+
+Production systems usually add at least one repair path:
+
+- A `search resync` CLI or admin job that clears and rebuilds the index from Catalog.
+- A scheduled reconciliation job that compares Catalog and Search counts, then replays missing records.
+- A startup mode such as `SEARCH_BOOTSTRAP_MODE=always|if_empty|disabled`.
+- A transactional outbox plus replayable event log so missed events can be republished safely.
+
+The invariant is simple: Search is a projection, not the source of truth. If it drifts, you should be able to rebuild it from Catalog.
+
+---
+
 ## Exercises
 
 1. **Add a year range filter.** Extend `SearchFilters` with `MinYear` and `MaxYear` fields. Update `buildFilterString` to generate Meilisearch filter expressions like `published_year >= 2020 AND published_year <= 2025`. Remember to add `published_year` to the filterable attributes in `EnsureIndex`.

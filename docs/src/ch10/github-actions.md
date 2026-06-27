@@ -61,6 +61,10 @@ on:
   pull_request:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   ci:
     runs-on: ubuntu-latest
@@ -72,6 +76,18 @@ jobs:
           version: v0.8.15
       - name: Run CI
         run: earthly +ci
+
+  integration-test:
+    needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Earthly
+        uses: earthly/actions-setup@v1
+        with:
+          version: v0.8.15
+      - name: Run integration tests
+        run: earthly -P +integration-test
 ```
 
 Walking through each part:
@@ -88,6 +104,10 @@ Walking through each part:
 
 **`run: earthly +ci`**—Calls the `+ci` target defined in the Earthfile. That target runs lint and tests. All the build logic is there; the workflow does not know or care what `+ci` does internally.
 
+**`integration-test` job**—Runs `earthly -P +integration-test` after fast CI passes. The `-P` flag enables privileged Earthly mode, which the Testcontainers-based integration tests need so they can start Docker containers from inside the build. Keeping this as a separate job makes the quick feedback path visible while still blocking merges when integration tests fail.
+
+The PR workflow intentionally does not request `id-token: write`. The Terraform plan job shown later in Chapter 13 is commented out by default; when you enable it, add OIDC permission back as part of that change.
+
 ### Why a Separate Workflow for PRs?
 
 PRs need validation but not publishing. If you ran the full pipeline (including pushing Docker images) on every PR update, you would push dozens of images for in-progress work—most of them from branches that never merge. Container registries charge for storage; image tags accumulate noise. Separating the workflows keeps the registry clean: only commits that land on `main` produce published images.
@@ -103,7 +123,7 @@ If you did not use Earthly, the same CI job would look like this:
 >   - uses: actions/checkout@v4
 >   - uses: actions/setup-go@v5
 >     with:
->       go-version: '1.22'
+>       go-version: '1.26'
 >   - uses: golangci/golangci-lint-action@v6
 >   - run: go test ./...
 > ```
@@ -125,6 +145,7 @@ on:
 permissions:
   contents: read
   packages: write
+  id-token: write  # Used by the disabled Chapter 13 deploy job
 
 jobs:
   ci:
@@ -138,8 +159,20 @@ jobs:
       - name: Run CI
         run: earthly +ci
 
-  build-and-push:
+  integration-test:
     needs: ci
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Earthly
+        uses: earthly/actions-setup@v1
+        with:
+          version: v0.8.15
+      - name: Run integration tests
+        run: earthly -P +integration-test
+
+  build-and-push:
+    needs: [ci, integration-test]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -159,6 +192,15 @@ jobs:
           tags: |
             ghcr.io/${{ github.repository }}/${{ matrix.service }}:sha-${{ github.sha }}
             ghcr.io/${{ github.repository }}/${{ matrix.service }}:latest
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    if: false
+    environment: production
+    steps:
+      - uses: actions/checkout@v4
+      # Chapter 13 removes if: false after AWS infrastructure exists.
 ```
 
 ### Trigger
@@ -171,11 +213,14 @@ jobs:
 permissions:
   contents: read
   packages: write
+  id-token: write
 ```
 
-By default, `GITHUB_TOKEN` (the automatically provisioned token for each workflow run) has broad permissions. Declaring permissions explicitly follows the principle of least privilege: this workflow needs to read the repository (`contents: read`) and push to the GitHub Container Registry (`packages: write`). Nothing else. If an attacker compromises a step in this workflow, the token cannot create releases, modify secrets, or push to other registries.[^2]
+By default, `GITHUB_TOKEN` (the automatically provisioned token for each workflow run) has broad permissions. Declaring permissions explicitly follows the principle of least privilege: this workflow needs to read the repository (`contents: read`) and push to the GitHub Container Registry (`packages: write`). It also declares `id-token: write` for the disabled deploy job introduced in Chapter 13. If you remove that job, remove the permission too.
 
 `packages: write` is specifically required for GHCR (GitHub Container Registry, `ghcr.io`). Without it, the `docker/login-action` step authenticates successfully but the push step is rejected with a 403.
+
+`id-token: write` is only required for OIDC federation with AWS. Chapter 10 leaves deployment disabled with `if: false`; Chapter 13 provisions AWS infrastructure and then removes that guard.
 
 If you come from Jenkins, this maps to credentials binding—scoping the available credentials to exactly what the job needs.
 
@@ -185,7 +230,7 @@ Identical to the PR workflow. The same lint and test checks run on `main` even a
 
 ### The `build-and-push` Job
 
-**`needs: ci`**—This job only starts if the `ci` job succeeds. If lint or tests fail on `main`, no images are published. `needs:` creates an explicit dependency between jobs; without it, jobs run in parallel from the start.[^3]
+**`needs: [ci, integration-test]`**—This job only starts if both fast CI and integration tests succeed. If lint, unit tests, or Testcontainers-based integration tests fail on `main`, no images are published. `needs:` creates an explicit dependency between jobs; without it, jobs run in parallel from the start.[^3]
 
 **`strategy: matrix: service: [auth, catalog, gateway, reservation, search]`**—This is a matrix build. GitHub Actions creates one job instance per matrix value and runs all five in parallel. Each instance has access to `${{ matrix.service }}`, which resolves to one of the five service names.
 

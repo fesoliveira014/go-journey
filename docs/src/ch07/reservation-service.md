@@ -164,7 +164,7 @@ func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.
     }
 
     // Rule 2: ask catalog to atomically decrement available_copies. Catalog's
-    // guarded UPDATE (WHERE available_copies + ? >= 0) is the single source
+    // guarded UPDATE (available_copies + ? BETWEEN 0 AND total_copies) is the single source
     // of truth for "is a copy available?" — no in-service pre-check.
     if _, err := s.catalog.UpdateAvailability(ctx, &catalogv1.UpdateAvailabilityRequest{
         Id:    bookID.String(),
@@ -222,7 +222,7 @@ It is also **wrong** under concurrency—this is a textbook [time-of-check-to-ti
 
 The fix flips the flow so that the **database** is the gate, not the service:
 
-1. `catalog.UpdateAvailability(book, -1)` runs a guarded `UPDATE` that refuses to go below zero (`WHERE available_copies + ? >= 0`). PostgreSQL's row-level locking during `UPDATE` serializes the two racing decrements—one wins, the other gets zero rows affected and returns `FailedPrecondition`.
+1. `catalog.UpdateAvailability(book, -1)` runs a guarded `UPDATE` that refuses to go below zero or above `total_copies` (`WHERE available_copies + ? BETWEEN 0 AND total_copies`). PostgreSQL's row-level locking during `UPDATE` serializes the two racing decrements—one wins, the other gets zero rows affected and returns `FailedPrecondition`.
 2. Only after the decrement succeeds do we create the reservation row.
 3. If the reservation insert then fails (database down, constraint violation, context cancelled), we compensate with `UpdateAvailability(+1)` so catalog's counter does not drift. The compensation is best-effort—if it also fails, the counter will stay off by one until operator reconciliation or a separate job fixes it. The expiration reaper (see _Expiring reservations_) cannot heal this gap on its own: it only expires existing reservation rows, so an orphaned decrement with no paired row is never reconciled by the reaper.
 
@@ -324,7 +324,7 @@ func (s *ReservationService) ReapExpired(ctx context.Context) {
 }
 ```
 
-Both paths route through the same `expireReservation` helper, which flips the row, saves it, and publishes the `reservation.expired` event that the catalog's consumer picks up to increment availability. Keeping the write logic in one place means the two paths cannot disagree about what "expired" means or forget to publish.
+Both paths route through the same `expireReservation` helper, which flips the row, saves it, calls Catalog's `UpdateAvailability(+1)` command, and publishes the `reservation.expired` event for downstream observers. Keeping the write logic in one place means the two paths cannot disagree about what "expired" means or forget to release the copy.
 
 The reaper is wired into `cmd/main.go` as a goroutine that shares the service's signal-aware context, so it stops cleanly on `SIGTERM`:
 

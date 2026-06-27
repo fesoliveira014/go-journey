@@ -12,6 +12,14 @@ All three services share a single `Init` function that configures the OTel SDK. 
 // pkg/otel/otel.go
 
 func Init(ctx context.Context, serviceName, serviceVersion, collectorEndpoint string) (func(context.Context) error, error) {
+    if collectorEndpoint == "" {
+        otelgo.SetTracerProvider(nooptrace.NewTracerProvider())
+        otelgo.SetMeterProvider(noopmetric.NewMeterProvider())
+        otelgo.SetTextMapPropagator(propagation.TraceContext{})
+        slog.SetDefault(slog.New(NewTraceLogHandler(os.Stdout)))
+        return func(context.Context) error { return nil }, nil
+    }
+
     res, err := resource.New(ctx,
         resource.WithAttributes(
             semconv.ServiceNameKey.String(serviceName),
@@ -70,6 +78,8 @@ func Init(ctx context.Context, serviceName, serviceVersion, collectorEndpoint st
 ```
 
 Let us walk through each piece.
+
+If `collectorEndpoint` is empty, `Init` deliberately installs no-op tracer and meter providers. Local services keep running with the same instrumentation calls, but no spans or metrics are exported until `OTEL_COLLECTOR_ENDPOINT` is configured. This is useful for simple local runs where you do not want to start the Grafana stack.
 
 ### Resource
 
@@ -331,13 +341,13 @@ This is the asynchronous equivalent of what `otelhttp` and `otelgrpc` do for syn
 
 ## Custom Metrics: The Book Counter
 
-Beyond auto-instrumented metrics (HTTP latency, gRPC duration), we add one custom metric: `catalog.books.total`, an `Int64UpDownCounter` that tracks how many books exist in the catalog.
+Beyond auto-instrumented metrics (HTTP latency, gRPC duration), we add one custom metric: `catalog.books.total`, an `Int64UpDownCounter` that tracks book-count changes made by this process.
 
 ```go
 // services/catalog/internal/service/catalog.go
 
 var bookCounter, _ = otelgo.Meter("catalog").Int64UpDownCounter("catalog.books.total",
-    metric.WithDescription("Total number of books in the catalog"),
+    metric.WithDescription("Book count delta recorded by this catalog process"),
 )
 ```
 
@@ -359,9 +369,11 @@ func (s *CatalogService) DeleteBook(ctx context.Context, id uuid.UUID) error {
 }
 ```
 
-An `UpDownCounter` (as opposed to a regular `Counter`) can decrease. Regular counters are monotonically increasing—they only go up or reset. An UpDownCounter models values that naturally go up and down, like queue depth or, in our case, the number of books.
+An `UpDownCounter` (as opposed to a regular `Counter`) can decrease. Regular counters are monotonically increasing—they only go up or reset. An UpDownCounter models values that naturally go up and down, like queue depth or, in our case, the number of books created and deleted through this process since it started.
 
 In Micrometer, this would be a `Gauge` backed by an `AtomicLong`. The semantics are similar, but OTel distinguishes between "gauge" (a value you *observe*, like CPU temperature) and "UpDownCounter" (a value you *add to*). The distinction matters for backends that handle push vs. pull metrics differently.
+
+This metric is intentionally not a durable absolute total. If the service restarts, the in-process counter starts from zero, and if another replica handles a write, this process does not see that delta. A production "current book total" metric should be an observable gauge that queries the repository or a reporting projection.
 
 ---
 

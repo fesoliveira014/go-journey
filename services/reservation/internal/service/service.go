@@ -106,8 +106,9 @@ func (s *ReservationService) ListAllReservations(ctx context.Context) ([]Reserva
 //
 // If the reservation row fails to persist after the decrement, we compensate
 // with an increment so catalog's counter does not drift. The compensation is
-// best-effort and logged — the expiration reaper (see RunExpirationReaper)
-// provides the backstop for any drift that escapes here.
+// best-effort and logged. If that compensation also fails, there is no
+// reservation row for the expiration reaper to find; production systems need
+// an outbox/reconciliation path for that class of drift.
 func (s *ReservationService) CreateReservation(ctx context.Context, bookID uuid.UUID) (*model.Reservation, error) {
 	userID, err := pkgauth.UserIDFromContext(ctx)
 	if err != nil {
@@ -204,6 +205,8 @@ func (s *ReservationService) ReturnBook(ctx context.Context, reservationID uuid.
 		return nil, fmt.Errorf("update reservation: %w", err)
 	}
 
+	s.restoreAvailability(ctx, updated.BookID, "reservation.returned", updated.ID)
+
 	if err := s.publisher.Publish(ctx, ReservationEvent{
 		Type:          "reservation.returned",
 		ReservationID: updated.ID.String(),
@@ -265,10 +268,10 @@ func (s *ReservationService) expireIfDue(ctx context.Context, r *model.Reservati
 	s.expireReservation(ctx, r)
 }
 
-// expireReservation flips the row to 'expired', persists it, and publishes
-// the event. Caller must have already decided expiration is appropriate.
-// On DB failure the in-memory status is reverted so the caller does not
-// show stale data to the user.
+// expireReservation flips the row to 'expired', persists it, restores catalog
+// availability, and publishes the event. Caller must have already decided
+// expiration is appropriate. On DB failure the in-memory status is reverted
+// so the caller does not show stale data to the user.
 func (s *ReservationService) expireReservation(ctx context.Context, r *model.Reservation) {
 	previousStatus := r.Status
 	r.Status = model.StatusExpired
@@ -278,10 +281,12 @@ func (s *ReservationService) expireReservation(ctx context.Context, r *model.Res
 		return
 	}
 
+	s.restoreAvailability(ctx, r.BookID, "reservation.expired", r.ID)
+
 	// The reaper runs with a background context that has no user attached,
 	// so UserIDFromContext may fail — fall back to the reservation's own
-	// UserID so consumers downstream (e.g. catalog) can still route the
-	// availability increment correctly.
+	// UserID so downstream audit/notification consumers can still associate
+	// the event with the original holder.
 	var userIDStr string
 	if uid, err := pkgauth.UserIDFromContext(ctx); err == nil {
 		userIDStr = uid.String()
@@ -297,6 +302,21 @@ func (s *ReservationService) expireReservation(ctx context.Context, r *model.Res
 		Timestamp:     time.Now(),
 	}); err != nil {
 		slog.ErrorContext(ctx, "failed to publish event", "event", "reservation.expired", "reservation_id", r.ID, "error", err)
+	}
+}
+
+func (s *ReservationService) restoreAvailability(ctx context.Context, bookID uuid.UUID, reason string, reservationID uuid.UUID) {
+	if s.catalog == nil {
+		slog.ErrorContext(ctx, "catalog client missing; cannot restore availability",
+			"event", reason, "reservation_id", reservationID, "book_id", bookID)
+		return
+	}
+	if _, err := s.catalog.UpdateAvailability(ctx, &catalogv1.UpdateAvailabilityRequest{
+		Id:    bookID.String(),
+		Delta: 1,
+	}); err != nil {
+		slog.ErrorContext(ctx, "failed to restore catalog availability",
+			"event", reason, "reservation_id", reservationID, "book_id", bookID, "error", err)
 	}
 }
 

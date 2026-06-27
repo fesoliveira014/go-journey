@@ -1,5 +1,11 @@
 # Chapter 10: CI/CD with GitHub Actions & Earthly
 
+> **Chapter checkpoint**
+> Start from: `git checkout chapter-10-start`
+> End state: `git checkout chapter-10-end`
+>
+> Chapter snippets are point-in-time snapshots. Later chapters intentionally change the same files.
+
 In this chapter, we build a production-grade CI/CD pipeline for the library system. Rather than scripting builds directly in YAML, we put all build logic in Earthly targets—portable and cacheable—and use GitHub Actions purely for triggering and orchestration. The result is a pipeline that runs identically on your laptop and in CI.
 
 ## What You'll Learn

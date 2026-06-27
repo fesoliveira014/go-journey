@@ -3,6 +3,7 @@
 <h1>Login</h1>
 {{if .Data.Error}}<p class="form-error">{{.Data.Error}}</p>{{end}}
 <form method="POST" action="/login" class="auth-form">
+    <input type="hidden" name="_csrf" value="{{.CSRFToken}}">
     <label for="email">Email</label>
     <input type="email" name="email" id="email" value="{{if .Data.Email}}{{.Data.Email}}{{end}}" required>
     <label for="password">Password</label>

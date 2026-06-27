@@ -92,7 +92,7 @@ Key settings:
 Here is `services/catalog/Dockerfile.dev`:
 
 ```dockerfile
-FROM golang:1.22-alpine
+FROM golang:1.26-alpine
 
 RUN go install github.com/air-verse/air@latest
 
@@ -125,7 +125,7 @@ The `COPY` lines for `gen/`, `pkg/auth/`, and `pkg/otel/` mirror the production 
 The Gateway's `Dockerfile.dev` follows the same pattern, since the gateway also imports from `gen/`, `pkg/auth/`, and `pkg/otel/`:
 
 ```dockerfile
-FROM golang:1.22-alpine
+FROM golang:1.26-alpine
 
 RUN go install github.com/air-verse/air@latest
 
