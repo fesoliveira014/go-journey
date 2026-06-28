@@ -263,8 +263,8 @@ resources:
 
 # Images from ECR with explicit tags:
 # images:
-#   - name: library/catalog
-#     newName: 123456789.dkr.ecr.eu-west-1.amazonaws.com/library/catalog
+#   - name: library-system/catalog
+#     newName: 123456789.dkr.ecr.eu-west-1.amazonaws.com/library-system/catalog
 #     newTag: v1.2.0
 ```
 
@@ -275,7 +275,7 @@ Each commented section maps to a concrete problem:
 - **Replica patches**—a JSON patch on `spec.replicas` sets each service's replica count independently.
 - **imagePullPolicy**—`IfNotPresent` is correct for kind (which loads images locally); `Always` is correct for ECR (which holds canonical tagged releases).
 - **RDS endpoint**—managed PostgreSQL replaces the in-cluster StatefulSet in production. A patch replaces the Service with an ExternalName Service pointing to the RDS endpoint.
-- **Image references**—the `images` block rewrites image names and tags without touching the base manifests. All Deployments referencing `library/catalog` will use the ECR URI and the release tag.
+- **Image references**—the `images` block rewrites image names and tags without touching the base manifests. All Deployments referencing `library-system/catalog` will use the ECR URI and the release tag.
 
 ---
 

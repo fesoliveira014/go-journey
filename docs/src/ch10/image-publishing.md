@@ -13,7 +13,7 @@ This project pushes two tags per image on every `main` build.
 ### `latest`—Mutable, Convenient, Dangerous in Production
 
 ```
-ghcr.io/myorg/library/catalog:latest
+ghcr.io/myorg/library-system/catalog:latest
 ```
 
 `latest` always points to the most recent build. It is what you get when you `docker pull` without specifying a tag. This is convenient during local development—`docker compose pull` fetches the newest image without needing to know a specific identifier.
@@ -27,7 +27,7 @@ Avoid `latest` for: production deployments, Kubernetes manifests committed to ve
 ### `sha-<commit>`—Immutable, Traceable, Production-Safe
 
 ```
-ghcr.io/myorg/library/catalog:sha-a3f8c21b9d04e6f1c7b8d3a5e2f9c0d1b4a7e8f2
+ghcr.io/myorg/library-system/catalog:sha-a3f8c21b9d04e6f1c7b8d3a5e2f9c0d1b4a7e8f2
 ```
 
 The `sha-<commit>` tag is constructed from `sha-` plus the full 40-character Git SHA (`${{ github.sha }}`). It is immutable: once pushed, the tag is never updated. Given a running container, you can:
@@ -52,10 +52,10 @@ GHCR is GitHub's built-in Docker registry, available at `ghcr.io`.[^1] Images li
 ghcr.io/<github-owner>/<github-repo>/<service-name>:<tag>
 ```
 
-For example, if the repo is `acme-corp/library`, the catalog image is:
+For example, if the repo is `acme-corp/library-system`, the catalog image is:
 
 ```
-ghcr.io/acme-corp/library/catalog:latest
+ghcr.io/acme-corp/library-system/catalog:latest
 ```
 
 ### Authentication via `GITHUB_TOKEN`
@@ -163,15 +163,15 @@ docker:
     COPY +build/catalog /usr/local/bin/catalog
     EXPOSE 50052
     ENTRYPOINT ["/usr/local/bin/catalog"]
-    SAVE IMAGE catalog:latest
+    SAVE IMAGE library-system/catalog:latest
 ```
 
-Running `earthly ./services/catalog+docker` locally produces a `catalog:latest` image you can load into Docker and test with Docker Compose. The build logic is identical to what the Dockerfile does, and it benefits from Earthly's layer caching for fast iteration.
+Running `earthly ./services/catalog+docker` locally produces a `library-system/catalog:latest` image you can load into Docker, kind, or Docker Compose. The build logic is identical to what the Dockerfile does, and it benefits from Earthly's layer caching for fast iteration.
 
 The Earthly alternative for publishing is:
 
 ```bash
-earthly --push ./services/catalog+docker --image ghcr.io/myorg/library/catalog:sha-abc123
+earthly --push ./services/catalog+docker --image ghcr.io/myorg/library-system/catalog:sha-abc123
 ```
 
 This works, but it bypasses GHA's provenance features and requires manual secret injection for registry authentication. For a team project, the docker actions are a better fit.

@@ -279,7 +279,7 @@ jobs:
           SERVICES=(auth catalog gateway reservation search)
           for SERVICE in "${SERVICES[@]}"; do
             GHCR_IMAGE="ghcr.io/${{ github.repository }}/${SERVICE}:${IMAGE_TAG}"
-            ECR_IMAGE="${ECR_REGISTRY}/library/${SERVICE}:${IMAGE_TAG}"
+            ECR_IMAGE="${ECR_REGISTRY}/library-system/${SERVICE}:${IMAGE_TAG}"
 
             docker pull "${GHCR_IMAGE}"
             docker tag  "${GHCR_IMAGE}" "${ECR_IMAGE}"
@@ -312,7 +312,7 @@ jobs:
           SERVICES=(auth catalog gateway reservation search)
           for SERVICE in "${SERVICES[@]}"; do
             kustomize edit set image \
-              "library/${SERVICE}=${ECR_REGISTRY}/library/${SERVICE}:${IMAGE_TAG}"
+              "library-system/${SERVICE}=${ECR_REGISTRY}/library-system/${SERVICE}:${IMAGE_TAG}"
           done
 
       # Apply the production overlay. kubectl apply -k is equivalent to
@@ -434,7 +434,7 @@ kubectl get deployment catalog -n library \
 # Force a deployment to a specific previous image
 # (bypasses the pipeline; use for emergency recovery only)
 kubectl set image deployment/catalog \
-  catalog=123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog:sha-abc1234 \
+  catalog=123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/catalog:sha-abc1234 \
   --namespace library
 ```
 

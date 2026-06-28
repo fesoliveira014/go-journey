@@ -134,7 +134,7 @@ Docker can only access files within the build context—the directory you pass t
 The solution: run the build from the repository root and specify the Dockerfile path:
 
 ```bash
-docker build -f services/catalog/Dockerfile -t catalog:latest .
+docker build -f services/catalog/Dockerfile -t library-system/catalog:latest .
 ```
 
 Or equivalently, in `docker-compose.yml`:
@@ -238,16 +238,16 @@ Build both images from the repository root:
 
 ```bash
 # Build the catalog image
-docker build -f services/catalog/Dockerfile -t catalog:latest .
+docker build -f services/catalog/Dockerfile -t library-system/catalog:latest .
 
 # Build the gateway image
-docker build -f services/gateway/Dockerfile -t gateway:latest .
+docker build -f services/gateway/Dockerfile -t library-system/gateway:latest .
 ```
 
 Run the gateway standalone:
 
 ```bash
-docker run --rm -p 8080:8080 gateway:latest
+docker run --rm -p 8080:8080 library-system/gateway:latest
 ```
 
 `--rm` removes the container when it exits (cleanup). `-p 8080:8080` maps host port 8080 to container port 8080. You should see the Gateway's startup log. Test it:
@@ -264,8 +264,8 @@ The Catalog service is harder to run standalone because it needs PostgreSQL. Tha
 
 1. From the repository root, build both Docker images:
    ```bash
-   docker build -f services/catalog/Dockerfile -t catalog:latest .
-   docker build -f services/gateway/Dockerfile -t gateway:latest .
+   docker build -f services/catalog/Dockerfile -t library-system/catalog:latest .
+   docker build -f services/gateway/Dockerfile -t library-system/gateway:latest .
    ```
 
 2. Check the image sizes:
@@ -275,7 +275,7 @@ The Catalog service is harder to run standalone because it needs PostgreSQL. Tha
 
 3. Run the gateway container and test it with `curl`:
    ```bash
-   docker run --rm -p 8080:8080 gateway:latest
+   docker run --rm -p 8080:8080 library-system/gateway:latest
    # In another terminal:
    curl http://localhost:8080/healthz
    ```
@@ -296,7 +296,7 @@ gateway   latest   def456   12MB
 Running the gateway:
 
 ```bash
-$ docker run --rm -p 8080:8080 gateway:latest
+$ docker run --rm -p 8080:8080 library-system/gateway:latest
 # Gateway starts and listens on :8080
 $ curl http://localhost:8080/healthz
 # Returns 200 OK (or whatever the health endpoint returns)
@@ -305,7 +305,7 @@ $ curl http://localhost:8080/healthz
 Running the catalog:
 
 ```bash
-$ docker run --rm -p 50052:50052 catalog:latest
+$ docker run --rm -p 50052:50052 library-system/catalog:latest
 # The service will fail to start (or start and crash) because it cannot
 # connect to PostgreSQL. The DATABASE_URL environment variable is not set,
 # and even if it were, there is no PostgreSQL server reachable from the

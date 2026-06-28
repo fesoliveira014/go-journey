@@ -30,7 +30,7 @@ locals {
 resource "aws_ecr_repository" "services" {
   for_each = toset(local.services)
 
-  name                 = "library/${each.key}"
+  name                 = "library-system/${each.key}"
   image_tag_mutability = "MUTABLE"
 
   image_scanning_configuration {
@@ -96,8 +96,8 @@ The lifecycle policy has two rules, evaluated in priority order. Rule 1 expires 
 ECR uses the same two-tag strategy from Chapter 10: `sha-<commit>` and `latest`. The full image URI changes to reflect the ECR endpoint:
 
 ```
-<account-id>.dkr.ecr.<region>.amazonaws.com/library/catalog:sha-abc1234
-<account-id>.dkr.ecr.<region>.amazonaws.com/library/catalog:latest
+<account-id>.dkr.ecr.<region>.amazonaws.com/library-system/catalog:sha-abc1234
+<account-id>.dkr.ecr.<region>.amazonaws.com/library-system/catalog:latest
 ```
 
 The account ID and region make ECR URIs more verbose than GHCR equivalents, but the semantics are identical. `sha-<commit>` is immutable and production-safe; `latest` is mutable and convenient for local pulls.
@@ -107,12 +107,12 @@ In Kubernetes manifests committed to the GitOps repository, always use `sha-<com
 ```yaml
 # k8s/overlays/production/kustomization.yaml
 images:
-  - name: catalog
-    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog
+  - name: library-system/catalog
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/catalog
     newTag: sha-abc1234f
 ```
 
-This keeps the base manifests portable—they reference short names like `catalog`—while the production overlay injects the environment-specific registry and tag. A CI job updates `newTag` in this file as part of the deploy pipeline, committing the change to trigger a GitOps reconciliation.
+This keeps the base manifests portable—they reference local names like `library-system/catalog`—while the production overlay injects the environment-specific registry and tag. A CI job updates `newTag` in this file as part of the deploy pipeline, committing the change to trigger a GitOps reconciliation.
 
 ---
 
@@ -133,11 +133,11 @@ After `terraform apply`, the output looks like:
 
 ```
 ecr_repository_urls = {
-  "auth"        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library/auth"
-  "catalog"     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog"
-  "gateway"     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library/gateway"
-  "reservation" = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library/reservation"
-  "search"      = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library/search"
+  "auth"        = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/auth"
+  "catalog"     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/catalog"
+  "gateway"     = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/gateway"
+  "reservation" = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/reservation"
+  "search"      = "123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/search"
 }
 ```
 

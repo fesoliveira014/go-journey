@@ -26,11 +26,13 @@ COPY services/search/ ./services/search/
 # 4. Build static binary
 WORKDIR /app/services/search
 RUN CGO_ENABLED=0 go build -o /bin/search ./cmd/
+RUN CGO_ENABLED=0 go build -o /bin/search-reindex ./cmd/reindex/
 
 # Stage 2: Runtime
 FROM alpine:3.19
 RUN apk add --no-cache ca-certificates && addgroup -S app && adduser -S app -G app
 COPY --from=builder /bin/search /usr/local/bin/search
+COPY --from=builder /bin/search-reindex /usr/local/bin/search-reindex
 USER app
 EXPOSE 50054
 ENTRYPOINT ["/usr/local/bin/search"]

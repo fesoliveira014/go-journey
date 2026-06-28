@@ -274,7 +274,7 @@ With the health server registered, configure probes in the Deployment spec for e
 ```yaml
 containers:
   - name: catalog
-    image: catalog:latest
+    image: library-system/catalog:latest
     ports:
       - containerPort: 50052
     livenessProbe:
@@ -303,7 +303,7 @@ The gateway already has a `/healthz` endpoint (registered as `mux.HandleFunc("GE
 ```yaml
 containers:
   - name: gateway
-    image: gateway:latest
+    image: library-system/gateway:latest
     ports:
       - containerPort: 8080
     livenessProbe:

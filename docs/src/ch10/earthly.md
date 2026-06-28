@@ -115,7 +115,7 @@ docker:
     COPY +build/catalog /usr/local/bin/catalog
     EXPOSE 50052
     ENTRYPOINT ["/usr/local/bin/catalog"]
-    SAVE IMAGE catalog:latest
+    SAVE IMAGE library-system/catalog:latest
 ```
 
 ### `deps`—Dependency Layer
@@ -220,14 +220,14 @@ docker:
     COPY +build/catalog /usr/local/bin/catalog
     EXPOSE 50052
     ENTRYPOINT ["/usr/local/bin/catalog"]
-    SAVE IMAGE catalog:latest
+    SAVE IMAGE library-system/catalog:latest
 ```
 
 This target starts fresh from `alpine:3.19`—not from `+src`. The Go toolchain, module cache, and source code are not needed at runtime. The final image contains only the Alpine base and the compiled binary. This keeps the image small (typically under 20 MB for a static Go binary on Alpine) and reduces the attack surface.
 
 `COPY +build/catalog /usr/local/bin/catalog` pulls the artifact saved by the `build` target into this container. This is Earthly's artifact reference syntax: `+targetname/path`.
 
-`SAVE IMAGE catalog:latest` tags the container image. You can push it with `earthly --push +docker`, which runs the target and pushes the resulting image to a registry.
+`SAVE IMAGE library-system/catalog:latest` tags the container image with the same name the Kubernetes manifests reference. You can push it with `earthly --push +docker`, which runs the target and pushes the resulting image to a registry.
 
 ---
 
@@ -278,7 +278,7 @@ docker:
     COPY +src/static /app/static
     EXPOSE 8080
     ENTRYPOINT ["/usr/local/bin/gateway"]
-    SAVE IMAGE gateway:latest
+    SAVE IMAGE library-system/gateway:latest
 ```
 
 The gateway's `test` target differs from the other services. The `-race` flag enables the Go race detector, which requires cgo. On Alpine, cgo needs `gcc` and `musl-dev` installed, plus `CGO_ENABLED=1` explicitly set. The other services skip the race detector and run with `CGO_ENABLED=0` by default.

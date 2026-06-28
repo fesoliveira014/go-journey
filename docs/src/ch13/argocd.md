@@ -109,7 +109,7 @@ When the CI pipeline builds and pushes a new image to ECR, the new image tag (ty
   run: |
     cd deploy/k8s/overlays/production
     kustomize edit set image \
-      catalog=123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog:${{ github.sha }}
+      library-system/catalog=123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/catalog:${{ github.sha }}
     git config user.name "github-actions[bot]"
     git config user.email "github-actions[bot]@users.noreply.github.com"
     git commit -am "chore: update catalog image to ${{ github.sha }}"

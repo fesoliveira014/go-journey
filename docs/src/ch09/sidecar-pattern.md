@@ -65,7 +65,7 @@ In Docker Compose, this would look like:
 # Not implemented—shown for illustration
 
 catalog:
-  image: library/catalog:latest
+  image: library-system/catalog:latest
   environment:
     OTEL_COLLECTOR_ENDPOINT: otel-collector-catalog:4317
 
@@ -91,7 +91,7 @@ spec:
     spec:
       containers:
         - name: catalog
-          image: library/catalog:latest
+          image: library-system/catalog:latest
           env:
             - name: OTEL_COLLECTOR_ENDPOINT
               value: "localhost:4317"

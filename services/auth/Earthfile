@@ -51,4 +51,4 @@ docker:
     USER app
     EXPOSE 50051
     ENTRYPOINT ["/usr/local/bin/auth"]
-    SAVE IMAGE auth:latest
+    SAVE IMAGE library-system/auth:latest

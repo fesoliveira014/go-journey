@@ -4,6 +4,8 @@ Chapter 12 introduced Kustomize and structured the manifests into a base and two
 
 Now you write the production overlay. At this point you have an EKS cluster, three RDS instances, an MSK cluster, ECR repositories, and a working CI pipeline. The production overlay is the piece that wires those AWS resources into the Kubernetes manifests. Most application manifests stay untouched; the one deliberate base change is moving local-only PostgreSQL and Kafka resources into `deploy/k8s/base/local-infra/` so production never renders them.
 
+On `main`, the production overlay already includes the Chapter 14 External Secrets resources. At the Chapter 13 checkpoint, it still uses temporary `secretGenerator` placeholders so you can deploy before the hardening chapter replaces them with External Secrets Operator.
+
 ---
 
 ## Restructuring the base for production
@@ -122,24 +124,24 @@ resources:
 # ---------------------------------------------------------------------------
 # Image references: rewrite local names to ECR URIs.
 # Kustomize matches on the image name field in every container spec across all
-# Deployments in the base. All containers using library/catalog will
+# Deployments in the base. All containers using library-system/catalog will
 # get the ECR URI assigned here, without touching any base manifest.
 # ---------------------------------------------------------------------------
 images:
-  - name: library/gateway
-    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library/gateway
+  - name: library-system/gateway
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/gateway
     newTag: latest
-  - name: library/auth
-    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library/auth
+  - name: library-system/auth
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/auth
     newTag: latest
-  - name: library/catalog
-    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library/catalog
+  - name: library-system/catalog
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/catalog
     newTag: latest
-  - name: library/reservation
-    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library/reservation
+  - name: library-system/reservation
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/reservation
     newTag: latest
-  - name: library/search
-    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library/search
+  - name: library-system/search
+    newName: 123456789012.dkr.ecr.us-east-1.amazonaws.com/library-system/search
     newTag: latest
 
 generatorOptions:
@@ -525,7 +527,7 @@ kubectl kustomize deploy/k8s/overlays/production
 Scan the output and confirm:
 
 1. Every Deployment shows `replicas: 2`.
-2. Every container image references the ECR URI, not `library/<svc>:latest`.
+2. Every container image references the ECR URI, not `library-system/<svc>:latest`.
 3. Every container shows `imagePullPolicy: Always`.
 4. The `auth`, `catalog`, and `reservation` Deployments show RDS hostnames in `DATABASE_URL` with `sslmode=require`.
 5. The `catalog-config`, `reservation-config`, and `search-config` ConfigMaps show the MSK bootstrap string in `KAFKA_BROKERS`.
@@ -555,7 +557,7 @@ If a Deployment stalls, `kubectl describe deployment/<name> -n library` shows ev
 
 ## What remains for Chapter 14
 
-The `secretGenerator` in this overlay writes placeholder strings into Kubernetes Secrets. That is a deliberate simplification—real credentials belong in AWS Secrets Manager, not in a `kustomization.yaml` committed to a repository.
+At the Chapter 13 checkpoint, the `secretGenerator` in this overlay writes placeholder strings into Kubernetes Secrets. That is a deliberate simplification—real credentials belong in AWS Secrets Manager, not in a `kustomization.yaml` committed to a repository.
 
 Chapter 14 replaces the `secretGenerator` block entirely with ExternalSecret resources. The External Secrets Operator (ESO) watches ExternalSecret objects, fetches the value from AWS Secrets Manager, and creates or updates a native Kubernetes Secret. The Deployments do not change—they continue reading from `postgres-auth-secret`, `jwt-secret`, `flash-cookie-key`, and `internal-service-token` by name. Only the source of those secrets changes.
 
@@ -564,7 +566,7 @@ Until that work is complete, populate secrets out-of-band after applying the ove
 ```bash
 kubectl create secret generic jwt-secret \
   --from-literal=JWT_SECRET="$(aws secretsmanager get-secret-value \
-    --secret-id library/jwt-secret --query SecretString --output text)" \
+    --secret-id library-system/jwt-secret --query SecretString --output text)" \
   --namespace library --dry-run=client -o yaml | kubectl apply -f -
 ```
 

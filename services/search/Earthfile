@@ -41,13 +41,16 @@ integration-test:
 build:
     FROM +src
     RUN CGO_ENABLED=0 go build -o /bin/search ./cmd/
+    RUN CGO_ENABLED=0 go build -o /bin/search-reindex ./cmd/reindex/
     SAVE ARTIFACT /bin/search
+    SAVE ARTIFACT /bin/search-reindex
 
 docker:
     FROM alpine:3.19
     RUN apk add --no-cache ca-certificates && addgroup -S app && adduser -S app -G app
     COPY +build/search /usr/local/bin/search
+    COPY +build/search-reindex /usr/local/bin/search-reindex
     USER app
     EXPOSE 50054
     ENTRYPOINT ["/usr/local/bin/search"]
-    SAVE IMAGE search:latest
+    SAVE IMAGE library-system/search:latest

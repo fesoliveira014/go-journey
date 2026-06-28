@@ -49,4 +49,4 @@ docker:
     USER app
     EXPOSE 8080
     ENTRYPOINT ["/usr/local/bin/gateway"]
-    SAVE IMAGE gateway:latest
+    SAVE IMAGE library-system/gateway:latest

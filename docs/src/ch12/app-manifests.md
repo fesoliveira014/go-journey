@@ -63,7 +63,7 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-          image: library/catalog:latest
+          image: library-system/catalog:latest
           imagePullPolicy: IfNotPresent
           ports:
             - containerPort: 50052
@@ -134,9 +134,9 @@ Everything under `spec.template` describes the Pod that the Deployment creates. 
 
 #### `image` and `imagePullPolicy`
 
-`image: library/catalog:latest` references the image we built and loaded into kind in section 12.1. The `latest` tag is normally discouraged in production because it makes rollbacks ambiguous, but it is fine for a local development cluster where we control exactly what is in the cache.
+`image: library-system/catalog:latest` references the image we built and loaded into kind in section 12.1. The `latest` tag is normally discouraged in production because it makes rollbacks ambiguous, but it is fine for a local development cluster where we control exactly what is in the cache.
 
-`imagePullPolicy: IfNotPresent` is critical for kind. By default, Kubernetes tries to pull images from a registry. kind loads images directly into its internal containerd cache via `kind load docker-image`. If the pull policy is `Always`, the kubelet will still attempt a registry pull, which fails because `library/catalog:latest` does not exist in any public registry. `IfNotPresent` tells the kubelet: if the image is already present in the local cache, use it. This is the correct policy for locally built images in a kind cluster.
+`imagePullPolicy: IfNotPresent` is critical for kind. By default, Kubernetes tries to pull images from a registry. kind loads images directly into its internal containerd cache via `kind load docker-image`. If the pull policy is `Always`, the kubelet will still attempt a registry pull, which fails because `library-system/catalog:latest` does not exist in any public registry. `IfNotPresent` tells the kubelet: if the image is already present in the local cache, use it. This is the correct policy for locally built images in a kind cluster.
 
 #### `ports`
 
@@ -338,7 +338,7 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-          image: library/auth:latest
+          image: library-system/auth:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
@@ -457,7 +457,7 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-          image: library/reservation:latest
+          image: library-system/reservation:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
@@ -582,7 +582,7 @@ spec:
             readOnlyRootFilesystem: true
             capabilities:
               drop: ["ALL"]
-          image: library/search:latest
+          image: library-system/search:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: grpc
@@ -678,7 +678,7 @@ spec:
       terminationGracePeriodSeconds: 30
       containers:
         - name: gateway
-          image: library/gateway:latest
+          image: library-system/gateway:latest
           imagePullPolicy: IfNotPresent
           ports:
             - name: http
