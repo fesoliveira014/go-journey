@@ -127,7 +127,9 @@ The alternatives are:
 
 [franz-comparison]: https://github.com/twmb/franz-go#comparisons
 
-Sarama's API is lower-level than Spring Kafka's `@KafkaListener` annotation. In Spring, you annotate a method and the framework handles consumer group setup, deserialization, and offset management. In Sarama, you implement an interface and manage the consume loop yourself. This is more code, but the control flow is explicit and there is no annotation magic to debug.
+Sarama's API is lower-level than framework-managed Kafka consumers. You implement an interface and manage the consume loop yourself: consumer group setup, deserialization, offset handling, and shutdown all live in your code.
+
+> **If you are coming from Spring Kafka:** Sarama is closer to writing the machinery behind an `@KafkaListener` than to annotating a method and letting the framework host it.
 
 ### Producer Setup
 

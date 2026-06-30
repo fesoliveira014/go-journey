@@ -1,15 +1,15 @@
 # 2.5 Wiring It All Together
 
-Every component you have built so far—the repository, the service, the handler—exists in isolation. The repository knows nothing about the service, and the service knows nothing about gRPC. That separation is the whole point, but something must eventually plug them together. That's `main.go`. This section walks through how the pieces connect, why the connection is explicit rather than magical, and how to drive the running service with `grpcurl`.
+Every component you have built so far—the repository, the service, the handler—exists in isolation. The repository knows nothing about the service, and the service knows nothing about gRPC. That separation is the whole point, but something must eventually plug them together. That's `main.go`. This section walks through how the pieces connect, why the connection is explicit, and how to drive the running service with `grpcurl`.
 
 ---
 
 ## Constructor-Based Dependency Injection
 
-In Spring, you might write:
+> **If you are coming from Spring:** a framework-managed version of this stack might look like this:
 
 ```kotlin
-// Spring — framework magic
+// Spring
 @Service
 class CatalogService(@Autowired val repo: BookRepository)
 
@@ -17,7 +17,7 @@ class CatalogService(@Autowired val repo: BookRepository)
 class CatalogHandler(@Autowired val svc: CatalogService)
 ```
 
-The framework scans for annotations, builds a dependency graph, constructs objects in the right order, and wires them up for you. Convenient—until a stack trace runs through layers of reflection.
+The framework scans for annotations, builds a dependency graph, constructs objects in the right order, and wires them up for you. Go uses a more direct startup path.
 
 Go uses none of this. Dependency injection in Go is function calls:
 
@@ -49,7 +49,7 @@ func NewCatalogHandler(svc *service.CatalogService) *CatalogHandler {
 
 The service constructor accepts a `BookRepository` **interface**, not a concrete type. This is the important detail: The service owns the interface definition and only knows that it has something to call `Create`, `GetByID`, and so on. In production, that turns out to be the GORM-backed struct. In tests it is the in-memory mock from the previous section. The service does not know or care which.
 
-This pattern is sometimes called **manual dependency injection**. For projects up to moderate complexity, it is the right approach—it scales well, is easy to debug, and produces zero "magic". Larger projects sometimes introduce a dependency injection framework (`google/wire` is the most common in Go), but that is code generation over the same pattern, not a fundamentally different approach.
+This pattern is sometimes called **manual dependency injection**. For projects up to moderate complexity, it is the right approach: it scales well, is easy to debug, and keeps construction order visible. Larger projects sometimes introduce a dependency injection framework (`google/wire` is the most common in Go), but that is code generation over the same pattern, not a fundamentally different approach.
 
 ---
 
@@ -85,15 +85,15 @@ Walk through each call:
 
 ## The Handler Layer
 
-The `CatalogHandler` is the boundary between the gRPC transport and the domain model. Its job is narrow: translate proto types to domain types, call the service, translate the result back to proto, and map domain errors to gRPC status codes.
+The `CatalogHandler` is the boundary between the gRPC transport and the service model. Its job is narrow: translate proto types to `model` types, call the service, translate the result back to proto, and map service errors to gRPC status codes.
 
-### Proto ↔ Domain Conversion
+### Proto ↔ Model Conversion
 
-Proto types and domain types are deliberately separate. The generated `catalogv1.Book` is a transport struct—it carries wire format metadata, has protobuf-specific field types (`int32`, `*timestamppb.Timestamp`), and is tied to the serialization contract with external callers. The domain `model.Book` is a persistence struct with GORM tags and Go-native types (`uuid.UUID`, `time.Time`, `int`).
+Proto types and service model types are deliberately separate. The generated `catalogv1.Book` is a transport struct—it carries wire format metadata, has protobuf-specific field types (`int32`, `*timestamppb.Timestamp`), and is tied to the serialization contract with external callers. `model.Book` is the Catalog service's owned model type. In this project it also carries GORM tags, so it acts as both the domain object used by service logic and the persistence model used by the repository.
 
-Keeping them separate means a change to the proto schema does not cascade into the database layer, and a change to the domain model (adding a field, changing a type) does not automatically break the public API. The conversion functions are the explicit, auditable boundary between those two worlds.
+Keeping them separate means a change to the proto schema does not cascade into the database layer, and a change to `model.Book` (adding a field, changing a type) does not automatically break the public API. The conversion functions are the explicit, auditable boundary between those two worlds.
 
-`bookToProto` handles domain → proto:
+`bookToProto` handles model → proto:
 
 ```go
 func bookToProto(b *model.Book) *catalogv1.Book {

@@ -20,13 +20,15 @@ Consider the Catalog Service's `BookRepository`. In chapter 2 you defined an int
 
 ```go
 type BookRepository interface {
-    Create(ctx context.Context, book *domain.Book) error
-    FindByID(ctx context.Context, id uuid.UUID) (*domain.Book, error)
+    Create(ctx context.Context, book *model.Book) (*model.Book, error)
+    GetByID(ctx context.Context, id uuid.UUID) (*model.Book, error)
     // ...
 }
 ```
 
-Your unit tests inject a hand-written mock that satisfies the interface, thoroughly exercising the service logic. But the mock has no SQL behind it. If the real GORM implementation contains a typo—say, `published_at` in the struct tag but `publish_date` in the migration—the mock will never surface that. Only a test that actually connects to a PostgreSQL instance and runs the query will catch it.
+This project uses `model` as the package name for service-owned domain and persistence structs: `model.Book`, `model.User`, `model.Reservation`. Transport structs live in generated protobuf packages such as `catalogv1`.
+
+Your unit tests inject a hand-written mock that satisfies the interface, thoroughly exercising the service logic. But the mock has no SQL behind it. If the real GORM implementation contains a typo—say, `published_year` in the struct tag but `publish_year` in the migration—the mock will never surface that. Only a test that actually connects to a PostgreSQL instance and runs the query will catch it.
 
 Now consider the gRPC layer: the `CatalogServer` is tested by calling its methods as plain Go functions. That is fast and convenient. But it means no gRPC frame ever travels over the wire, no interceptor chain runs, and no metadata is parsed. If the auth interceptor from chapter 4 is accidentally omitted from the server's option list, every unit test still passes. A test that dials a real (in-process) gRPC listener will fail immediately when it receives `codes.Unauthenticated`.
 
@@ -63,7 +65,7 @@ The testing pyramid[^1] describes a recommended distribution of tests across thr
 
 **End-to-end (E2E) tests** sit at the top. In a microservices system, a full end-to-end test might start all five services and exercise a user-facing scenario through the gateway's HTTP API. They give the highest confidence but cost the most: tens of seconds to start containers, complex setup and teardown, and fragile dependencies on network timing. You keep them few and focused on critical user paths.
 
-If you are coming from a Java/Spring background, think of unit tests as JUnit tests with Mockito, integration tests as `@SpringBootTest` with an in-memory or Testcontainers-backed data source, and e2e tests as REST Assured or Playwright suites that drive a fully deployed application. The taxonomy is identical; Go's tooling just looks different.
+> **If you are coming from Java/Spring:** unit tests map roughly to JUnit tests with Mockito, integration tests to `@SpringBootTest` with an in-memory or Testcontainers-backed data source, and e2e tests to REST Assured or Playwright suites that drive a fully deployed application.
 
 ---
 
@@ -101,7 +103,9 @@ go test ./...
 go test -tags integration ./...
 ```
 
-This is the Go equivalent of Gradle's `sourceSets` or Maven's `Failsafe` plugin separating unit and integration test lifecycles. The tag is a compiler directive, not a runtime flag—files without the tag are never compiled into the test binary at all.
+> **If you are coming from Maven or Gradle:** build tags serve a similar separation purpose to Failsafe or test-specific source sets, but the mechanism is compiler-level file selection.
+
+The tag is a compiler directive, not a runtime flag—files without the tag are never compiled into the test binary at all.
 
 The practical implication: your integration test files start with `//go:build integration` and may import packages like `testcontainers-go` and `github.com/docker/docker/client` that you do not want in the standard test binary.
 

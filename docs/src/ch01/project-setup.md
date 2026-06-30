@@ -6,7 +6,9 @@ Every Go project starts by answering one question: *how does the toolchain find,
 
 ### Go Modules
 
-If you come from the JVM world, a Go module resembles a Maven `pom.xml` or Gradle `build.gradle` file. It declares the project name, the minimum Go version, and all external dependencies. Unlike Maven or Gradle, Go bakes module support directly into the toolchain (`go mod`) with no plugin layer.
+A Go module declares the module path, the Go version used by the module, and the external dependencies required to build it. Module support is part of the Go toolchain itself through commands such as `go mod init`, `go get`, and `go mod tidy`.
+
+> **If you are coming from Maven or Gradle:** `go.mod` plays the role of the build descriptor for dependency resolution, but it is much smaller. There is no separate plugin system for ordinary compilation and test discovery; those behaviors are built into `go`.
 
 A module is a directory tree whose root contains a `go.mod` file. Every `.go` source file in that tree belongs to exactly one module.
 
@@ -17,7 +19,7 @@ The Gateway Service's module file looks like this:
 ```
 module github.com/fesoliveira014/library-system/services/gateway
 
-go 1.22
+go 1.26.1
 ```
 
 Three things worth unpacking:
@@ -26,9 +28,9 @@ Three things worth unpacking:
 
 Contrast this with Java packages, where the reverse-domain convention (`com.example.myapp`) is separate from the artifact coordinates in `pom.xml`. In Go, they are the same string.
 
-**`go`—the minimum language version.** This pins language semantics. The toolchain refuses to build if the installed Go version is older than what is declared here.
+**`go`—the minimum Go version for this module.** This pins language and toolchain semantics. The toolchain refuses to build if the installed Go version is older than what is declared here. This project requires Go 1.26+, and the snippets use `go 1.26.1` to match the repository checkpoint. References to Go 1.22 later in the chapter identify the release that introduced method-aware `ServeMux` routing, not the required toolchain version.
 
-**Dependencies** appear as `require` directives added automatically by `go get` or `go mod tidy`, following [Semantic Versioning](https://semver.org/). One Go-specific rule worth knowing early: If a module releases a v2 or higher, the major version must appear in the module path itself (`github.com/foo/bar/v2`). This lets two incompatible major versions coexist in a single binary without conflict—something that has historically been painful in Maven/Gradle projects.
+**Dependencies** appear as `require` directives added automatically by `go get` or `go mod tidy`, following [Semantic Versioning](https://semver.org/). One Go-specific rule worth knowing early: if a module releases a v2 or higher, the major version must appear in the module path itself (`github.com/foo/bar/v2`). That path-level versioning lets two incompatible major versions coexist in a single binary.
 
 #### Creating a Module
 
@@ -49,12 +51,14 @@ This project is a monorepo: multiple independently deployable services live insi
 The answer is `go.work`, introduced in Go 1.18. A workspace file at the repository root tells the toolchain to resolve specific module paths to local directories instead of fetching them from the network. It does not replace `go.mod`—each module retains its own dependency graph and builds independently. The workspace is a development-time overlay.
 
 ```
-go 1.22
+go 1.26.1
 
 use ./services/gateway
 ```
 
-The `use` directive registers a local module. When any code in the workspace imports a package whose path matches a registered module, the toolchain resolves it locally. This is analogous to Gradle's multi-project build, with one key advantage: Each `go.mod` remains self-contained. Running `go build ./...` from inside `services/gateway` works exactly as if the workspace did not exist.
+The `use` directive registers a local module. When any code in the workspace imports a package whose path matches a registered module, the toolchain resolves it locally. Each `go.mod` remains self-contained: running `go build ./...` from inside `services/gateway` works exactly as if the workspace did not exist.
+
+> **If you are coming from Gradle:** a Go workspace is closest to a multi-project build used only for local path resolution. It does not merge all modules into one build graph; each module keeps its own `go.mod`.
 
 #### Workspace Commands
 
@@ -75,7 +79,7 @@ go work sync
 
 ### Project Structure Conventions
 
-Go has no mandated project layout, but the community has converged on conventions that most open-source projects follow. There is no `src/` directory—that is a Java/Maven convention Go does not use.
+Go has no mandated project layout, but the community has converged on conventions that most open-source projects follow. This project keeps service code under `services/<name>/`, executable entry points under `cmd/`, and private packages under `internal/`.
 
 #### `cmd/`
 

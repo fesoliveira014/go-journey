@@ -1,6 +1,6 @@
 # 6.4 Putting It Together
 
-This section walks through the full checkpoint flow end-to-end: starting the stack, bootstrapping an admin, seeding the catalog, and verifying everything through the UI. The reservation steps require the Reservation service from Chapter 7; if you are reading strictly linearly, do Steps 1-6 now and return to Steps 7-8 after Chapter 7.
+This section walks through the Chapter 6 checkpoint flow end-to-end: starting the stack, bootstrapping an admin, seeding the catalog, registering a normal user, and verifying the admin dashboard.
 
 ---
 
@@ -10,7 +10,7 @@ This section walks through the full checkpoint flow end-to-end: starting the sta
 cd deploy && docker compose up --build
 ```
 
-Wait for all services to be healthy. You should see log output from `auth`, `catalog`, `reservation`, `gateway`, and the two PostgreSQL instances. The gateway will be available at `http://localhost:8080`.
+Wait for the Chapter 6 services to be healthy. You should see log output from `auth`, `catalog`, `gateway`, and the PostgreSQL instances. The gateway will be available at `http://localhost:8080`.
 
 ---
 
@@ -67,19 +67,16 @@ Navigate to `http://localhost:8080/books`. You should see all sixteen seeded boo
 
 ## Step 6: Check the Admin Dashboard
 
-Click the **Admin** link in the navigation, or go to `http://localhost:8080/admin`. You should see three cards:
+Click the **Admin** link in the navigation, or go to `http://localhost:8080/admin`. You should see dashboard links for:
 
 - **Users**—links to `/admin/users`
-- **Reservations**—links to `/admin/reservations`
 - **Books**—links to the "Add Book" form
 
 Click **View Users**. You should see a table with one row: the admin account you just created, with role `admin`.
 
-Click **View Reservations**. The table should be empty—no one has reserved any books yet.
-
 ---
 
-## Step 7: Register a Regular User and Make a Reservation
+## Step 7: Register a Regular User
 
 1. **Log out** (or open a private/incognito window).
 2. Go to `http://localhost:8080/register` and create a new account:
@@ -87,30 +84,24 @@ Click **View Reservations**. The table should be empty—no one has reserved any
    - **Password:** `reader123`
    - **Name:** `Regular Reader`
 3. After registration, you will be logged in automatically.
-4. Navigate to the catalog (`/books`), click on a book (e.g., *Dune*), and click **Reserve**.
-5. Go to `http://localhost:8080/reservations` to confirm the reservation appears in your list.
 
 ---
 
-## Step 8: Verify in the Admin Dashboard
+## Step 8: Verify the User List
 
 1. Log out of the regular user account.
 2. Log back in as `admin@library.local`.
-3. Go to `http://localhost:8080/admin/users`. You should now see two rows: the admin and the regular user.
-4. Go to `http://localhost:8080/admin/reservations`. You should see one row showing:
-   - **User:** `reader@example.com`
-   - **Book:** *Dune* (or whichever book was reserved)
-   - **Status:** `active`
-   - **Reserved:** today's date
-   - **Returned:** a dash (not yet returned)
+3. Go to `http://localhost:8080/admin/users`.
 
-This confirms the full flow: the Reservation Service resolves the book title from the Catalog Service and the user email from the Auth Service, embedding both in the `ReservationDetail` response.
+You should now see two rows: the admin and the regular user. This confirms the Chapter 6 flow: the admin CLI created an administrative account, the seed CLI populated the catalog through service APIs, and the dashboard can inspect users through an admin-only Auth RPC.
+
+Chapter 7 adds reservations and then extends this dashboard with `/admin/reservations`.
 
 ---
 
 ## What's Next
 
-At this point the library system is functional: users can register, browse, and reserve books; admins can manage the catalog and monitor activity. But the services are tightly coupled—the Reservation Service calls Catalog and Auth synchronously via gRPC, and the Search Service is not yet connected.
+At this point the development loop is much smoother: you can create an admin, seed catalog data, browse books, and inspect users without manual database edits. Users cannot reserve books yet because there is no Reservation service.
 
 In **Chapter 7**, we introduce **Kafka** and **event-driven architecture**. The Reservation Service will call Catalog synchronously for availability changes, then publish `reservation.created` and `reservation.returned` events as facts for downstream observers. In Chapter 8, the Catalog Service will publish `book.created`, `book.updated`, and `book.deleted` events that the Search Service consumes to build and maintain a search index.
 

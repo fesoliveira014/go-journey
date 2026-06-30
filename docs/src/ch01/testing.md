@@ -1,6 +1,8 @@
 ## 1.4 Testing
 
-Go's testing story is opinionated and minimal. There is no JUnit, no TestNG, no pytest—just the standard library's `testing` package and a handful of conventions baked into the toolchain. If you are used to writing `@Test` annotations or `assert.assertEquals`, you will immediately notice the absence of assertions. Go's philosophy is that your test functions are ordinary code, and `if` is perfectly capable of expressing a failure condition.
+Go's testing story is opinionated and minimal. The standard library's `testing` package, file naming conventions, and `go test` command are enough to discover and run tests without a separate test runner. Test functions are ordinary code, and `if` is the default assertion mechanism.
+
+> **If you are coming from JUnit, pytest, or TestNG:** there are no test annotations and no built-in assertion library. Many Go projects add assertion helpers, but this book starts with the standard library so the mechanics stay visible.
 
 ---
 
@@ -16,7 +18,7 @@ func TestXxx(t *testing.T) { ... }
 
 The function must start with `Test`, the next character must be uppercase, and the parameter must be `*testing.T`. The `T` type provides methods for logging, marking failures, and stopping execution:
 
-| Method | Behavior | Java/Kotlin analogue |
+| Method | Behavior | Comparable idea |
 |---|---|---|
 | `t.Errorf(...)` | Marks the test as failed, continues running | `fail(message)`—soft |
 | `t.Fatalf(...)` | Marks the test as failed, stops immediately | `fail(message)`—hard |
@@ -43,7 +45,7 @@ go test -cover ./...            # print a coverage summary per package
 
 The `-race` flag instruments the binary to detect concurrent memory accesses that are not properly synchronized. It has a runtime cost (roughly 2–20× slowdown) but catches genuine concurrency bugs that are otherwise nearly impossible to reproduce. Run it in CI, even if you skip it locally.
 
-`./...` is a Go path wildcard meaning "this module and all packages recursively below it." Think of it as the Go equivalent of Maven's `mvn test` applied to all submodules at once.
+`./...` is a Go path wildcard meaning "this module and all packages recursively below it." From a module root, it is the usual way to say "test everything under here."
 
 ---
 
@@ -63,13 +65,17 @@ handler.Health(rec, req)
 // rec.Code, rec.Body, rec.Header() are all available now
 ```
 
-No ports, no goroutines, no teardown. This is the standard Go pattern. If you've used Spring's `MockMvc` or Ktor's `testApplication`, the motivation is identical—but the implementation is lighter because the handler is already just a function.
+No ports, no goroutines, no teardown. This is the standard Go pattern: because an HTTP handler is just a value that satisfies `http.Handler`, you can call it in memory.
+
+> **If you are coming from Spring or Ktor:** `httptest` serves the same purpose as `MockMvc` or `testApplication`, but with less framework machinery because the handler is already a plain function.
 
 ---
 
 ### Table-Driven Tests
 
-The most idiomatic way to write parameterized tests in Go is the **table-driven** pattern.[^2] Rather than writing one test function per case, you define a slice of test cases and range over them. This is Go's answer to JUnit's `@ParameterizedTest` or pytest's `@pytest.mark.parametrize`.
+The most idiomatic way to write parameterized tests in Go is the **table-driven** pattern.[^2] Rather than writing one test function per case, you define a slice of test cases and range over them.
+
+> **If you are coming from JUnit or pytest:** table-driven tests cover the same need as `@ParameterizedTest` or `@pytest.mark.parametrize`, but the table is just data in Go code.
 
 Here is the health handler rewritten as a table-driven test:
 
@@ -205,9 +211,9 @@ Coverage is a proxy metric, not a goal. 100% coverage does not mean the code is 
 
 ---
 
-### Testing with Earthly
+### Optional Preview: Testing with Earthly
 
-The gateway's `Earthfile` includes a `+test` target that runs the full suite inside a reproducible container. Chapter 10 covers Earthly and CI/CD in depth; for now, here is the target for reference:
+Chapter 10 covers Earthly and CI/CD in depth. You do not need Earthly to complete Chapter 1; `go test ./...` is the main command. The gateway's `Earthfile` will later include a `+test` target that runs the same suite inside a reproducible container:
 
 ```earthly
 test:
@@ -215,7 +221,7 @@ test:
     RUN go test -v -race -cover ./...
 ```
 
-Running `earthly +test` executes the tests in the same `golang:1.26-alpine` image used for CI, eliminating "works on my machine" failures.[^4]
+Once Earthly is installed, running `earthly +test` executes the tests in the same `golang:1.26-alpine` image used by the later CI pipeline, reducing "works on my machine" failures.[^4]
 
 ---
 

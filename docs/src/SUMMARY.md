@@ -37,6 +37,7 @@
   - [7.2 Reservation Service](./ch07/reservation-service.md)
   - [7.3 Kafka Consumer](./ch07/kafka-consumer.md)
   - [7.4 Reservation UI](./ch07/reservation-ui.md)
+  - [7.5 Reservation Admin Dashboard](./ch07/admin-dashboard.md)
 - [Chapter 8: Full-Text Search](./ch08/index.md)
   - [8.1 Catalog Event Publishing](./ch08/catalog-events.md)
   - [8.2 Search Service](./ch08/search-service.md)

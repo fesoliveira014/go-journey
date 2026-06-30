@@ -438,7 +438,9 @@ reservationSvc := service.NewReservationService(repo, catalogClient, authClient,
 reservationHandler := handler.NewReservationHandler(reservationSvc)
 ```
 
-Three lines to wire the domain stack: create the repository, create the service (injecting the repo, catalog client, auth client, event publisher, and config), create the handler (injecting the service). Every dependency is explicit. Compare this to Spring Boot, where the equivalent would be three `@Component` classes with `@Autowired` constructors, and the wiring would happen invisibly through component scanning.
+Three lines to wire the domain stack: create the repository, create the service (injecting the repo, catalog client, auth client, event publisher, and config), create the handler (injecting the service). Every dependency is explicit.
+
+> **If you are coming from Spring Boot:** the equivalent shape would be three `@Component` classes with constructor injection. Here, the same graph is assembled directly in `main.go`.
 
 The service also creates a gRPC connection to the Catalog Service, since it needs to reserve copies through the catalog:
 

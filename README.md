@@ -14,7 +14,7 @@ The tutorial is written as an [mdBook](https://rust-lang.github.io/mdBook/). Eac
 | 4 | [Authentication](docs/src/ch04/index.md) | JWT, bcrypt, OAuth2 with Google, gRPC interceptors |
 | 5 | [Gateway & Frontend](docs/src/ch05/index.md) | BFF pattern, HTML templates, HTMX, sessions, admin CRUD |
 | 6 | [Admin & Developer Tooling](docs/src/ch06/index.md) | Admin CLI, admin dashboard, catalog seed CLI |
-| 7 | [Event-Driven Architecture](docs/src/ch07/index.md) | Kafka, reservation service, event consumers |
+| 7 | [Event-Driven Architecture](docs/src/ch07/index.md) | Kafka, reservation service, event consumers, admin reservation view |
 | 8 | [Full-Text Search](docs/src/ch08/index.md) | Meilisearch, event-driven indexing, search UI |
 | 9 | [Observability](docs/src/ch09/index.md) | OpenTelemetry, structured logging, Grafana stack |
 | 10 | [CI/CD](docs/src/ch10/index.md) | Earthly, GitHub Actions, linting, image publishing |
