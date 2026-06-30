@@ -1,0 +1,9 @@
+{
+  "name": "go-journey-book-pdf",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Mermaid CLI used to pre-render diagrams to SVG when building the book PDF.",
+  "dependencies": {
+    "@mermaid-js/mermaid-cli": "^11.4.2"
+  }
+}

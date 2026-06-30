@@ -42,3 +42,9 @@ editorial/
 docs/mermaid-init.js
 docs/mermaid.min.js
 .worktrees/
+
+# Book PDF build (the PDF is an artifact, never committed)
+/dist/
+scripts/book-pdf/.venv/
+scripts/book-pdf/node_modules/
+scripts/book-pdf/.diagram-cache/

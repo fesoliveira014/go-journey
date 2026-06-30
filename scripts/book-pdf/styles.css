@@ -1,0 +1,393 @@
+/* =========================================================================
+   Building Microservices in Go — print stylesheet (WeasyPrint / CSS Paged Media)
+   An O'Reilly-style homage: colored spine band, framed animal engraving,
+   small-caps series typography, serif body, running headers and folios.
+   ========================================================================= */
+
+:root {
+    --ink: #1a1a1a;
+    --muted: #555;
+    --rule: #c9c9c9;
+    --accent: #0b5563;        /* teal spine colour */
+    --accent-light: #e7f0f1;
+    --code-bg: #f6f8fa;
+    --code-border: #e1e4e8;
+    --link: #0b5563;
+}
+
+/* ---------- Page geometry ------------------------------------------------ */
+
+@page {
+    size: 6in 9in;            /* trade-book trim size */
+    margin: 22mm 18mm 20mm 18mm;
+
+    @top-left {
+        content: string(book-title);
+        font: italic 8pt Georgia, serif;
+        color: var(--muted);
+        vertical-align: bottom;
+        padding-bottom: 4pt;
+    }
+    @top-right {
+        content: string(chapter-title);
+        font: italic 8pt Georgia, serif;
+        color: var(--muted);
+        vertical-align: bottom;
+        padding-bottom: 4pt;
+    }
+    @bottom-center {
+        content: counter(page);
+        font: 9pt Georgia, serif;
+        color: var(--muted);
+        vertical-align: top;
+        padding-top: 6pt;
+    }
+}
+
+/* Left/right (verso/recto) header mirroring for a printed-book feel. */
+@page :left {
+    @top-left   { content: string(book-title); }
+    @top-right  { content: string(chapter-title); }
+}
+@page :right {
+    @top-left   { content: string(chapter-title); }
+    @top-right  { content: string(book-title); }
+}
+
+/* Cover: full-bleed, no running heads or folio. */
+@page cover {
+    margin: 0;
+    @top-left { content: none; }
+    @top-right { content: none; }
+    @bottom-center { content: none; }
+}
+
+/* Front matter (copyright, TOC): no folio, no running heads. */
+@page frontmatter {
+    @top-left { content: none; }
+    @top-right { content: none; }
+    @bottom-center { content: none; }
+}
+
+/* First page of a chapter: suppress the running head, keep the folio. */
+@page chapter-open {
+    @top-left { content: none; }
+    @top-right { content: none; }
+}
+
+/* ---------- Base typography --------------------------------------------- */
+
+html {
+    font-family: Georgia, "Times New Roman", serif;
+    font-size: 10.5pt;
+    line-height: 1.5;
+    color: var(--ink);
+    hyphens: auto;
+}
+
+body { margin: 0; }
+
+p { margin: 0 0 0.7em 0; text-align: justify; }
+
+a { color: var(--link); text-decoration: none; }
+
+h1, h2, h3, h4, h5, h6 {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    color: var(--ink);
+    line-height: 1.2;
+    font-weight: 700;
+    bookmark-level: none;          /* opt out by default; opt back in below */
+}
+
+h2 { font-size: 16pt; margin: 1.6em 0 0.5em; }
+h3 { font-size: 13pt; margin: 1.3em 0 0.4em; }
+h4 { font-size: 11pt; margin: 1.1em 0 0.3em; color: var(--muted); }
+
+h2, h3, h4 { break-after: avoid; }
+
+ul, ol { margin: 0 0 0.7em 0; padding-left: 1.4em; }
+li { margin: 0.15em 0; }
+
+strong { font-weight: 700; }
+em { font-style: italic; }
+
+blockquote {
+    margin: 0.8em 0;
+    padding: 0.2em 0 0.2em 1em;
+    border-left: 3px solid var(--accent);
+    color: var(--muted);
+    font-style: italic;
+}
+
+hr { border: none; border-top: 1px solid var(--rule); margin: 1.4em 0; }
+
+/* ---------- Code -------------------------------------------------------- */
+
+code, pre, kbd, samp {
+    font-family: "DejaVu Sans Mono", "SFMono-Regular", Menlo, Consolas, monospace;
+}
+
+p code, li code, td code {
+    font-size: 0.86em;
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 3px;
+    padding: 0.05em 0.3em;
+}
+
+pre {
+    background: var(--code-bg);
+    border: 1px solid var(--code-border);
+    border-radius: 5px;
+    padding: 0.7em 0.9em;
+    font-size: 8.2pt;
+    line-height: 1.45;
+    overflow-wrap: break-word;
+    white-space: pre-wrap;
+    break-inside: avoid;
+    margin: 0.8em 0;
+}
+pre code { background: none; border: none; padding: 0; font-size: inherit; }
+
+/* Keep short code blocks from splitting; allow long ones to flow. */
+pre.allow-break { break-inside: auto; }
+
+/* ---------- Tables ------------------------------------------------------ */
+
+table {
+    border-collapse: collapse;
+    width: 100%;
+    margin: 0.9em 0;
+    font-size: 9pt;
+    break-inside: avoid;
+}
+th, td {
+    border: 1px solid var(--rule);
+    padding: 0.35em 0.55em;
+    text-align: left;
+    vertical-align: top;
+}
+th {
+    background: var(--accent-light);
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 700;
+}
+tr:nth-child(even) td { background: #fafafa; }
+
+/* ---------- Diagrams (pre-rendered mermaid SVG) ------------------------- */
+
+figure.diagram {
+    margin: 1.1em 0;
+    text-align: center;
+    break-inside: avoid;
+}
+figure.diagram img {
+    max-width: 100%;
+    max-height: 7.4in;
+}
+
+/* ---------- Footnotes / references -------------------------------------- */
+
+.footnote {
+    font-size: 8.5pt;
+    color: var(--muted);
+    margin-top: 2em;
+    border-top: 1px solid var(--rule);
+    padding-top: 0.6em;
+}
+.footnote ol { padding-left: 1.2em; }
+sup a { font-size: 0.75em; }
+
+/* =========================================================================
+   COVER
+   ========================================================================= */
+
+.cover {
+    page: cover;
+    break-after: page;
+    position: relative;
+    width: 6in;
+    height: 9in;
+    color: var(--ink);
+    overflow: hidden;
+}
+
+/* Top + bottom colour bands echoing the O'Reilly spine treatment. */
+.cover .band-top,
+.cover .band-bottom {
+    position: absolute;
+    left: 0; right: 0;
+    height: 0.55in;
+    background: var(--accent);
+}
+.cover .band-top { top: 0; }
+.cover .band-bottom { bottom: 0; }
+
+.cover .series {
+    position: absolute;
+    top: 0.95in; left: 0; right: 0;
+    text-align: center;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.32em;
+    font-size: 9pt;
+    color: var(--accent);
+}
+
+.cover .animal {
+    position: absolute;
+    top: 1.7in; left: 0; right: 0;
+    text-align: center;
+}
+.cover .animal svg { width: 2.5in; height: auto; }
+.cover .animal .caption {
+    margin-top: 0.15in;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 7.5pt;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+}
+
+.cover .title-block {
+    position: absolute;
+    bottom: 1.5in; left: 0.7in; right: 0.7in;
+    text-align: left;
+}
+.cover .title-block .title {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 33pt;
+    font-weight: 800;
+    line-height: 1.05;
+    color: var(--accent);
+    margin: 0;
+}
+.cover .title-block .subtitle {
+    font-family: Georgia, serif;
+    font-style: italic;
+    font-size: 13pt;
+    color: var(--ink);
+    margin: 0.25in 0 0 0;
+}
+
+.cover .author {
+    position: absolute;
+    bottom: 0.85in; left: 0.7in; right: 0.7in;
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-size: 12pt;
+    font-weight: 600;
+    color: var(--ink);
+}
+
+/* =========================================================================
+   FRONT MATTER
+   ========================================================================= */
+
+.frontmatter {
+    page: frontmatter;
+    break-after: page;
+}
+
+.copyright {
+    font-size: 9.5pt;
+    line-height: 1.55;
+}
+.copyright h1 {
+    font-size: 15pt;
+    margin: 0 0 1em;
+}
+.copyright .meta { color: var(--muted); }
+.copyright p { text-align: left; }
+
+/* ---------- Table of contents ------------------------------------------- */
+
+.toc {
+    page: frontmatter;
+    break-after: page;
+}
+.toc h1 {
+    font-size: 20pt;
+    margin: 0 0 1em;
+}
+.toc ul { list-style: none; padding: 0; margin: 0; }
+.toc li { margin: 0; }
+
+.toc a {
+    display: block;
+    color: var(--ink);
+    text-decoration: none;
+}
+/* GCPM leader dots + the page number resolved from the body pass.
+   (target-counter cannot reach across the two merged documents, so the page
+   number is injected as data-page by build_pdf.py.) */
+.toc a::after {
+    content: leader('.') ' ' attr(data-page);
+    font-variant-numeric: tabular-nums;
+    color: var(--muted);
+}
+
+.toc .toc-chapter > a {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    font-weight: 700;
+    font-size: 11pt;
+    margin-top: 0.7em;
+}
+.toc .toc-chapter > a::after { color: var(--ink); }
+.toc .toc-section > a {
+    font-size: 9.5pt;
+    padding-left: 1.2em;
+    color: var(--muted);
+}
+
+/* =========================================================================
+   BODY MATTER — chapters
+   ========================================================================= */
+
+/* WeasyPrint ignores resets of the `page` counter, so body folios cannot be
+   restarted within a document. build_pdf.py renders the body as its own
+   document (folios naturally begin at 1) and merges the front matter ahead of
+   it, which is why there is no counter-reset here. */
+
+section.chapter {
+    break-before: page;
+    page: chapter-open;
+}
+/* Only the FIRST page of a chapter uses the chapter-open page; subsequent
+   pages fall back to the default named page automatically. */
+
+.chapter-head {
+    margin: 0.2in 0 0.5in 0;
+    border-bottom: 3px solid var(--accent);
+    padding-bottom: 0.18in;
+}
+.chapter-head .chapter-number {
+    font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+    text-transform: uppercase;
+    letter-spacing: 0.25em;
+    font-size: 9pt;
+    color: var(--accent);
+    margin-bottom: 0.12in;
+}
+h1.chapter-title {
+    string-set: chapter-title content();
+    bookmark-level: 1;             /* top level of the PDF outline */
+    bookmark-label: content();
+    font-size: 26pt;
+    font-weight: 800;
+    margin: 0;
+    line-height: 1.1;
+    color: var(--ink);
+}
+
+/* Section titles form the second level of the navigable PDF outline. */
+section.section > h2 {
+    bookmark-level: 2;
+    bookmark-label: content();
+}
+
+/* Non-chapter top-level sections (Introduction, Appendix). */
+section.frontish { break-before: page; page: chapter-open; }
+section.frontish h1.chapter-title { string-set: chapter-title content(); }
+
+/* The book title is set once so it appears in every running header. */
+.title-anchor { string-set: book-title content(); }

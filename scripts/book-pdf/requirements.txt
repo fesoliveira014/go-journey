@@ -1,0 +1,6 @@
+# Python dependencies for building the book PDF.
+# Install with: pip install -r requirements.txt
+weasyprint>=66,<70
+markdown>=3.5
+pymdown-extensions>=10.7
+pygments>=2.17
