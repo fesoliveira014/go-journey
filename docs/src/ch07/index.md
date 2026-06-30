@@ -17,6 +17,7 @@ In this chapter, we build the Reservation service and introduce Apache Kafka for
 - Event-driven vs. synchronous communication trade-offs
 - Eventual consistency and its implications for UI design
 - Building a complete microservice end-to-end (proto → DB → service → handler → gateway)
+- Extending the admin dashboard with a reservation-owned read view
 
 ## Architecture Overview
 
@@ -38,3 +39,4 @@ Reservation Service → Kafka "reservations" topic → audit/notification consum
 - [7.2 Reservation Service](./reservation-service.md)—Building the service: state machine, expiration on read, TDD
 - [7.3 Kafka Consumer](./kafka-consumer.md)—Consumer groups, offset handling, and non-mutating reservation event observation
 - [7.4 Reservation UI](./reservation-ui.md)—Gateway changes, eventual consistency in the UI, Docker setup
+- [7.5 Reservation Admin Dashboard](./admin-dashboard.md)—Admin-only reservation visibility across Auth, Catalog, and Reservation

@@ -67,7 +67,7 @@ Testcontainers is a library (available for Go, Java, Python, .NET, and others) t
 
 The container runs on the same Docker daemon you use for development. No separate service, CI environment variable, or `docker compose up` step is required. The only prerequisite is that the Docker daemon is reachable when the test runs.
 
-If you have used Spring Boot's `@Testcontainers` + `@Container` annotations, the Go approach is equivalent but explicit: there is no annotation magic. You call functions, receive values, and register cleanup with `t.Cleanup`. This is a good fit for Go's philosophy of making control flow visible.
+> **If you are coming from Spring Boot:** the Go approach serves the same purpose as `@Testcontainers` plus `@Container`, but you call functions, receive values, and register cleanup with `t.Cleanup`.
 
 ---
 

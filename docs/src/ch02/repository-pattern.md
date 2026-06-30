@@ -8,7 +8,9 @@ This section introduces GORM (Go's dominant ORM), explains the repository patter
 
 ## GORM Basics
 
-GORM's mental model will feel familiar if you've used JPA/Hibernate. You annotate your structs with tags, call `gorm.Open()` to get a `*gorm.DB` handle, and then call chainable methods to build and execute queries. The concepts map cleanly:
+GORM maps Go structs to database tables and exposes a chainable query API. You add `gorm` tags to struct fields, open a `*gorm.DB` handle, and call methods such as `Create`, `First`, `Where`, `Find`, `Updates`, and `Delete`.
+
+> **If you are coming from JPA/Hibernate:** the concepts map roughly like this:
 
 | JPA/Hibernate | GORM |
 |---|---|
@@ -431,7 +433,7 @@ func TestBookRepository_GetByISBN(t *testing.T) {
 
 ## Summary
 
-- GORM struct tags declare column types, constraints, and indexes—they mirror JPA annotations but use Go's backtick tag syntax.
+- GORM struct tags declare column types, constraints, and indexes directly on the Go model fields.
 - `db.WithContext(ctx)` propagates cancellation and deadlines into every query. Always use it.
 - The repository pattern wraps GORM behind a named interface, isolating data access from business logic and making each layer independently testable.
 - `gorm.ErrRecordNotFound` and PostgreSQL error codes are translated into domain errors at the repository boundary—callers never handle GORM or SQL internals directly.

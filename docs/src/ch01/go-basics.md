@@ -1,6 +1,8 @@
 ## 1.2 Go Language Essentials
 
-This section moves fast. You already know what a struct is, what an interface is, and why error handling matters. The goal here is to show you how Go's versions of these things differ from what you already know—and where those differences bite you if you come in with C++/Java assumptions.
+This section moves fast. You already know what a struct is, what an interface is, and why error handling matters. The goal here is to show how Go expresses those concepts and which details matter for the rest of the system.
+
+> **If you are coming from C++, Java, or Kotlin:** pay special attention to interfaces, slices, pointers, and errors. Those are the places where familiar assumptions most often produce Go bugs.
 
 ---
 
@@ -121,7 +123,9 @@ This is not inheritance. The embedded type has no knowledge of the outer type. T
 
 ### Interfaces
 
-In Java/Kotlin, you write `implements Serializable`. In C++ you inherit from a pure-virtual base class. In Go, interface satisfaction is **implicit**: if your type has the methods, it satisfies the interface—no declaration required.
+In Go, interface satisfaction is **implicit**: if your type has the methods, it satisfies the interface—no declaration required.
+
+> **If you are coming from Java/Kotlin or C++:** there is no `implements` clause and no inheritance from a pure-virtual base class. The compiler checks satisfaction where the interface is used.
 
 ```go
 // Standard library interface — defined in package fmt
@@ -130,7 +134,7 @@ type Stringer interface {
 }
 ```
 
-`Book` above already satisfies `fmt.Stringer` because it has a `String() string` method. There is no annotation, no `implements`, nothing to register. The compiler verifies satisfaction where the interface is used.
+`Book` above already satisfies `fmt.Stringer` because it has a `String() string` method. There is nothing to register. The compiler verifies satisfaction where the interface is used.
 
 ```go
 func printItem(s fmt.Stringer) {
@@ -243,7 +247,7 @@ Map iteration order is deliberately randomized on each run—do not rely on it.
 
 ### Pointers
 
-You know pointers from C. Go pointers are simpler—same concept and no arithmetic. Go does not have Kotlin-style nil safety, though: dereferencing a nil pointer panics at runtime, so check nil when a pointer may be absent.
+Go pointers hold the address of a value. They are simpler than C pointers: there is no pointer arithmetic. Go also does not have type-level nil safety, so dereferencing a nil pointer panics at runtime. Check nil when a pointer may be absent.
 
 ```go
 b := Book{Title: "TGPL"}
@@ -317,9 +321,9 @@ if errors.Is(err, ErrNotFound) {
 }
 ```
 
-Contrast with Java: No try/catch, no checked exceptions, no `throws` declarations. The caller always knows a function can fail because the signature says so. The downside is that error handling is verbose—you will write `if err != nil` hundreds of times. The upside is that the control flow is always explicit and local. There are no surprise exceptions propagating through six stack frames.
+There is no try/catch control flow and no checked exception declaration. The caller knows a function can fail because the signature says so. The downside is that error handling is verbose—you will write `if err != nil` hundreds of times. The upside is that failure paths are explicit and local.
 
-Contrast with C: Returning an `int` error code loses the message and the chain. Go's `error` interface carries both the message and the wrapped cause, so you get readable stack-like context without stack-unwinding overhead.
+Compared with integer error codes, Go's `error` interface can carry both the message and the wrapped cause, so you get readable context without stack-unwinding control flow.
 
 One firm convention: **never ignore errors**. The blank identifier `_` can discard a return value, but silently discarding errors is considered a serious bug in Go code review.
 

@@ -1,6 +1,6 @@
 # 2.2 PostgreSQL & Migrations
 
-The Catalog service needs a database. This section gets PostgreSQL running locally, explains why raw SQL migrations beat ORM magic in production, walks through the actual migration files for the books table, and shows how Go's `embed` package bundles those SQL files directly into the compiled binary.
+The Catalog service needs a database. This section gets PostgreSQL running locally, explains why explicit SQL migrations are safer than letting an ORM infer production schema changes, walks through the actual migration files for the books table, and shows how Go's `embed` package bundles those SQL files directly into the compiled binary.
 
 ---
 

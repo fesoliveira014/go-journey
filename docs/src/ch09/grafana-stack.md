@@ -334,9 +334,6 @@ This workflow—from metric alert, to trace, to logs—is the observability feed
 
 The observability services in `deploy/docker-compose.yml`:
 
-<details>
-<summary>Full Docker Compose configuration for the Grafana stack</summary>
-
 ```yaml
 otel-collector:
   image: otel/opentelemetry-collector-contrib:0.149.0
@@ -400,8 +397,6 @@ Notable details:
 - Grafana enables anonymous access (`GF_AUTH_ANONYMOUS_ENABLED`) for development convenience. In production, disable anonymous access and use proper authentication.
 - `tempo-data` is a named volume that persists trace data across container restarts.
 - The `depends_on` declarations ensure Grafana starts after its datasource backends. Note that `depends_on` only waits for container start, not readiness—Grafana handles reconnection internally.
-
-</details>
 
 ---
 

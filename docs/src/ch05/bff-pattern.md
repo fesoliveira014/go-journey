@@ -10,7 +10,7 @@ When you have a microservices backend and need to serve a web frontend, there ar
 
 Our gateway is a BFF. It serves HTML to the browser, issues gRPC calls to the Auth and Catalog services, and owns the presentation layer. It contains no business logic—it does not validate ISBNs or hash passwords. It validates form input just enough to give the user good error messages, then delegates to the backend.
 
-If you have worked with Spring MVC, the BFF is analogous to a `@Controller` layer that calls `@Service` beans—except the "services" live in separate processes and communicate over gRPC instead of local method calls.
+> **If you are coming from Spring MVC:** the BFF is analogous to a `@Controller` layer that calls service collaborators, except those collaborators live in separate processes and communicate over gRPC instead of local method calls.
 
 ---
 
@@ -51,9 +51,9 @@ func New(auth authv1.AuthServiceClient, catalog catalogv1.CatalogServiceClient, 
 }
 ```
 
-This is manual dependency injection, Go-style: construct your dependencies outside the struct and pass them in through the constructor. There is no annotation magic, no DI container, no classpath scanning. You wire things up explicitly in `main()`.
+This is manual dependency injection, Go-style: construct your dependencies outside the struct and pass them in through the constructor. There is no DI container or runtime component scanning. You wire things up explicitly in `main()`.
 
-In Spring, the equivalent would be:
+> **If you are coming from Spring:** the equivalent shape would be constructor injection:
 
 ```java
 @Controller
@@ -70,7 +70,7 @@ public class GatewayController {
 }
 ```
 
-The Go version is more explicit but achieves the same result: the `Server` owns its dependencies, they are injected at construction time, and the struct's methods (handlers) can use them freely. The advantage of Go's approach is that the wiring is visible in one place (`main.go`), not scattered across annotations that require understanding Spring's component scanning rules.
+The Go version achieves the same dependency ownership: the `Server` receives its clients at construction time, and handler methods use those fields. The operational advantage is that the wiring is visible in one place (`main.go`).
 
 ---
 
@@ -86,7 +86,7 @@ mux.HandleFunc("POST /admin/books", srv.AdminBookCreate)
 
 The method comes first, separated from the path by a space. Path parameters use curly braces: `{id}` is extracted in the handler with `r.PathValue("id")`. The special pattern `"GET /{$}"` matches only the root path exactly (without the `{$}`, `GET /` would match all `GET` requests as a prefix).
 
-Compare this to Spring:
+> **If you are coming from Spring MVC:** the route declarations correspond to controller method annotations:
 
 ```java
 @GetMapping("/books")
@@ -99,7 +99,7 @@ public String bookDetail(@PathVariable String id, Model model) { ... }
 public String adminBookCreate(@ModelAttribute BookForm form) { ... }
 ```
 
-The Go version is more verbose (no annotation shorthand) but conceptually identical. One notable difference: Spring uses separate annotations for each method (`@GetMapping`, `@PostMapping`), while Go uses a single registration function with the method in the pattern string.
+Go uses a single registration function with the HTTP method in the pattern string. The route table is ordinary code, so searching `main.go` shows every public route.
 
 Here is the complete route registration from `main.go`:
 
@@ -185,13 +185,13 @@ The `statusWriter` trick is a common Go pattern: embed `http.ResponseWriter` to 
 
 The auth middleware is covered in detail in section 5.3.
 
-In Spring terms, these middleware functions are equivalent to `HandlerInterceptor` or servlet `Filter` chains. The key difference is that Spring manages the chain through configuration, while in Go you compose it explicitly with function calls.
+> **If you are coming from Spring:** these middleware functions serve the same purpose as `HandlerInterceptor` or servlet `Filter` chains. In this gateway, the chain is composed directly with function calls.
 
 ---
 
 ## Wiring It All Together
 
-The `main` function ties everything together: environment variables, gRPC connections, template parsing, server construction, route registration, and middleware application. There is no framework bootstrap, no YAML configuration, no classpath scanning. Everything is explicit.
+The `main` function ties everything together: environment variables, gRPC connections, template parsing, server construction, route registration, and middleware application. There is no framework bootstrap or runtime component scanning. The startup path is ordinary Go code.
 
 ```go
 // Create gRPC clients
@@ -212,7 +212,7 @@ srv := handler.New(authClient, catalogClient, tmpl)
 
 The full `main.go` includes `defer authConn.Close()` and `defer catalogConn.Close()` calls omitted here for brevity.
 
-This is the "explicit wiring" philosophy of Go. It is more lines of code than `@SpringBootApplication`, but every dependency is visible and traceable. If you want to know what the gateway depends on, read `main.go`—it is all there.
+This is the explicit wiring philosophy of Go. Every dependency is visible and traceable. If you want to know what the gateway depends on, read `main.go`—it is all there.
 
 ---
 

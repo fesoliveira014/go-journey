@@ -1,6 +1,6 @@
 # 11.1 Unit Testing Patterns
 
-Go's standard library ships with a testing package that is deliberately minimal. There is no built-in assertion library, no test runner framework, and no magic annotations. What Go does provide—subtests, helper functions, and a set of strong conventions—turns out to be enough for writing expressive, maintainable test suites. This section walks through the patterns you will reach for most often.
+Go's standard library ships with a testing package that is deliberately minimal. There is no built-in assertion library, no test runner framework, and no test annotations. What Go does provide—subtests, helper functions, and a set of strong conventions—turns out to be enough for writing expressive, maintainable test suites. This section walks through the patterns you will reach for most often.
 
 ---
 
@@ -12,7 +12,7 @@ The single most important pattern in Go testing is the table-driven test. Rather
 
 Each element of the slice is a small, self-contained record describing one test case: its human-readable name, its inputs, and what the expected outcome looks like. The anonymous struct type is defined inline, so you avoid naming a type you will never use elsewhere. Adding a new case is a single line that does not require touching any control flow.
 
-Compare this to the C++ or Java approach of parameterized tests (GoogleTest's `INSTANTIATE_TEST_SUITE_P`, JUnit's `@ParameterizedTest`): the Go version has no framework machinery—it is just a slice and a loop.
+> **If you are coming from GoogleTest or JUnit:** table-driven tests cover the same need as `INSTANTIATE_TEST_SUITE_P` or `@ParameterizedTest`, but the table is just a slice and a loop.
 
 ### Worked Example: `CreateBook` Validation
 

@@ -140,7 +140,7 @@ func Auth(next http.Handler, jwtSecret string) http.Handler {
 
 This is a "soft" auth middleware—it enriches the context when a valid token is present but never rejects a request. Individual handlers decide whether to require authentication (by checking `userFromContext`). This design means public pages like the catalog work for anonymous users, while protected pages like admin CRUD can redirect to login.
 
-Compare this to Spring Security's filter chain: in Spring, you configure URL patterns in `SecurityFilterChain` to require authentication. In our gateway, the middleware always runs and handlers opt-in to requiring auth. Both approaches work—the Go version is more explicit about the decision point.
+> **If you are coming from Spring Security:** this maps roughly to a filter chain with URL authorization rules. In our gateway, the middleware always runs and handlers opt in to requiring auth. Both approaches work; the Go version puts the decision point inside the handler.
 
 ---
 
@@ -206,7 +206,9 @@ func (s *Server) OAuth2Callback(w http.ResponseWriter, r *http.Request) {
 
 ## Flash Messages
 
-Flash messages are one-time notifications displayed after a redirect—"Book created," "Welcome back!", etc. In Spring, you would use `RedirectAttributes.addFlashAttribute()` backed by the session store. We use a simpler approach: a short-lived cookie, HMAC-signed so the client cannot tamper with it.
+Flash messages are one-time notifications displayed after a redirect—"Book created," "Welcome back!", etc. We use a short-lived cookie, HMAC-signed so the client cannot tamper with it.
+
+> **If you are coming from Spring MVC:** this fills the same role as `RedirectAttributes.addFlashAttribute()`, but the storage mechanism is a signed cookie instead of the session.
 
 ```go
 // services/gateway/internal/handler/render.go

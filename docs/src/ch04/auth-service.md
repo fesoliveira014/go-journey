@@ -144,7 +144,7 @@ type UserRepository interface {
 }
 ```
 
-If you come from Spring, this is the same dependency inversion pattern—a Spring `@Service` depends on a `@Repository` interface, not the JPA implementation. In Go, we achieve this without annotations or DI frameworks. The interface is defined in the `service` package (the consumer), and the `repository` package provides a concrete struct that satisfies it. No `@Autowired` magic—the wiring happens explicitly in `main.go`.
+> **If you are coming from Spring:** this is the same dependency inversion pattern: a service depends on a repository interface, not a specific persistence implementation. In Go, the interface is defined in the `service` package (the consumer), and the `repository` package provides a concrete struct that satisfies it. Wiring happens explicitly in `main.go`.
 
 ### Registration Flow
 
@@ -331,7 +331,7 @@ The Register and Login responses include both a `token` string and a `user` obje
 - Nullable `password_hash` supports both email/password and OAuth-only users
 - The service layer handles all business logic (hashing, validation) while the handler handles gRPC translation
 - Domain errors map to specific gRPC codes via `toGRPCError`
-- DI wiring is explicit in `main.go`—no framework magic
+- DI wiring is explicit in `main.go`
 
 ---
 

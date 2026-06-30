@@ -36,7 +36,9 @@ func (s *Server) AdminBookNew(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-This is a simpler approach than Spring Security's `@PreAuthorize("hasRole('ADMIN')")` annotation, but it achieves the same result. The trade-off is that you must remember to call `requireAdmin` in every admin handler—there is no framework enforcing it at the routing level. For a small codebase, this explicitness is a feature. For a large one, you might extract it into middleware that applies to an entire route prefix.
+The trade-off is that you must remember to call `requireAdmin` in every admin handler; nothing enforces it at the routing level. For a small codebase, this explicitness is manageable. For a large one, you might extract it into middleware that applies to an entire route prefix.
+
+> **If you are coming from Spring Security:** this fills the same role as `@PreAuthorize("hasRole('ADMIN')")`, but it is an ordinary function call instead of a method annotation.
 
 ---
 
@@ -113,7 +115,9 @@ func (s *Server) AdminBookCreate(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
-In Spring, `@ModelAttribute` or `@RequestBody` would handle this binding and conversion automatically. In Go, the mapping from form values to typed fields is manual. This is more verbose but leaves no ambiguity about what happens when a field is missing or cannot be parsed.
+In Go, the mapping from form values to typed fields is manual. This is more verbose but leaves no ambiguity about what happens when a field is missing or cannot be parsed.
+
+> **If you are coming from Spring MVC:** `@ModelAttribute` or `@RequestBody` usually handles this binding. Here, the handler owns the conversion step directly.
 
 The update handler follows the same pattern but includes the book ID from the path:
 

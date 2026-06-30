@@ -16,6 +16,8 @@ This hands-on guide walks you through building a complete microservices applicat
 
 You are an experienced software engineer who is new to Go, cloud-native tooling, or both. The guide assumes strong programming fundamentals and explains Go-specific concepts, infrastructure patterns, and architectural decisions from scratch.
 
+The default explanations stand on their own. When a comparison to Spring, JVM tooling, C++, or another ecosystem is useful, it appears as an explicit "If you are coming from..." note rather than as the assumed background.
+
 ## The Project
 
 We will build a **library-management system** where:
