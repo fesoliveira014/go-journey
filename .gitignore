@@ -42,3 +42,7 @@ editorial/
 docs/mermaid-init.js
 docs/mermaid.min.js
 .worktrees/
+
+# Python bytecode
+__pycache__/
+*.pyc

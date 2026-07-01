@@ -1,0 +1,46 @@
+# mdbook configuration for the LaTeX/pandoc PDF build.
+#
+# This is NOT the site's book.toml. The docs-pdf workflow copies the mdbook
+# `src` into a scratch dir, drops this file in as book.toml, pre-renders Mermaid
+# to images, then runs `mdbook build` so mdbook-pandoc emits a single PDF via
+# Tectonic (XeTeX). Keeping it separate leaves the committed docs/book.toml as
+# an HTML-only, Chrome-free config for the published site.
+
+[book]
+title = "Building Microservices in Go"
+authors = ["fesoliveira014"]
+language = "en"
+src = "src"
+
+[build]
+build-dir = "site"
+
+[output.pandoc.profile.pdf]
+output-file = "output.pdf"
+to = "latex"
+pdf-engine = "tectonic"
+standalone = true
+table-of-contents = true
+toc-depth = 2
+# Chapter/section titles already carry their own numbers (e.g. "1.1 Project
+# Setup"), so let LaTeX not add a second set.
+number-sections = false
+include-in-header = ["header.tex"]
+
+[output.pandoc.profile.pdf.metadata]
+title = "Building Microservices in Go"
+subtitle = "A hands-on journey through cloud-native architecture"
+author = "fesoliveira014"
+date = "2026"
+
+[output.pandoc.profile.pdf.variables]
+documentclass = "book"
+geometry = "margin=1in"
+fontsize = "11pt"
+# DejaVu Sans Mono covers the box-drawing glyphs used in directory-tree code
+# blocks that Latin Modern Mono lacks.
+monofont = "DejaVu Sans Mono"
+monofontoptions = ["Scale=0.85"]
+linkcolor = "RoyalBlue"
+urlcolor = "RoyalBlue"
+toccolor = "black"

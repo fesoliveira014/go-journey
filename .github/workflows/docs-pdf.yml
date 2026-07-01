@@ -1,15 +1,17 @@
 name: Docs PDF
 
-# Compiles the mdBook in docs/ into a single, full-book PDF.
-# Mermaid diagrams are rendered client-side, so the PDF is produced by
-# driving headless Chrome over the DevTools protocol (mdbook-pdf), which
-# runs the page JavaScript before printing — a LaTeX/pandoc path would not.
+# Compiles the mdBook in docs/ into a single, book-quality PDF: cover, a
+# page-numbered table of contents, and LaTeX typography. mdbook-pandoc emits
+# LaTeX which Tectonic (XeTeX) turns into the PDF. Because LaTeX can't run
+# JavaScript, Mermaid diagrams are pre-rendered to vector PDFs first.
+# See docs-pdf/ for the build assets and a local-build recipe.
 
 on:
   push:
     branches: [main]
     paths:
       - "docs/**"
+      - "docs-pdf/**"
       - ".github/workflows/docs-pdf.yml"
   release:
     types: [published]
@@ -20,8 +22,9 @@ permissions:
 
 env:
   MDBOOK_VERSION: "0.5.3"
-  MDBOOK_MERMAID_VERSION: "0.17.0"
-  MDBOOK_PDF_VERSION: "0.1.13"
+  MDBOOK_PANDOC_VERSION: "0.11.1"
+  PANDOC_VERSION: "3.10"
+  TECTONIC_VERSION: "0.16.9"
   PDF_NAME: "building-microservices-in-go.pdf"
 
 jobs:
@@ -30,60 +33,74 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # mdbook + the mermaid preprocessor ship prebuilt binaries — no compile.
-      - name: Install mdbook toolchain
+      - name: Install mdbook
         uses: taiki-e/install-action@v2
         with:
-          tool: mdbook@${{ env.MDBOOK_VERSION }},mdbook-mermaid@${{ env.MDBOOK_MERMAID_VERSION }}
+          tool: mdbook@${{ env.MDBOOK_VERSION }}
 
-      # The PDF backend has no prebuilt release, so build it from crates.io.
-      # cargo-install caches the compiled binary keyed on the crate version.
-      - name: Install mdbook-pdf
+      - name: Install mdbook-pandoc
         uses: baptiste0928/cargo-install@v3
         with:
-          crate: mdbook-pdf
-          version: ${{ env.MDBOOK_PDF_VERSION }}
+          crate: mdbook-pandoc
+          version: ${{ env.MDBOOK_PANDOC_VERSION }}
 
-      # mdbook-pdf prints the rendered HTML through headless Chrome. Install a
-      # real Chrome (the ubuntu snap chromium is unreliable headless) and expose
-      # its path via $CHROME, which the headless_chrome crate reads.
+      - name: Install pandoc
+        run: |
+          curl -fsSL "https://github.com/jgm/pandoc/releases/download/${PANDOC_VERSION}/pandoc-${PANDOC_VERSION}-linux-amd64.tar.gz" -o /tmp/pandoc.tgz
+          mkdir -p "$HOME/.local"
+          tar xzf /tmp/pandoc.tgz --strip-components=1 -C "$HOME/.local"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Install Tectonic
+        run: |
+          curl -fsSL "https://github.com/tectonic-typesetting/tectonic/releases/download/tectonic%40${TECTONIC_VERSION}/tectonic-${TECTONIC_VERSION}-x86_64-unknown-linux-musl.tar.gz" -o /tmp/tectonic.tgz
+          mkdir -p "$HOME/.local/bin"
+          tar xzf /tmp/tectonic.tgz -C "$HOME/.local/bin"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # DejaVu Sans Mono covers box-drawing glyphs in directory-tree code blocks.
+      - name: Install fonts
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends fonts-dejavu-core
+
+      # Tectonic downloads its support files on first run; cache them.
+      - name: Cache Tectonic bundle
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/Tectonic
+          key: tectonic-${{ env.TECTONIC_VERSION }}
+
+      # mmdc (Mermaid CLI) drives headless Chrome to render diagrams.
       - name: Install Chrome
         id: chrome
         uses: browser-actions/setup-chrome@v1
         with:
           install-dependencies: true
 
-      # mermaid.min.js / mermaid-init.js are git-ignored (generated locally),
-      # so regenerate them or the build fails on the additional-js references.
-      - name: Generate Mermaid assets
-        run: mdbook-mermaid install docs
-
-      # Enable the PDF backend only here, at build time. Keeping [output.pdf]
-      # out of the committed book.toml lets local and HTML-only builds run
-      # without Chrome or mdbook-pdf installed.
-      - name: Enable the PDF backend
-        run: |
-          cat >> docs/book.toml <<'EOF'
-
-          [output.pdf]
-          display-header-footer = true
-          margin-top = 0.75
-          margin-bottom = 0.75
-          margin-left = 0.5
-          margin-right = 0.5
-          header-template = " "
-          footer-template = '<div style="font-size:8px; width:100%; text-align:center; color:#666;"><span class="pageNumber"></span> / <span class="totalPages"></span></div>'
-          EOF
-
-      - name: Build PDF
+      - name: Install mermaid-cli
         env:
-          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+          PUPPETEER_SKIP_DOWNLOAD: "1" # reuse the Chrome installed above
+        run: npm install -g @mermaid-js/mermaid-cli
+
+      - name: Assemble and build the PDF
+        env:
+          PUPPETEER_EXECUTABLE_PATH: ${{ steps.chrome.outputs.chrome-path }}
         run: |
-          mdbook build docs
-          # book.toml sets build-dir = "../site"; mdbook-pdf writes <build-dir>/pdf/output.pdf
-          test -f site/pdf/output.pdf
+          set -euo pipefail
+          BUILD="${RUNNER_TEMP}/book"
+          cp -r docs "$BUILD"
+          cp docs-pdf/book.pandoc.toml "$BUILD/book.toml"
+          cp docs-pdf/header.tex "$BUILD/header.tex"
+
+          # Chrome needs --no-sandbox in the CI sandbox.
+          printf '{"args":["--no-sandbox","--disable-gpu"]}\n' > "${RUNNER_TEMP}/puppeteer.json"
+          export PUPPETEER_CONFIG_FILE="${RUNNER_TEMP}/puppeteer.json"
+
+          python3 docs-pdf/prerender_mermaid.py "$BUILD/src"
+          mdbook build "$BUILD"
+
+          test -f "$BUILD/site/pdf/output.pdf"
           mkdir -p dist
-          cp site/pdf/output.pdf "dist/${PDF_NAME}"
+          cp "$BUILD/site/pdf/output.pdf" "dist/${PDF_NAME}"
 
       - name: Upload PDF artifact
         uses: actions/upload-artifact@v4
@@ -92,7 +109,6 @@ jobs:
           path: dist/${{ env.PDF_NAME }}
           if-no-files-found: error
 
-      # On a published GitHub Release, attach the PDF as a downloadable asset.
       - name: Attach PDF to release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
