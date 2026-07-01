@@ -1,0 +1,14 @@
+% Extra LaTeX preamble for the pandoc PDF build (see book.pandoc.toml).
+
+% Wrap long lines inside highlighted code blocks so they don't overflow the page.
+\usepackage{fvextra}
+\DefineVerbatimEnvironment{Highlighting}{Verbatim}{breaklines,breakanywhere,breaksymbolleft={},commandchars=\\\{\}}
+% Also wrap plain verbatim blocks.
+\fvset{breaklines=true,breakanywhere=true}
+
+% Scale oversized diagrams/images down to the text width, keep aspect ratio.
+\usepackage{graphicx}
+\setkeys{Gin}{width=\linewidth,keepaspectratio}
+
+% Blank-line paragraph separation instead of first-line indents.
+\usepackage{parskip}
