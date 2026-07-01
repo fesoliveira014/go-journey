@@ -1,0 +1,100 @@
+name: Docs PDF
+
+# Compiles the mdBook in docs/ into a single, full-book PDF.
+# Mermaid diagrams are rendered client-side, so the PDF is produced by
+# driving headless Chrome over the DevTools protocol (mdbook-pdf), which
+# runs the page JavaScript before printing — a LaTeX/pandoc path would not.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "docs/**"
+      - ".github/workflows/docs-pdf.yml"
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: write # attach the PDF to a release when triggered by one
+
+env:
+  MDBOOK_VERSION: "0.5.3"
+  MDBOOK_MERMAID_VERSION: "0.17.0"
+  MDBOOK_PDF_VERSION: "0.1.13"
+  PDF_NAME: "building-microservices-in-go.pdf"
+
+jobs:
+  build-pdf:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # mdbook + the mermaid preprocessor ship prebuilt binaries — no compile.
+      - name: Install mdbook toolchain
+        uses: taiki-e/install-action@v2
+        with:
+          tool: mdbook@${{ env.MDBOOK_VERSION }},mdbook-mermaid@${{ env.MDBOOK_MERMAID_VERSION }}
+
+      # The PDF backend has no prebuilt release, so build it from crates.io.
+      # cargo-install caches the compiled binary keyed on the crate version.
+      - name: Install mdbook-pdf
+        uses: baptiste0928/cargo-install@v3
+        with:
+          crate: mdbook-pdf
+          version: ${{ env.MDBOOK_PDF_VERSION }}
+
+      # mdbook-pdf prints the rendered HTML through headless Chrome. Install a
+      # real Chrome (the ubuntu snap chromium is unreliable headless) and expose
+      # its path via $CHROME, which the headless_chrome crate reads.
+      - name: Install Chrome
+        id: chrome
+        uses: browser-actions/setup-chrome@v1
+        with:
+          install-dependencies: true
+
+      # mermaid.min.js / mermaid-init.js are git-ignored (generated locally),
+      # so regenerate them or the build fails on the additional-js references.
+      - name: Generate Mermaid assets
+        run: mdbook-mermaid install docs
+
+      # Enable the PDF backend only here, at build time. Keeping [output.pdf]
+      # out of the committed book.toml lets local and HTML-only builds run
+      # without Chrome or mdbook-pdf installed.
+      - name: Enable the PDF backend
+        run: |
+          cat >> docs/book.toml <<'EOF'
+
+          [output.pdf]
+          display-header-footer = true
+          margin-top = 0.75
+          margin-bottom = 0.75
+          margin-left = 0.5
+          margin-right = 0.5
+          header-template = " "
+          footer-template = '<div style="font-size:8px; width:100%; text-align:center; color:#666;"><span class="pageNumber"></span> / <span class="totalPages"></span></div>'
+          EOF
+
+      - name: Build PDF
+        env:
+          CHROME: ${{ steps.chrome.outputs.chrome-path }}
+        run: |
+          mdbook build docs
+          # book.toml sets build-dir = "../site"; mdbook-pdf writes <build-dir>/pdf/output.pdf
+          test -f site/pdf/output.pdf
+          mkdir -p dist
+          cp site/pdf/output.pdf "dist/${PDF_NAME}"
+
+      - name: Upload PDF artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: docs-pdf
+          path: dist/${{ env.PDF_NAME }}
+          if-no-files-found: error
+
+      # On a published GitHub Release, attach the PDF as a downloadable asset.
+      - name: Attach PDF to release
+        if: github.event_name == 'release'
+        uses: softprops/action-gh-release@v2
+        with:
+          files: dist/${{ env.PDF_NAME }}
